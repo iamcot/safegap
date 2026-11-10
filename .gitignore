@@ -1,0 +1,7 @@
+data/clips/
+__pycache__/
+*.pyc
+*.pt
+*.mlpackage/
+out/
+.venv/

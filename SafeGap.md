@@ -81,7 +81,7 @@ Lưu ý: đổi ống kính (1x/2x), độ phân giải hay chế độ chống 
 
 | Phần | Công nghệ |
 |---|---|
-| Prototype offline | Python 3.11, OpenCV, Ultralytics, NumPy, filterpy |
+| Prototype offline | Python 3.11+, OpenCV, Ultralytics, NumPy (Kalman tự viết, không cần filterpy) |
 | App iPhone | Swift, SwiftUI, AVFoundation, Vision + CoreML, CoreLocation, CoreMotion |
 | Model | YOLO11n → `.mlpackage` (Ultralytics export, `nms=True`) |
 
@@ -91,7 +91,7 @@ Yêu cầu: Mac + Xcode. Apple ID miễn phí cài được lên iPhone của m�
 
 ```
 safegap/
-├── PLAN.md
+├── SafeGap.md           # kế hoạch này
 ├── config/
 │   ├── law_vn.json          # bảng tốc độ → d_min
 │   └── default.json         # W_real, ROI, ngưỡng, hysteresis
@@ -102,11 +102,13 @@ safegap/
 │   ├── distance.py          # công thức 3.3, 3.4
 │   ├── tracker.py           # Kalman + IoU tracking
 │   ├── alert.py             # bảng luật + hysteresis
+│   ├── pipeline.py          # ghép lane → distance → tracker → alert cho 1 frame
 │   ├── run_video.py         # input video (+ file tốc độ) → video có overlay
 │   └── eval.py              # so D ước lượng với ground truth
+├── tests/                   # pytest cho proto/ (cũng là test mẫu khi port sang Swift)
 ├── data/
 │   ├── clips/               # video quay thử (không commit)
-│   └── groundtruth.csv      # clip, frame, khoảng cách thật
+│   └── groundtruth.csv      # clip, frame_start, frame_end, distance_m
 └── ios/SafeGap/             # Xcode project
     ├── Camera/              # AVFoundation, intrinsics
     ├── Detection/           # Vision + CoreML
@@ -128,13 +130,17 @@ safegap/
 **Done khi:** có ≥ 4 mốc ground truth và ≥ 30 phút clip cao tốc.
 
 ### Phase 1 – Prototype Python (offline)
-- [ ] `calib.py`: tính f từ ảnh A4.
-- [ ] `detect.py` + `lane.py`: bắt xe cùng làn trên clip.
-- [ ] `distance.py`: tính D theo bề rộng xe.
-- [ ] `tracker.py`: Kalman filter, D mượt không nhảy.
-- [ ] `alert.py`: đọc `law_vn.json`, hysteresis.
-- [ ] `run_video.py`: xuất video có overlay (box, D, d_min, màu cảnh báo).
-- [ ] `eval.py`: báo cáo sai số % theo từng mốc ground truth.
+Code đã có, có unit test (`pytest tests`). Còn lại là chạy trên dữ liệu thật của Phase 0.
+- [x] `calib.py`: tính f từ ảnh A4 / HFOV, đổi f theo độ phân giải.
+- [x] `detect.py` + `lane.py`: YOLO wrapper, chọn xe cùng làn bằng ROI.
+- [x] `distance.py`: tính D theo bề rộng xe (+ cách mặt đường, mặc định tắt).
+- [x] `tracker.py`: Kalman filter + IoU tracking.
+- [x] `alert.py`: đọc `law_vn.json`, hysteresis, cooldown âm thanh, d_min chỉnh tay.
+- [x] `run_video.py`: xuất video có overlay + CSV log mỗi frame.
+- [x] `eval.py`: báo cáo sai số % theo từng mốc ground truth.
+- [ ] Calibrate f thật bằng ảnh A4, cập nhật `config/default.json`.
+- [ ] Chạy `eval.py` trên clip ground truth, chỉnh `W_real`/ROI nếu cần.
+- [ ] Chạy `run_video.py` trên clip cao tốc, xem overlay.
 
 **Done khi:** sai số ≤ 15% ở 10–50 m trên dữ liệu ground truth, và overlay trên clip cao tốc nhìn hợp lý.
 
