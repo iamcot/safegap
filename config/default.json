@@ -1,0 +1,40 @@
+{
+  "camera": {
+    "f_px": 1530.0,
+    "f_px_image_width": 2100,
+    "h_cam_m": 1.2
+  },
+  "vehicle_width_m": {
+    "car": 1.80,
+    "truck": 2.50,
+    "bus": 2.50
+  },
+  "detection": {
+    "model": "yolo11n.pt",
+    "classes": ["car", "truck", "bus"],
+    "min_conf": 0.35
+  },
+  "roi": {
+    "comment": "Hình thang chọn xe cùng làn, toạ độ chuẩn hoá 0..1 (x, y), y tính từ trên xuống",
+    "polygon": [[0.42, 0.45], [0.58, 0.45], [0.80, 1.0], [0.20, 1.0]]
+  },
+  "distance": {
+    "use_ground": false,
+    "y_horizon_norm": 0.45,
+    "fuse_far_m": 40.0
+  },
+  "tracker": {
+    "iou_match": 0.3,
+    "max_missed": 10,
+    "accel_sigma": 3.0,
+    "meas_rel_sigma": 0.08
+  },
+  "alert": {
+    "red_ratio": 0.9,
+    "yellow_ratio": 1.1,
+    "hold_s": 1.0,
+    "min_speed_kmh": 40.0,
+    "sound_cooldown_s": 5.0,
+    "manual_d_min_m": null
+  }
+}

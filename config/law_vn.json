@@ -1,0 +1,11 @@
+{
+  "source": "Thông tư 38/2024/TT-BGTVT",
+  "condition": "Đường khô ráo, không có biển 'Cự ly tối thiểu giữa hai xe'",
+  "note": "Cập nhật file này khi có văn bản mới. Tốc độ trên mốc cuối dùng d_min của mốc cuối.",
+  "table": [
+    {"max_kmh": 60,  "d_min_m": 35},
+    {"max_kmh": 80,  "d_min_m": 55},
+    {"max_kmh": 100, "d_min_m": 70},
+    {"max_kmh": 120, "d_min_m": 100}
+  ]
+}
