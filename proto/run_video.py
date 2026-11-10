@@ -7,49 +7,13 @@ File tốc độ (tuỳ chọn): CSV có cột t_s,speed_kmh (t_s tính từ đ�
 Không có file tốc độ thì dùng --const-speed.
 """
 import argparse
-import bisect
 import csv
 from pathlib import Path
 
 from . import config
+from .overlay import draw
 from .pipeline import Pipeline
-
-COLORS = {"GREEN": (0, 200, 0), "YELLOW": (0, 220, 255), "RED": (0, 0, 255), "NONE": (160, 160, 160)}
-
-
-class SpeedTrack:
-    def __init__(self, path):
-        self.t, self.v = [], []
-        with open(path, newline="") as f:
-            for row in csv.DictReader(f):
-                self.t.append(float(row["t_s"]))
-                self.v.append(float(row["speed_kmh"]))
-
-    def at(self, t: float):
-        if not self.t:
-            return None
-        i = bisect.bisect_left(self.t, t)
-        if i <= 0:
-            return self.v[0]
-        if i >= len(self.t):
-            return self.v[-1]
-        t0, t1, v0, v1 = self.t[i - 1], self.t[i], self.v[i - 1], self.v[i]
-        return v0 + (v1 - v0) * (t - t0) / (t1 - t0)
-
-
-def draw(cv2, frame, pipe, dets, r):
-    import numpy as np
-    cv2.polylines(frame, [np.array(pipe.roi, dtype=np.int32)], True, (255, 255, 0), 2)
-    for d in dets:
-        cv2.rectangle(frame, (int(d.x1), int(d.y1)), (int(d.x2), int(d.y2)), (200, 200, 200), 1)
-    color = COLORS[r.level]
-    h, w = frame.shape[:2]
-    cv2.rectangle(frame, (0, 0), (w, 70), color, -1)
-    txt = f"D={r.d:.0f}m" if r.d is not None else "D=--"
-    txt += f"  d_min={r.d_min:.0f}m" if r.d_min is not None else "  d_min=--"
-    txt += f"  v={r.speed_kmh:.0f}km/h" if r.speed_kmh is not None else "  v=--"
-    txt += f"  {r.level}"
-    cv2.putText(frame, txt, (15, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.4, (0, 0, 0), 3)
+from .speed import SpeedTrack
 
 
 def main(argv=None):
@@ -71,7 +35,7 @@ def main(argv=None):
     w, h = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     det = Detector(**cfg["detection"])
     pipe = Pipeline(cfg, law, w, h)
-    speed = SpeedTrack(args.speed) if args.speed else None
+    speed = SpeedTrack.from_csv(args.speed) if args.speed else None
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -95,7 +59,7 @@ def main(argv=None):
                 log.writeheader()
             log.writerow(r.row())
             if writer is not None:
-                draw(cv2, frame, pipe, dets, r)
+                draw(cv2, frame, pipe.roi, dets, r)
                 writer.write(frame)
             i += 1
     cap.release()
