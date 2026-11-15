@@ -64,11 +64,20 @@ struct SettingsView: View {
                 } footer: {
                     Text("Ngoài bề rộng xe, đo thêm theo vị trí đáy xe so với chân trời (chân trời tính từ góc nghiêng máy bằng CoreMotion). Giúp ổn định khi xe gần, dưới khoảng 40 m. Cần nhập đúng chiều cao camera trong màn hiệu chỉnh.")
                 }
-                Section("Camera") {
+                Section {
+                    Picker("Ống kính", selection: $model.settings.zoom2x) {
+                        Text("1x").tag(false)
+                        Text("2x (đo xa)").tag(true)
+                    }
+                    .pickerStyle(.segmented)
                     Button("Hiệu chỉnh camera / ROI") {
                         dismiss()
                         model.beginCalibration()
                     }
+                } header: {
+                    Text("Camera")
+                } footer: {
+                    Text("2x: xe ở xa to gấp đôi trên ảnh nên đo xa chính xác hơn, nhưng nhìn hẹp hơn (dễ mất xe khi vào cua). Mỗi chế độ hiệu chỉnh ROI riêng.")
                 }
                 Section {
                     Text("App chỉ để tham khảo, không thay thế sự chú ý của tài xế. Không thao tác điện thoại khi đang lái.")

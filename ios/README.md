@@ -57,6 +57,15 @@ Cài đặt (⚙) > "Tốc độ giả lập": đặt ví dụ 90 km/h để xem
 Mỗi lần mở app ghi một file `logs/safegap_YYYYMMDD_HHmmss.csv` (app Tệp > Trên iPhone > SafeGap).
 11 cột đầu giống CSV của `proto/run_video.py`, thêm `time, f_px, f_source, n_dets, infer_ms, speed_acc_kmh`.
 
-## Chưa làm (Phase 3)
+## Phase 3 (trong Cài đặt ⚙)
 
-Bù pitch bằng CoreMotion, camera 2x, nhận diện vạch làn, giảm fps khi máy nóng.
+- **Máy nóng**: app theo dõi nhiệt độ máy (`thermalState`), tự giảm 30 → 20 → 12 → 6 fps cho camera và YOLO. HUD báo khi đang giảm.
+- **ROI bám vạch làn** (mặc định bật): tìm vạch kẻ đường hai bên làn mình, ROI uốn theo làn khi vào cua. Vạch xanh trên HUD
+  là vạch nhận diện được. Không thấy vạch (đường không kẻ, trời tối) thì dùng hình thang đã hiệu chỉnh.
+- **Kết hợp đo theo mặt đường** (mặc định bật): chân trời tính từ góc nghiêng máy (CoreMotion), đo thêm theo vị trí đáy xe.
+  Cần nhập đúng chiều cao camera trong màn hiệu chỉnh. Ở màn hiệu chỉnh có vạch vàng nét đứt là chân trời: đỗ xe trên đường
+  bằng, nếu vạch lệch với điểm tụ của làn thì chỉnh "Bù lệch".
+- **Ống kính 2x**: zoom 2x trên camera chính, xe ở xa to gấp đôi nên đo xa chính xác hơn. Mỗi chế độ (1x/2x) hiệu chỉnh ROI riêng.
+- **Cảnh báo từ … km/h**: mặc định 40 km/h (dưới mức này coi là kẹt xe). Hạ xuống để thử trong phố.
+
+CSV có thêm cột `thermal`, `lane` (LR / L / R / rỗng), `pitch_deg`, `y_horizon`.

@@ -159,11 +159,11 @@ Code đã có, có unit test (`pytest tests`). Còn lại là chạy trên dữ 
 **Done khi:** chạy ổn định 30 phút trên cao tốc, không quá nóng, cảnh báo khớp cảm nhận thực tế.
 
 ### Phase 3 – Cải thiện (tùy chọn)
-- [ ] Bù pitch bằng CoreMotion, bật cách tính mặt đường (3.4) để kết hợp.
-- [ ] Hỗ trợ camera 2x cho tầm xa.
-- [ ] Nhận diện vạch làn thay ROI cố định.
-- [ ] Theo dõi `ProcessInfo.thermalState`, tự giảm fps khi máy nóng.
-- [ ] Cho chỉnh d_min thủ công (biển cự ly, trời mưa).
+- [x] Bù pitch bằng CoreMotion, bật cách tính mặt đường (3.4) để kết hợp.
+- [x] Hỗ trợ camera 2x cho tầm xa.
+- [x] Nhận diện vạch làn thay ROI cố định.
+- [x] Theo dõi `ProcessInfo.thermalState`, tự giảm fps khi máy nóng.
+- [x] Cho chỉnh d_min thủ công (biển cự ly, trời mưa).
 - [ ] Sau này: Android (Kotlin + TFLite), dùng lại config và logic.
 
 ## 8. Rủi ro và lưu ý

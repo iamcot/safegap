@@ -129,3 +129,12 @@ final class CoreTests: XCTestCase {
         XCTAssertTrue(empty.hasPrefix("0,0.0000,,,,,,,NONE,False,,"))
     }
 }
+
+final class ZoomTests: XCTestCase {
+    func testZoomAdjusted() {
+        XCTAssertEqual(FocalLength.zoomAdjusted(fx: 1450, zoom: 1, baseF: 1400), 1450)
+        XCTAssertEqual(FocalLength.zoomAdjusted(fx: 1450, zoom: 2, baseF: 1400), 2900)   // iOS chưa nhân zoom
+        XCTAssertEqual(FocalLength.zoomAdjusted(fx: 2890, zoom: 2, baseF: 1400), 2890)   // đã nhân sẵn
+        XCTAssertEqual(FocalLength.zoomAdjusted(fx: 1450, zoom: 2, baseF: nil), 1450)
+    }
+}

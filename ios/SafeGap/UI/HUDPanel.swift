@@ -54,7 +54,7 @@ struct HUDPanel: View {
                 if !model.isCalibrated {
                     Text("Chưa hiệu chỉnh máy này: bấm ◎ để chỉnh ROI").font(.caption2.bold())
                 }
-                Text(String(format: "%.0f fps · YOLO %.0f ms · f %.0f px (%@)", s.fps, s.inferMs, s.fPx, s.fSource.rawValue))
+                Text(String(format: "%@ · %.0f fps · YOLO %.0f ms · f %.0f px (%@)", model.settings.zoom2x ? "2x" : "1x", s.fps, s.inferMs, s.fPx, s.fSource.rawValue))
                     .font(.caption2).monospacedDigit()
                 if model.logURL != nil {
                     Label("Đang ghi log CSV", systemImage: "record.circle").font(.caption2)

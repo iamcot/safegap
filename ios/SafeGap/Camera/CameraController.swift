@@ -19,7 +19,8 @@ enum CameraError: LocalizedError {
 
 final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     /// Cố định để f không đổi giữa các lần chạy. Đổi ở đây thì hiệu chỉnh lưu theo khoá mới.
-    static let lens = "wide1x"
+    /// Khoá hiệu chỉnh theo ống kính: 1x hoặc zoom 2x (crop trên camera chính, máy nào cũng có).
+    static func lens(zoom: Double) -> String { zoom > 1.01 ? "wide2x" : "wide1x" }
     static let frameWidth = 1920.0
     static let frameHeight = 1080.0
 
@@ -123,6 +124,20 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
             } catch {
                 // không đổi được fps camera thì FrameProcessor vẫn bỏ bớt frame
             }
+        }
+    }
+
+    /// Zoom số trên camera chính (1 hoặc 2). Xe ở xa to gấp đôi trên ảnh → đo xa chính xác hơn, đổi lại nhìn hẹp hơn.
+    func setZoom(_ z: Double) {
+        sessionQueue.async {
+            guard let input = self.session.inputs.first as? AVCaptureDeviceInput else { return }
+            let device = input.device
+            let zz = min(max(z, 1), device.activeFormat.videoMaxZoomFactor)
+            do {
+                try device.lockForConfiguration()
+                device.videoZoomFactor = zz
+                device.unlockForConfiguration()
+            } catch {}
         }
     }
 

@@ -48,3 +48,13 @@ public enum FocalLength {
         2.0 * atan(imageWidthPx / 2.0 / fPx) * 180.0 / .pi
     }
 }
+
+extension FocalLength {
+    /// f khi zoom số (crop) trên camera 1x. iOS có thể đã nhân zoom vào intrinsics hoặc chưa: so với f gốc
+    /// (tính từ HFOV ở 1x) để biết, chưa nhân thì nhân. Không có f gốc thì tin intrinsics.
+    public static func zoomAdjusted(fx: Double, zoom: Double, baseF: Double?) -> Double {
+        guard zoom > 1.01, let baseF, baseF > 0 else { return fx }
+        let midpoint = baseF * (1 + zoom) / 2
+        return fx < midpoint ? fx * zoom : fx
+    }
+}

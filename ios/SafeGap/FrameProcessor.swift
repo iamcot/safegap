@@ -18,6 +18,10 @@ struct UserSettings: Codable, Equatable {
     var laneFollow = true
     /// Kết hợp cách đo theo mặt đường (cần chiều cao camera), chân trời lấy từ CoreMotion.
     var groundFusion = true
+    /// Zoom 2x trên camera chính để đo xa (hiệu chỉnh lưu riêng cho chế độ này).
+    var zoom2x = false
+
+    var zoom: Double { zoom2x ? 2 : 1 }
 
     init() {}
 
@@ -31,6 +35,7 @@ struct UserSettings: Codable, Equatable {
         minSpeedKmh = try c.decodeIfPresent(Double.self, forKey: .minSpeedKmh)
         laneFollow = try c.decodeIfPresent(Bool.self, forKey: .laneFollow) ?? d.laneFollow
         groundFusion = try c.decodeIfPresent(Bool.self, forKey: .groundFusion) ?? d.groundFusion
+        zoom2x = try c.decodeIfPresent(Bool.self, forKey: .zoom2x) ?? d.zoom2x
     }
 
     static let key = "settings.v1"
@@ -162,8 +167,11 @@ final class FrameProcessor {
         guard throttle.shouldProcess(t: t, targetFps: targetFps) else { return }
 
         let intr = CameraController.intrinsics(sb)
-        let fx = intr?.fx
-        let hfovF = hfovDeg.flatMap { FocalLength.fromHFOV(imageWidthPx: w, hfovDeg: $0) }
+        // HFOV của định dạng là ở 1x; khi zoom thì f tăng theo zoom
+        let zoom = p.settings.zoom
+        let baseF = hfovDeg.flatMap { FocalLength.fromHFOV(imageWidthPx: w, hfovDeg: $0) }
+        let fx = intr.map { FocalLength.zoomAdjusted(fx: $0.fx, zoom: zoom, baseF: baseF) }
+        let hfovF = baseF.map { $0 * zoom }
         let (f, source) = p.calibration.resolveF(frameWidth: w, intrinsicsFx: fx, hfovF: hfovF, config: p.config)
 
         if pipeline == nil || pipelineVersion != p.version || pipelineW != w || pipelineH != h {

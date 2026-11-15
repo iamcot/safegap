@@ -19,6 +19,7 @@ final class AppModel: ObservableObject {
             guard settings != oldValue else { return }
             settings.save()
             applyLogging()
+            if settings.zoom2x != oldValue.zoom2x { applyZoom() }
             pushParams()
         }
     }
@@ -50,9 +51,10 @@ final class AppModel: ObservableObject {
         let law = loadJSON("law_vn", LawConfig.decode) ?? AppModel.fallbackLaw
         config = cfg
         self.law = law
-        settings = UserSettings.load()
+        let loadedSettings = UserSettings.load()
+        settings = loadedSettings
 
-        let defaults = DeviceCalibration.defaults(from: cfg, deviceModel: CalibrationStore.deviceModel, lens: CameraController.lens,
+        let defaults = DeviceCalibration.defaults(from: cfg, deviceModel: CalibrationStore.deviceModel, lens: CameraController.lens(zoom: loadedSettings.zoom),
                                                   frameWidth: CameraController.frameWidth, frameHeight: CameraController.frameHeight)
         calibration = CalibrationStore.load(key: defaults.storageKey) ?? defaults
         errorMessage = loadError
@@ -119,6 +121,7 @@ final class AppModel: ObservableObject {
                 guard let self else { return }
                 if let err { self.errorMessage = err.localizedDescription }
                 self.processor.hfovDeg = self.camera.hfovDeg
+                self.camera.setZoom(self.settings.zoom)
                 self.applyThermal()
             }
         }
@@ -144,6 +147,21 @@ final class AppModel: ObservableObject {
             logger.stop()
             logURL = nil
         }
+    }
+
+    /// Đổi 1x / 2x: đổi zoom camera và nạp hiệu chỉnh riêng của chế độ đó (chưa có thì lấy ROI mặc định).
+    private func applyZoom() {
+        camera.setZoom(settings.zoom)
+        let d = DeviceCalibration.defaults(from: config, deviceModel: calibration.deviceModel,
+                                           lens: CameraController.lens(zoom: settings.zoom),
+                                           frameWidth: calibration.frameWidth, frameHeight: calibration.frameHeight)
+        var cal = CalibrationStore.load(key: d.storageKey) ?? d
+        if cal.updatedAt == nil {
+            // chưa hiệu chỉnh 2x: giữ chiều cao camera, bù pitch, vạch capo của chế độ kia
+            cal.hCamM = calibration.hCamM
+            cal.pitchOffsetDeg = calibration.pitchOffsetDeg
+        }
+        calibration = cal
     }
 
     // MARK: hiệu chỉnh
