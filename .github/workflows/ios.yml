@@ -1,0 +1,29 @@
+name: iOS
+on:
+  push:
+    branches: [main]
+    paths: ["ios/**", "config/**", ".github/workflows/ios.yml"]
+  pull_request:
+    paths: ["ios/**", "config/**", ".github/workflows/ios.yml"]
+
+jobs:
+  core-linux:
+    # Test phần lõi (port từ Python) trên Linux: rẻ và nhanh
+    runs-on: ubuntu-latest
+    container: swift:6.0-noble
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test
+        working-directory: ios/SafeGapCore
+
+  app-build:
+    # Build app cho Simulator (không ký) để chắc chắn project + code Swift biên dịch được
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: xcodebuild -version
+      - run: swift test
+        working-directory: ios/SafeGapCore
+      - run: >
+          xcodebuild -project ios/SafeGap.xcodeproj -scheme SafeGap -configuration Debug
+          -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
