@@ -36,3 +36,8 @@ thời gian bấm vào để tua. Phím: Space phát/dừng, ←/→ 1 frame, Sh
 `config/default.json`, **Tải CSV log** xuất kết quả từng frame.
 
 Config: `config/law_vn.json` (bảng luật tốc độ → d_min), `config/default.json` (f, bề rộng xe, ROI, ngưỡng).
+
+## App iPhone (Phase 2)
+
+Code Swift trong `ios/`: lõi `ios/SafeGapCore` (port từ `proto/`, test so khớp output Python) và app `ios/SafeGap.xcodeproj`.
+Cách build, cài lên iPhone và hiệu chỉnh camera theo máy: [ios/README.md](ios/README.md).

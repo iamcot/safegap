@@ -145,14 +145,16 @@ Code đã có, có unit test (`pytest tests`). Còn lại là chạy trên dữ 
 **Done khi:** sai số ≤ 15% ở 10–50 m trên dữ liệu ground truth, và overlay trên clip cao tốc nhìn hợp lý.
 
 ### Phase 2 – App iPhone MVP
-- [ ] Camera pipeline AVFoundation: khóa lens 1x, độ phân giải, tắt chống rung (hoặc ghi lại chế độ đang dùng), lấy intrinsics.
-- [ ] Hiệu chỉnh theo máy, không cố định trong code: f lấy từ intrinsics của AVFoundation (`cameraIntrinsicMatrix`) theo máy + lens + độ phân giải đang dùng, có màn hiệu chỉnh trong app (ROI theo vị trí gắn máy, kiểm tra/chỉnh f nếu cần). Lưu theo từng máy trên điện thoại, không dùng `config/default.json` chung.
-- [ ] Export YOLO sang CoreML, chạy qua Vision, mục tiêu ≥ 15 fps.
-- [ ] Port `lane`, `distance`, `tracker`, `alert` sang Swift. Viết unit test với cùng input/output như bản Python.
-- [ ] GPS speed (CoreLocation, `kCLLocationAccuracyBestForNavigation`).
-- [ ] HUD: số D lớn, d_min, tốc độ, nền xanh/vàng/đỏ. Không cần chạm khi đang lái.
-- [ ] Âm thanh cảnh báo khi RED.
-- [ ] Logging CSV mỗi frame: thời gian, v, D, d_min, trạng thái, loại xe, w_px.
+- [x] Camera pipeline AVFoundation: khóa lens 1x, độ phân giải, tắt chống rung (hoặc ghi lại chế độ đang dùng), lấy intrinsics.
+- [x] Hiệu chỉnh theo máy, không cố định trong code: f lấy từ intrinsics của AVFoundation (`cameraIntrinsicMatrix`) theo máy + lens + độ phân giải đang dùng, có màn hiệu chỉnh trong app (ROI theo vị trí gắn máy, kiểm tra/chỉnh f nếu cần). Lưu theo từng máy trên điện thoại, không dùng `config/default.json` chung.
+- [x] Export YOLO sang CoreML, chạy qua Vision (lệnh export trong `ios/SafeGap/Models/README.md`). Còn đo fps trên máy thật, mục tiêu ≥ 15 fps.
+- [x] Port `lane`, `distance`, `tracker`, `alert` sang Swift (`ios/SafeGapCore`). Viết unit test với cùng input/output như bản Python.
+- [x] GPS speed (CoreLocation, `kCLLocationAccuracyBestForNavigation`).
+- [x] HUD: số D lớn, d_min, tốc độ, nền xanh/vàng/đỏ. Không cần chạm khi đang lái.
+- [x] Âm thanh cảnh báo khi RED.
+- [x] Logging CSV mỗi frame: thời gian, v, D, d_min, trạng thái, loại xe, w_px.
+
+- [ ] Chạy thử trên iPhone thật: hiệu chỉnh, đo fps, 30 phút cao tốc.
 
 **Done khi:** chạy ổn định 30 phút trên cao tốc, không quá nóng, cảnh báo khớp cảm nhận thực tế.
 
