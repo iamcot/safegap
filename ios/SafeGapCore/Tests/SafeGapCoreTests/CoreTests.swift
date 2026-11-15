@@ -138,3 +138,24 @@ final class ZoomTests: XCTestCase {
         XCTAssertEqual(FocalLength.zoomAdjusted(fx: 1450, zoom: 2, baseF: nil), 1450)
     }
 }
+
+final class ZoomCalibrationTests: XCTestCase {
+    func testConvert1xTo2xAndBack() {
+        let cal = DeviceCalibration(deviceModel: "x", lens: "wide1x", frameWidth: 1920, frameHeight: 1080, manualFPx: 1450,
+                                    roi: [Point(0.42, 0.45), Point(0.58, 0.45), Point(0.80, 1.0), Point(0.20, 1.0)],
+                                    maxWidthRatio: 0.7, maxBottomRatio: 0.97, hCamM: 1.3)
+        let z = cal.converted(zoomRatio: 2, lens: "wide2x")
+        XCTAssertEqual(z.storageKey, "calib.x.wide2x.1920x1080")
+        XCTAssertEqual(z.manualFPx, 2900)
+        XCTAssertEqual(z.hCamM, 1.3)
+        XCTAssertEqual(z.roi[0].x, 0.34, accuracy: 1e-9)
+        XCTAssertEqual(z.roi[0].y, 0.40, accuracy: 1e-9)
+        // cạnh trái 2x: từ (0.34, 0.40) tới (-0.1, 1.5) → cắt ở y = 1
+        XCTAssertEqual(z.roi[3].y, 1.0, accuracy: 1e-12)
+        XCTAssertEqual(z.roi[3].x, 0.34 + (-0.1 - 0.34) * 0.6 / 1.1, accuracy: 1e-9)
+        XCTAssertEqual(z.maxBottomRatio, 1.0)
+        let back = z.converted(zoomRatio: 0.5, lens: "wide1x")
+        XCTAssertEqual(back.roi[0].x, 0.42, accuracy: 1e-9)
+        XCTAssertEqual(back.manualFPx, 1450)
+    }
+}

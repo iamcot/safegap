@@ -19,7 +19,7 @@ final class AppModel: ObservableObject {
             guard settings != oldValue else { return }
             settings.save()
             applyLogging()
-            if settings.zoom2x != oldValue.zoom2x { applyZoom() }
+            if settings.zoom2x != oldValue.zoom2x { applyZoom(from: oldValue.zoom) }
             pushParams()
         }
     }
@@ -149,20 +149,18 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Đổi 1x / 2x: đổi zoom camera và nạp hiệu chỉnh riêng của chế độ đó (chưa có thì lấy ROI mặc định).
-    private func applyZoom() {
+    /// Đổi 1x / 2x: đổi zoom camera và nạp hiệu chỉnh đã lưu của ống kính đó (lưu riêng theo ống kính).
+    /// Ống kính chưa hiệu chỉnh lần nào thì suy ra từ hiệu chỉnh hiện tại (ROI, vạch capo, f tay đổi theo tỉ lệ zoom).
+    private func applyZoom(from oldZoom: Double) {
         camera.setZoom(settings.zoom)
-        let d = DeviceCalibration.defaults(from: config, deviceModel: calibration.deviceModel,
-                                           lens: CameraController.lens(zoom: settings.zoom),
-                                           frameWidth: calibration.frameWidth, frameHeight: calibration.frameHeight)
-        var cal = CalibrationStore.load(key: d.storageKey) ?? d
-        if cal.updatedAt == nil {
-            // chưa hiệu chỉnh 2x: giữ chiều cao camera, bù pitch, vạch capo của chế độ kia
-            cal.hCamM = calibration.hCamM
-            cal.pitchOffsetDeg = calibration.pitchOffsetDeg
-        }
-        calibration = cal
+        let lens = CameraController.lens(zoom: settings.zoom)
+        let key = DeviceCalibration.defaults(from: config, deviceModel: calibration.deviceModel, lens: lens,
+                                             frameWidth: calibration.frameWidth, frameHeight: calibration.frameHeight).storageKey
+        calibration = CalibrationStore.load(key: key)
+            ?? calibration.converted(zoomRatio: settings.zoom / oldZoom, lens: lens)
     }
+
+    func toggleZoom() { settings.zoom2x.toggle() }
 
     // MARK: hiệu chỉnh
 

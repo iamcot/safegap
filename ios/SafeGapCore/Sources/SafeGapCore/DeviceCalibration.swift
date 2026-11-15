@@ -70,3 +70,29 @@ public struct DeviceCalibration: Codable, Equatable, Sendable {
         return c
     }
 }
+
+extension DeviceCalibration {
+    /// Suy ra hiệu chỉnh cho ống kính zoom khác (ví dụ 1x → 2x, ratio = 2) khi chưa hiệu chỉnh riêng:
+    /// zoom số phóng ảnh quanh tâm, nên ROI, vạch capo và f tay đổi theo tỉ lệ. Chiều cao camera, bù pitch giữ nguyên.
+    public func converted(zoomRatio r: Double, lens newLens: String) -> DeviceCalibration {
+        func scale(_ p: Point) -> Point { Point(0.5 + r * (p.x - 0.5), 0.5 + r * (p.y - 0.5)) }
+        var roiNew = roi.map(scale)
+        if roiNew.count == 4 {
+            // cắt hình thang ở đáy ảnh (y = 1) theo hai cạnh bên thay vì kẹp từng điểm
+            let (tl, tr, br, bl) = (roiNew[0], roiNew[1], roiNew[2], roiNew[3])
+            func cut(_ top: Point, _ bottom: Point) -> Point {
+                guard bottom.y > 1, bottom.y != top.y else { return bottom }
+                let k = (1 - top.y) / (bottom.y - top.y)
+                return Point(top.x + (bottom.x - top.x) * k, 1)
+            }
+            roiNew = [tl, tr, cut(tr, br), cut(tl, bl)]
+        }
+        roiNew = roiNew.map { Point(min(max($0.x, 0), 1), min(max($0.y, 0), 1)) }
+        var c = self
+        c.lens = newLens
+        c.roi = roiNew
+        c.maxBottomRatio = min(1.0, 0.5 + r * (maxBottomRatio - 0.5))
+        c.manualFPx = manualFPx.map { $0 * r }
+        return c
+    }
+}

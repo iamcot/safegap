@@ -77,7 +77,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Camera")
                 } footer: {
-                    Text("2x: xe ở xa to gấp đôi trên ảnh nên đo xa chính xác hơn, nhưng nhìn hẹp hơn (dễ mất xe khi vào cua). Mỗi chế độ hiệu chỉnh ROI riêng.")
+                    Text("2x: xe ở xa to gấp đôi trên ảnh nên đo xa chính xác hơn, nhưng nhìn hẹp hơn (dễ mất xe khi vào cua). Mỗi ống kính lưu hiệu chỉnh riêng (ROI, f, vạch capo); đổi qua lại không cần chỉnh lại. Lần đầu dùng 2x, app tự suy ra từ hiệu chỉnh 1x. Đổi nhanh bằng nút 1x/2x trên màn hình chính.")
                 }
                 Section {
                     Text("App chỉ để tham khảo, không thay thế sự chú ý của tài xế. Không thao tác điện thoại khi đang lái.")

@@ -68,7 +68,7 @@ Mỗi lần mở app ghi một file `logs/safegap_YYYYMMDD_HHmmss.csv` (app Tệ
 - **Kết hợp đo theo mặt đường** (mặc định bật): chân trời tính từ góc nghiêng máy (CoreMotion), đo thêm theo vị trí đáy xe.
   Cần nhập đúng chiều cao camera trong màn hiệu chỉnh. Ở màn hiệu chỉnh có vạch vàng nét đứt là chân trời: đỗ xe trên đường
   bằng, nếu vạch lệch với điểm tụ của làn thì chỉnh "Bù lệch".
-- **Ống kính 2x**: zoom 2x trên camera chính, xe ở xa to gấp đôi nên đo xa chính xác hơn. Mỗi chế độ (1x/2x) hiệu chỉnh ROI riêng.
+- **Ống kính 2x**: nút 1x/2x trên màn hình chính. Zoom 2x trên camera chính, xe ở xa to gấp đôi nên đo xa chính xác hơn. Hiệu chỉnh (ROI, f tay, vạch capo) lưu riêng theo ống kính, đổi qua lại không phải chỉnh lại; lần đầu dùng 2x app tự suy ra từ hiệu chỉnh 1x.
 - **Cảnh báo từ … km/h**: mặc định 40 km/h (dưới mức này coi là kẹt xe). Hạ xuống để thử trong phố.
 
 CSV có thêm cột `thermal`, `lane` (LR / L / R / rỗng), `pitch_deg`, `y_horizon`.

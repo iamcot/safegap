@@ -14,6 +14,12 @@ struct HUDPanel: View {
             HStack {
                 Text(r.level.label).font(.system(size: 22, weight: .heavy))
                 Spacer()
+                Button { model.toggleZoom() } label: {
+                    Text(model.settings.zoom2x ? "2x" : "1x")
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .frame(width: 40, height: 30)
+                        .overlay(Capsule().stroke(lineWidth: 2))
+                }
                 Button { model.beginCalibration() } label: { Image(systemName: "scope") }
                 Button { showSettings = true } label: { Image(systemName: "gearshape.fill") }
             }
