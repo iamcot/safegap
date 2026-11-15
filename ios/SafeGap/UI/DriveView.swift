@@ -218,7 +218,7 @@ private struct RoadCanvas: View {
             let r = snapshot.result
             if let dMin = r.dMin, dMin > 0 {
                 let zEnd = min(dMin, Self.farZ)
-                let l = left.filter { $0.z <= zEnd }, rr = right.filter { $0.z <= zEnd }
+                let l = left.filter { $0.z >= 0 && $0.z <= zEnd }, rr = right.filter { $0.z >= 0 && $0.z <= zEnd }
                 if l.count > 1, rr.count > 1 {
                     let carpet = l + rr.reversed()
                     let color = r.level == .none ? Color.cyan : r.level.accent
@@ -324,7 +324,7 @@ private struct RoadCanvas: View {
 
     /// Hai mép làn mình theo mét, từ z = 0 tới farZ. Thiếu vạch thì dựng thẳng / song song vạch còn lại.
     private func laneEdges() -> ([Ground], [Ground]) {
-        let zs = stride(from: 0.0, through: Self.farZ, by: 2.5).map { $0 }
+        let zs = stride(from: -12.0, through: Self.farZ, by: 2.5).map { $0 }  // từ dưới gầm xe mình để mặt đường chạm đáy màn hình
         func sample(_ c: LaneCurve?) -> [Ground]? {
             guard let c else { return nil }
             // lấy điểm ảnh trong vùng tin được (dưới chân trời, tới đáy ảnh) rồi nội suy theo z
@@ -393,16 +393,18 @@ private struct Car {
     var kind: Kind
 }
 
-/// Camera ảo: cao 3.2 m, lùi sau camera thật 7 m, nhìn thẳng ra trước.
+/// Camera ảo: cao 3.2 m, lùi sau camera thật 7 m, nhìn thẳng ra trước. Chiều sâu được nén lại
+/// (depth < 1) để xe ở 20–60 m không bị dồn sát chân trời; số mét hiển thị vẫn là số thật.
 private struct ChaseCamera {
     let size: CGSize
     let height = 3.2
     let back = 7.0
+    let depth = 0.45
 
-    var horizonY: CGFloat { size.height * 0.36 }
+    var horizonY: CGFloat { size.height * 0.30 }
     var focal: Double { Double(size.height) * 1.05 }
 
-    func scale(_ z: Double) -> Double { focal / max(z + back, 0.5) }
+    func scale(_ z: Double) -> Double { focal / max(z * depth + back, 0.5) }
 
     func point(_ g: Ground) -> CGPoint {
         let k = scale(g.z)
