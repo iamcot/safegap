@@ -62,10 +62,27 @@ struct CalibrationPanel: View {
                     .font(.footnote)
                 }
 
+                GroupBox("Chân trời (CoreMotion)") {
+                    VStack(alignment: .leading, spacing: 4) {
+                        if let pd = s.pitchDeg {
+                            Text(String(format: "Máy đang ngẩng %+.1f°", pd)).monospacedDigit()
+                        } else {
+                            Text("Chưa đọc được cảm biến chuyển động").foregroundStyle(.secondary)
+                        }
+                        Text("Đỗ xe trên đường bằng, nhìn ra xa: vạch vàng nét đứt phải nằm ở chân trời (điểm tụ của làn). Lệch thì chỉnh bù dưới đây.")
+                            .font(.caption)
+                        Stepper(String(format: "Bù lệch: %+.1f°", editor.draft.pitchOffsetDeg ?? 0),
+                                value: Binding(get: { editor.draft.pitchOffsetDeg ?? 0 },
+                                               set: { editor.draft.pitchOffsetDeg = $0 == 0 ? nil : $0 }),
+                                in: -5...5, step: 0.1)
+                    }
+                    .font(.footnote)
+                }
+
                 GroupBox {
                     Stepper(String(format: "Chiều cao camera: %.2f m", editor.draft.hCamM), value: $editor.draft.hCamM, in: 0.5...2.5, step: 0.05)
                         .font(.footnote)
-                    Text("Chỉ dùng khi bật cách tính theo mặt đường (mặc định tắt).").font(.caption2).foregroundStyle(.secondary)
+                    Text("Đo từ mặt đường lên tâm camera. Dùng cho cách đo theo mặt đường (Cài đặt > Khoảng cách).").font(.caption2).foregroundStyle(.secondary)
                 }
 
                 HStack {

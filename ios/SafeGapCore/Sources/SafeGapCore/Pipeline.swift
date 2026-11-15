@@ -27,13 +27,14 @@ public final class Pipeline {
     public let frameHeight: Double
     /// Tiêu cự theo pixel của frame đang xử lý. App cập nhật mỗi frame nếu intrinsics thay đổi (lấy nét).
     public var fPx: Double
-    public let hCam: Double
+    public var hCam: Double
     public let widths: [String: Double]
     /// ROI theo pixel. App thay bằng ROI bám vạch làn mỗi frame nếu bật.
     public var roi: [Point]
     public let ownVehicle: OwnVehicleFilter
-    public let useGround: Bool
-    public let yHorizon: Double
+    public var useGround: Bool
+    /// Dòng chân trời (pixel). App cập nhật mỗi frame từ pitch của CoreMotion.
+    public var yHorizon: Double
     public let fuseFar: Double
     public let tracker: IoUTracker
     public let alert: AlertState

@@ -22,6 +22,8 @@ public struct DeviceCalibration: Codable, Equatable, Sendable {
     public var maxWidthRatio: Double
     public var maxBottomRatio: Double
     public var hCamM: Double
+    /// Bù lệch góc ngẩng (độ) nếu chân trời từ CoreMotion lệch với chân trời thật trên ảnh. nil = 0.
+    public var pitchOffsetDeg: Double?
     public var updatedAt: Date?
 
     public init(deviceModel: String, lens: String, frameWidth: Double, frameHeight: Double, manualFPx: Double? = nil,

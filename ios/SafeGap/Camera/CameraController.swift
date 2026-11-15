@@ -130,12 +130,12 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         onFrame?(sampleBuffer)
     }
 
-    /// fx (pixel) từ cameraIntrinsicMatrix gắn kèm frame. Hệ pixel = kích thước buffer.
-    static func intrinsicsFx(_ sb: CMSampleBuffer) -> Double? {
+    /// fx, cy (pixel) từ cameraIntrinsicMatrix gắn kèm frame. Hệ pixel = kích thước buffer.
+    static func intrinsics(_ sb: CMSampleBuffer) -> (fx: Double, cy: Double)? {
         guard let att = CMGetAttachment(sb, key: kCMSampleBufferAttachmentKey_CameraIntrinsicMatrix, attachmentModeOut: nil),
               let data = att as? Data, data.count >= MemoryLayout<matrix_float3x3>.size else { return nil }
         let m = data.withUnsafeBytes { $0.loadUnaligned(as: matrix_float3x3.self) }
         let fx = Double(m.columns.0.x)
-        return fx > 0 ? fx : nil
+        return fx > 0 ? (fx, Double(m.columns.2.y)) : nil
     }
 }

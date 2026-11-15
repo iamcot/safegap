@@ -27,6 +27,7 @@ final class AppModel: ObservableObject {
     let law: LawConfig
     let camera = CameraController()
     let speed = SpeedProvider()
+    let motion = MotionProvider()
     let sound = AlertSound()
     let logger = CSVLogger()
     private var processor: FrameProcessor!
@@ -56,7 +57,7 @@ final class AppModel: ObservableObject {
         calibration = CalibrationStore.load(key: defaults.storageKey) ?? defaults
         errorMessage = loadError
 
-        processor = FrameProcessor(params: currentParams(), speed: speed, logger: logger, sound: sound)
+        processor = FrameProcessor(params: currentParams(), speed: speed, motion: motion, logger: logger, sound: sound)
         processor.onSnapshot = { [weak self] s in
             DispatchQueue.main.async { self?.snapshot = s }
         }
@@ -107,6 +108,7 @@ final class AppModel: ObservableObject {
         UIApplication.shared.isIdleTimerDisabled = true
         sound.prepare()
         speed.start()
+        motion.start()
         applyLogging()
         Task {
             guard await CameraController.requestAccess() else {

@@ -16,6 +16,8 @@ struct UserSettings: Codable, Equatable {
     var minSpeedKmh: Double?
     /// ROI bám theo vạch làn nhận diện được (tắt = dùng hình thang hiệu chỉnh cố định).
     var laneFollow = true
+    /// Kết hợp cách đo theo mặt đường (cần chiều cao camera), chân trời lấy từ CoreMotion.
+    var groundFusion = true
 
     init() {}
 
@@ -28,6 +30,7 @@ struct UserSettings: Codable, Equatable {
         simulatedSpeedKmh = try c.decodeIfPresent(Double.self, forKey: .simulatedSpeedKmh)
         minSpeedKmh = try c.decodeIfPresent(Double.self, forKey: .minSpeedKmh)
         laneFollow = try c.decodeIfPresent(Bool.self, forKey: .laneFollow) ?? d.laneFollow
+        groundFusion = try c.decodeIfPresent(Bool.self, forKey: .groundFusion) ?? d.groundFusion
     }
 
     static let key = "settings.v1"
@@ -67,6 +70,9 @@ struct FrameSnapshot {
     var roiNorm: [Point]?
     var laneLeft: LaneCurve?
     var laneRight: LaneCurve?
+    /// Chân trời (pixel) và góc ngẩng (độ) từ CoreMotion; nil nếu không có.
+    var yHorizon: Double?
+    var pitchDeg: Double?
 }
 
 final class FrameProcessor {
@@ -96,6 +102,7 @@ final class FrameProcessor {
     }()
 
     let speed: SpeedProvider
+    let motion: MotionProvider
     let logger: CSVLogger
     let sound: AlertSound
     var hfovDeg: Double?
@@ -119,9 +126,10 @@ final class FrameProcessor {
     /// Gọi trên hàng đợi camera; bên nhận tự chuyển về main.
     var onSnapshot: ((FrameSnapshot) -> Void)?
 
-    init(params: Params, speed: SpeedProvider, logger: CSVLogger, sound: AlertSound) {
+    init(params: Params, speed: SpeedProvider, motion: MotionProvider, logger: CSVLogger, sound: AlertSound) {
         self.params = params
         self.speed = speed
+        self.motion = motion
         self.logger = logger
         self.sound = sound
         do {
@@ -153,7 +161,8 @@ final class FrameProcessor {
         // Máy nóng: bỏ bớt frame (YOLO là phần tốn pin / nhiệt nhất). Kalman dùng dt thật nên vẫn đúng.
         guard throttle.shouldProcess(t: t, targetFps: targetFps) else { return }
 
-        let fx = CameraController.intrinsicsFx(sb)
+        let intr = CameraController.intrinsics(sb)
+        let fx = intr?.fx
         let hfovF = hfovDeg.flatMap { FocalLength.fromHFOV(imageWidthPx: w, hfovDeg: $0) }
         let (f, source) = p.calibration.resolveF(frameWidth: w, intrinsicsFx: fx, hfovF: hfovF, config: p.config)
 
@@ -168,6 +177,16 @@ final class FrameProcessor {
         }
         guard let pipeline else { return }
         pipeline.fPx = f
+
+        // Bù pitch: chân trời theo góc ngẩng thật của camera, rồi mới dùng cách đo theo mặt đường.
+        var yHorizon: Double?, pitchDeg: Double?
+        if let pitch = motion.currentPitch() {
+            let pc = pitch + (p.calibration.pitchOffsetDeg ?? 0) * .pi / 180
+            yHorizon = Horizon.yPx(fPx: f, cy: intr?.cy ?? h / 2, pitchRad: pc)
+            pitchDeg = pc * 180 / .pi
+        }
+        pipeline.useGround = p.settings.groundFusion && yHorizon != nil
+        if let yHorizon { pipeline.yHorizon = yHorizon }
 
         // ROI bám vạch làn (Phase 3). Không thấy vạch thì quay về hình thang hiệu chỉnh.
         var roiNorm = p.calibration.roi
@@ -217,7 +236,8 @@ final class FrameProcessor {
         if p.settings.logOn {
             let extra = FrameLog.Extra(time: isoFormatter.string(from: Date()), fPx: f, fSource: source, nDets: dets.count,
                                        inferMs: (t1 - t0) * 1000, speedAccuracyKmh: gps?.accuracyKmh,
-                                       thermal: thermal, lane: laneTag)
+                                       thermal: thermal, lane: laneTag,
+                                       pitchDeg: pitchDeg, yHorizon: pipeline.useGround ? yHorizon : nil)
             logger.append(FrameLog.row(r, extra))
         }
 
@@ -241,6 +261,8 @@ final class FrameProcessor {
         s.roiNorm = roiNorm
         s.laneLeft = laneTracker.left
         s.laneRight = laneTracker.right
+        s.yHorizon = yHorizon
+        s.pitchDeg = pitchDeg
         onSnapshot?(s)
     }
 

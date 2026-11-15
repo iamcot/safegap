@@ -14,6 +14,12 @@ struct DetectionOverlay: View {
             roi.addLines((snapshot.roiNorm ?? calibration.roi).map { m.toView(norm: $0) })
             roi.closeSubpath()
             ctx.stroke(roi, with: .color(.white.opacity(0.7)), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+            if let yH = snapshot.yHorizon {
+                var hz = Path()
+                hz.move(to: m.toView(0, yH))
+                hz.addLine(to: m.toView(snapshot.frameWidth, yH))
+                ctx.stroke(hz, with: .color(.yellow.opacity(0.35)), style: StrokeStyle(lineWidth: 1, dash: [2, 6]))
+            }
             // vạch làn nhận diện được
             let yTop = calibration.roi.map(\.y).min() ?? 0.45
             for curve in [snapshot.laneLeft, snapshot.laneRight].compactMap({ $0 }) {

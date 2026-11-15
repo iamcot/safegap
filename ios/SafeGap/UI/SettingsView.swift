@@ -57,6 +57,13 @@ struct SettingsView: View {
                 } footer: {
                     Text("Tìm vạch kẻ đường để ROI uốn theo làn (đường cong). Không thấy vạch thì dùng hình thang đã hiệu chỉnh. Vạch xanh trên màn hình là vạch nhận diện được.")
                 }
+                Section {
+                    Toggle("Kết hợp đo theo mặt đường", isOn: $model.settings.groundFusion)
+                } header: {
+                    Text("Khoảng cách")
+                } footer: {
+                    Text("Ngoài bề rộng xe, đo thêm theo vị trí đáy xe so với chân trời (chân trời tính từ góc nghiêng máy bằng CoreMotion). Giúp ổn định khi xe gần, dưới khoảng 40 m. Cần nhập đúng chiều cao camera trong màn hiệu chỉnh.")
+                }
                 Section("Camera") {
                     Button("Hiệu chỉnh camera / ROI") {
                         dismiss()

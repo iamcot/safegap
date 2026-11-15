@@ -3,6 +3,7 @@ import SafeGapCore
 import SwiftUI
 
 struct CalibrationOverlay: View {
+    @EnvironmentObject var model: AppModel
     @ObservedObject var editor: CalibrationEditor
     let snapshot: FrameSnapshot
 
@@ -26,6 +27,15 @@ struct CalibrationOverlay: View {
                     hood.move(to: m.toView(0, yHood))
                     hood.addLine(to: m.toView(editor.draft.frameWidth, yHood))
                     ctx.stroke(hood, with: .color(.orange), style: StrokeStyle(lineWidth: 2, dash: [8, 5]))
+                    if let yH = snapshot.yHorizon {
+                        // chân trời theo CoreMotion, đã gồm bù lệch đang lưu
+                        let y = yH + ((editor.draft.pitchOffsetDeg ?? 0) - (model.calibration.pitchOffsetDeg ?? 0))
+                            * .pi / 180 * snapshot.fPx
+                        var hz = Path()
+                        hz.move(to: m.toView(0, y))
+                        hz.addLine(to: m.toView(editor.draft.frameWidth, y))
+                        ctx.stroke(hz, with: .color(.yellow), style: StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+                    }
                     if editor.a4On {
                         for x in [editor.a4Left, editor.a4Right] {
                             var p = Path()
