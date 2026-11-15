@@ -251,7 +251,7 @@ private struct RoadCanvas: View {
             for edge in [leftmost, rightmost] {
                 ctx.stroke(cam.path(edge), with: .color(pal.roadEdge), lineWidth: 2)
             }
-            // vạch làn: làn mình nét liền, vạch giữa các làn bên nét đứt
+            // vạch làn: tất cả nét đứt; vạch làn mình đậm hơn
             let leftNext = left.map { Ground(x: $0.x - Self.laneWidth, z: $0.z) }
             let rightNext = right.map { Ground(x: $0.x + Self.laneWidth, z: $0.z) }
             for edge in [leftNext, rightNext] {
@@ -263,7 +263,7 @@ private struct RoadCanvas: View {
             let real = snapshot.roadLane.tracked
             for edge in [left, right] {
                 ctx.stroke(cam.path(edge), with: .color(real ? pal.lane : pal.laneFaint),
-                           style: StrokeStyle(lineWidth: real ? 2.5 : 1.5, lineCap: .round))
+                           style: StrokeStyle(lineWidth: real ? 2.5 : 1.5, lineCap: .round, dash: [14, 16]))
             }
 
             // dải đường đi giữa làn: từ đầu xe mình tới xe phía trước (không có xe thì dài bằng d_min, mờ dần)
