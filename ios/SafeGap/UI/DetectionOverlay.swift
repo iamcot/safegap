@@ -11,9 +11,20 @@ struct DetectionOverlay: View {
             let m = FrameMapping(frameWidth: snapshot.frameWidth, frameHeight: snapshot.frameHeight, viewSize: size)
             // ROI
             var roi = Path()
-            roi.addLines(calibration.roi.map { m.toView(norm: $0) })
+            roi.addLines((snapshot.roiNorm ?? calibration.roi).map { m.toView(norm: $0) })
             roi.closeSubpath()
             ctx.stroke(roi, with: .color(.white.opacity(0.7)), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+            // vạch làn nhận diện được
+            let yTop = calibration.roi.map(\.y).min() ?? 0.45
+            for curve in [snapshot.laneLeft, snapshot.laneRight].compactMap({ $0 }) {
+                var p = Path()
+                for i in 0...12 {
+                    let y = yTop + (1 - yTop) * Double(i) / 12
+                    let pt = m.toView(norm: Point(curve.x(at: y), y))
+                    if i == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
+                }
+                ctx.stroke(p, with: .color(.cyan.opacity(0.8)), lineWidth: 2)
+            }
             // vạch đáy: box chạm dưới vạch này là capo xe mình
             let yHood = calibration.maxBottomRatio * snapshot.frameHeight
             var hood = Path()

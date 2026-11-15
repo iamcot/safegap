@@ -50,6 +50,13 @@ struct SettingsView: View {
                 } footer: {
                     Text("Mở app Tệp > Trên iPhone > SafeGap > logs. Cột giống CSV của proto/run_video.py nên chạy được proto.eval.")
                 }
+                Section {
+                    Toggle("ROI bám theo vạch làn", isOn: $model.settings.laneFollow)
+                } header: {
+                    Text("Chọn xe cùng làn")
+                } footer: {
+                    Text("Tìm vạch kẻ đường để ROI uốn theo làn (đường cong). Không thấy vạch thì dùng hình thang đã hiệu chỉnh. Vạch xanh trên màn hình là vạch nhận diện được.")
+                }
                 Section("Camera") {
                     Button("Hiệu chỉnh camera / ROI") {
                         dismiss()

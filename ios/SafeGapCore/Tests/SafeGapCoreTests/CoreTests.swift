@@ -122,7 +122,7 @@ final class CoreTests: XCTestCase {
         let e = FrameLog.Extra(time: "2026-11-15T10:00:00.000Z", fPx: 1450, fSource: .intrinsics, nDets: 2, inferMs: 21.3,
                                speedAccuracyKmh: nil)
         let row = FrameLog.row(r, e)
-        XCTAssertEqual(row, "3,0.1000,92.50,car,68.85,40.000,40.000,70.0,RED,True,1,2026-11-15T10:00:00.000Z,1450.00,intrinsics,2,21.3,,nominal")
+        XCTAssertEqual(row, "3,0.1000,92.50,car,68.85,40.000,40.000,70.0,RED,True,1,2026-11-15T10:00:00.000Z,1450.00,intrinsics,2,21.3,,nominal,")
         XCTAssertEqual(row.split(separator: ",", omittingEmptySubsequences: false).count,
                        FrameLog.header.split(separator: ",").count)
         let empty = FrameLog.row(FrameResult(frame: 0, t: 0, speedKmh: nil), e)

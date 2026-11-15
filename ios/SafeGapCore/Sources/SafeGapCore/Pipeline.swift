@@ -29,7 +29,8 @@ public final class Pipeline {
     public var fPx: Double
     public let hCam: Double
     public let widths: [String: Double]
-    public let roi: [Point]
+    /// ROI theo pixel. App thay bằng ROI bám vạch làn mỗi frame nếu bật.
+    public var roi: [Point]
     public let ownVehicle: OwnVehicleFilter
     public let useGround: Bool
     public let yHorizon: Double

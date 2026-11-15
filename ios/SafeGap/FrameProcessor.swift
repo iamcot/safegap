@@ -4,7 +4,7 @@ import Foundation
 import QuartzCore
 import SafeGapCore
 
-/// Cài đặt người dùng (lưu UserDefaults).
+/// Cài đặt người dùng (lưu UserDefaults). Đọc từng khoá, thiếu thì lấy mặc định (thêm cài đặt mới không mất cái cũ).
 struct UserSettings: Codable, Equatable {
     var soundOn = true
     var logOn = true
@@ -14,6 +14,21 @@ struct UserSettings: Codable, Equatable {
     var simulatedSpeedKmh: Double?
     /// Ngưỡng tốc độ bắt đầu cảnh báo. nil = theo config (40 km/h). Hạ xuống để thử trong phố.
     var minSpeedKmh: Double?
+    /// ROI bám theo vạch làn nhận diện được (tắt = dùng hình thang hiệu chỉnh cố định).
+    var laneFollow = true
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = UserSettings()
+        soundOn = try c.decodeIfPresent(Bool.self, forKey: .soundOn) ?? d.soundOn
+        logOn = try c.decodeIfPresent(Bool.self, forKey: .logOn) ?? d.logOn
+        manualDMinM = try c.decodeIfPresent(Double.self, forKey: .manualDMinM)
+        simulatedSpeedKmh = try c.decodeIfPresent(Double.self, forKey: .simulatedSpeedKmh)
+        minSpeedKmh = try c.decodeIfPresent(Double.self, forKey: .minSpeedKmh)
+        laneFollow = try c.decodeIfPresent(Bool.self, forKey: .laneFollow) ?? d.laneFollow
+    }
 
     static let key = "settings.v1"
 
@@ -48,6 +63,10 @@ struct FrameSnapshot {
     var detectorError: String?
     var thermal: ThermalLevel = .nominal
     var targetFps: Double = 30
+    /// ROI đang dùng (chuẩn hoá): bám làn hoặc hình thang hiệu chỉnh.
+    var roiNorm: [Point]?
+    var laneLeft: LaneCurve?
+    var laneRight: LaneCurve?
 }
 
 final class FrameProcessor {
@@ -83,6 +102,7 @@ final class FrameProcessor {
     let thermalPolicy = ThermalPolicy()
     private var throttle = FrameThrottle()
     private var thermalLevel: ThermalLevel = .nominal
+    private var laneTracker = LaneTracker()
 
     /// Gọi từ main khi iOS báo đổi mức nhiệt.
     func setThermal(_ level: ThermalLevel) {
@@ -149,6 +169,27 @@ final class FrameProcessor {
         guard let pipeline else { return }
         pipeline.fPx = f
 
+        // ROI bám vạch làn (Phase 3). Không thấy vạch thì quay về hình thang hiệu chỉnh.
+        var roiNorm = p.calibration.roi
+        if p.settings.laneFollow, let gray = Self.gray(pb) {
+            let cal = p.calibration
+            let top = cal.roi.map(\.y).min() ?? 0.45
+            var lc = LaneConfig()
+            lc.yBottom = min(0.95, cal.maxBottomRatio - 0.02)
+            lc.yTop = top + 0.25 * (lc.yBottom - top)
+            let (tl, tr) = (laneTracker.left, laneTracker.right)
+            let d = LaneDetector.detect(gray, config: lc) { y in
+                LaneROI.center(at: y, left: tl, right: tr, calibrated: cal.roi)
+            }
+            laneTracker.update(d)
+            if let poly = LaneROI.polygon(left: laneTracker.left, right: laneTracker.right, calibrated: cal.roi) {
+                roiNorm = poly
+            }
+        } else {
+            laneTracker.reset()
+        }
+        pipeline.roi = Lane.roiToPixels(roiNorm, width: w, height: h)
+
         let t0 = CACurrentMediaTime()
         var dets: [Detection] = []
         if let detector {
@@ -172,10 +213,11 @@ final class FrameProcessor {
         frameIndex += 1
 
         if r.sound && p.settings.soundOn { sound.play() }
+        let laneTag = (laneTracker.left != nil ? "L" : "") + (laneTracker.right != nil ? "R" : "")
         if p.settings.logOn {
             let extra = FrameLog.Extra(time: isoFormatter.string(from: Date()), fPx: f, fSource: source, nDets: dets.count,
                                        inferMs: (t1 - t0) * 1000, speedAccuracyKmh: gps?.accuracyKmh,
-                                       thermal: thermal)
+                                       thermal: thermal, lane: laneTag)
             logger.append(FrameLog.row(r, extra))
         }
 
@@ -196,6 +238,27 @@ final class FrameProcessor {
         s.detectorError = detectorError
         s.thermal = thermal
         s.targetFps = targetFps
+        s.roiNorm = roiNorm
+        s.laneLeft = laneTracker.left
+        s.laneRight = laneTracker.right
         onSnapshot?(s)
+    }
+
+    /// Kênh sáng (Y) của buffer 420 thu nhỏ về chiều rộng outWidth, để tìm vạch làn.
+    static func gray(_ pb: CVPixelBuffer, outWidth: Int = 320) -> GrayImage? {
+        CVPixelBufferLockBaseAddress(pb, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
+        guard CVPixelBufferGetPlaneCount(pb) >= 1, let base = CVPixelBufferGetBaseAddressOfPlane(pb, 0) else { return nil }
+        let w = CVPixelBufferGetWidthOfPlane(pb, 0), h = CVPixelBufferGetHeightOfPlane(pb, 0)
+        let bpr = CVPixelBufferGetBytesPerRowOfPlane(pb, 0)
+        guard w > 0, h > 0 else { return nil }
+        let ow = min(outWidth, w), oh = max(1, h * ow / w)
+        let src = base.assumingMemoryBound(to: UInt8.self)
+        var px = [UInt8](repeating: 0, count: ow * oh)
+        for y in 0..<oh {
+            let row = src + (y * h / oh) * bpr
+            for x in 0..<ow { px[y * ow + x] = row[x * w / ow] }
+        }
+        return GrayImage(width: ow, height: oh, pixels: px)
     }
 }
