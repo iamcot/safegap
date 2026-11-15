@@ -23,7 +23,7 @@ struct UserSettings: Codable, Equatable {
     /// Chạy mát: YOLO 15 fps (giảm tiếp khi nóng) thay vì 30.
     var coolMode = true
     /// Ẩn hình camera trên HUD (chỉ số và màu), đỡ tốn GPU vẽ hình.
-    var hidePreview = false
+    var hidePreview = true
 
     var zoom: Double { zoom2x ? 2 : 1 }
 

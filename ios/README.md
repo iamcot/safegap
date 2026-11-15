@@ -34,7 +34,7 @@ Nhanh nhất: `scripts/dev.sh` (export model nếu chưa có, chạy test lõi, 
 3. Cắm iPhone, chọn máy, bấm Run. Lần đầu: trên iPhone vào Cài đặt > Cài đặt chung > VPN & Quản lý thiết bị để tin cậy.
    Cho phép Camera và Vị trí khi app hỏi.
 
-App khoá màn hình **ngang, camera (tai thỏ) bên trái**. Màn hình không tự tắt khi app mở.
+App chạy màn hình **ngang, cầm chiều nào cũng được** (ảnh tự xoay 180° theo hướng máy). Màn hình không tự tắt khi app mở.
 
 ## Hiệu chỉnh theo máy (làm mỗi khi đổi điện thoại hoặc đổi chỗ gắn giá)
 
@@ -63,7 +63,10 @@ Mỗi lần mở app ghi một file `logs/safegap_YYYYMMDD_HHmmss.csv` (app Tệ
 ## Phase 3 (trong Cài đặt ⚙)
 
 - **Chạy mát** (mặc định bật): YOLO 15 fps trên Neural Engine. Máy nóng (`thermalState`) thì tự giảm tiếp 12 → 8 → 5 fps
-  (tắt chạy mát: 30 → 20 → 12 → 6). Có tuỳ chọn ẩn hình camera trên HUD. HUD báo khi đang giảm.
+  (tắt chạy mát: 30 → 20 → 12 → 6). HUD báo khi đang giảm.
+- **Ẩn hình camera** (mặc định bật): full màn hình là con đường vẽ lại theo mét: vạch làn và các xe chiếu từ ảnh xuống mặt
+  đường (cần f, chiều cao camera và chân trời), xe phía trước tô màu cảnh báo, thảm màu trên đường dài đúng khoảng cách
+  tối thiểu. Viền màn hình sáng vàng/đỏ khi cần chú ý. Tắt đi thì về giao diện cũ (camera + bảng HUD).
   Ngoài app: gắn máy ở khe gió điều hoà, tháo ốp, tránh sạc nhanh khi đang chạy.
 - **ROI bám vạch làn** (mặc định bật): tìm vạch kẻ đường hai bên làn mình, ROI uốn theo làn khi vào cua. Vạch xanh trên HUD
   là vạch nhận diện được. Không thấy vạch (đường không kẻ, trời tối) thì dùng hình thang đã hiệu chỉnh.

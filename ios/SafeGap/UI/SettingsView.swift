@@ -56,7 +56,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Nhiệt độ máy")
                 } footer: {
-                    Text("Chạy mát: YOLO 15 fps thay vì 30, máy nóng thì giảm tiếp. Ẩn hình camera: chỉ hiện box, số và màu, bớt việc cho GPU. Gắn máy ở khe gió điều hoà, tháo ốp, tránh sạc nhanh khi đang chạy.")
+                    Text("Chạy mát: YOLO 15 fps thay vì 30, máy nóng thì giảm tiếp. Ẩn hình camera: màn hình chính vẽ lại con đường, vạch làn và các xe theo mét (không cần ảnh camera), bớt việc cho GPU. Màn hiệu chỉnh vẫn hiện camera. Gắn máy ở khe gió điều hoà, tháo ốp, tránh sạc nhanh khi đang chạy.")
                 }
                 Section {
                     Toggle("ROI bám theo vạch làn", isOn: $model.settings.laneFollow)

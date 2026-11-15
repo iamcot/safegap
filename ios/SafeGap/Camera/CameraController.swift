@@ -1,6 +1,6 @@
 // Camera sau 1x, 1080p, tắt chống rung, bật intrinsics mỗi frame (SafeGap.md mục 4, Phase 2).
-// Không xoay buffer: app khoá màn hình ngang (landscapeRight), đúng hướng gốc của cảm biến,
-// nên toạ độ box, ROI và ma trận intrinsics cùng một hệ pixel.
+// App chạy màn hình ngang (cả hai chiều). Buffer xoay 0° hoặc 180° theo hướng cầm để ảnh luôn đúng chiều;
+// toạ độ box, ROI, vạch làn đều theo ảnh đã xoay.
 import AVFoundation
 import CoreMedia
 import simd
@@ -124,6 +124,15 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
             } catch {
                 // không đổi được fps camera thì FrameProcessor vẫn bỏ bớt frame
             }
+        }
+    }
+
+    /// Xoay buffer theo hướng cầm máy (0° hoặc 180°), để app dùng được cả hai kiểu nằm ngang.
+    func setRotation(_ angle: CGFloat) {
+        sessionQueue.async {
+            guard let conn = self.output.connection(with: .video), conn.isVideoRotationAngleSupported(angle),
+                  conn.videoRotationAngle != angle else { return }
+            conn.videoRotationAngle = angle
         }
     }
 
