@@ -10,9 +10,8 @@ enum CalibrationStore {
         if let sim = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] { return sim }
         var sys = utsname()
         uname(&sys)
-        return withUnsafePointer(to: &sys.machine) {
-            $0.withMemoryRebound(to: CChar.self, capacity: MemoryLayout.size(ofValue: sys.machine)) { String(cString: $0) }
-        }
+        let bytes = Mirror(reflecting: sys.machine).children.compactMap { $0.value as? Int8 }
+        return String(decoding: bytes.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }
 
     static func load(key: String) -> DeviceCalibration? {
