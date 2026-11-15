@@ -143,6 +143,7 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+const EGO_COLOR = "#00ff66";
 const COLORS = { GREEN: "#2ecc40", YELLOW: "#ffd23f", RED: "#ff4136", NONE: "#9aa0a6" };
 const video = $("video"), overlay = $("overlay"), ctx = overlay.getContext("2d");
 
@@ -393,16 +394,21 @@ function drawOverlay() {
       if (conf < minConf) continue;
       const dropped = x2 - x1 > maxW || y2 > maxY2;
       const ego = !dropped && !egoDrawn && wpx !== null && Math.abs((x2 - x1) - wpx) < 1e-3 && res.d[r] !== null;
-      ctx.strokeStyle = ego ? color : dropped ? "rgba(220,220,220,.45)" : "rgba(220,220,220,.8)";
-      ctx.lineWidth = (ego ? 3 : 1) * dpr;
+      // Xe đang đo: xanh lá đậm. Xe khác: hồng tím (dễ thấy trên nền đường/trời). Box bị bỏ: nét đứt, mờ hơn.
+      ctx.strokeStyle = ego ? EGO_COLOR : dropped ? "rgba(255,77,255,.55)" : "#ff4dff";
+      ctx.lineWidth = (ego ? 4 : 2) * dpr;
       ctx.setLineDash(dropped ? [6 * dpr, 6 * dpr] : []);
       ctx.strokeRect(x1 * s, y1 * s, (x2 - x1) * s, (y2 - y1) * s);
       ctx.setLineDash([]);
       if (ego) {
         egoDrawn = true;
-        const fs = Math.max(14, 20 * dpr);
-        ctx.font = `bold ${fs}px system-ui`; ctx.fillStyle = color;
-        ctx.fillText(`${res.d[r].toFixed(0)} m`, x1 * s, y1 * s - 6 * dpr);
+        const fs = 22 * dpr, label = `${res.d[r].toFixed(1)} m`;
+        ctx.font = `bold ${fs}px system-ui`;
+        const tw = ctx.measureText(label).width, ph = fs * 1.3;
+        const lx = Math.min(Math.max(x1 * s, 0), W - tw - 12 * dpr);
+        const ly = Math.max(y1 * s - ph - 4 * dpr, 30 * dpr + 4 * dpr);   // không đè thanh trạng thái
+        ctx.fillStyle = "rgba(0,0,0,.7)"; ctx.fillRect(lx, ly, tw + 12 * dpr, ph);
+        ctx.fillStyle = EGO_COLOR; ctx.fillText(label, lx + 6 * dpr, ly + fs * 1.0);
       }
     }
   }
