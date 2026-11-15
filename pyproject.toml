@@ -5,14 +5,18 @@ description = "SafeGap – cảnh báo khoảng cách an toàn trên cao tốc (
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 dependencies = [
+    "fastapi>=0.163.0",
     "numpy>=1.26",
     "opencv-python>=4.9",
     "ultralytics>=8.3",
-    "streamlit>=1.35",
+    "uvicorn>=0.29",
 ]
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=8",
+]
 
 [tool.uv]
 # proto/ chạy bằng `python -m proto.xxx`, không cần build thành gói
