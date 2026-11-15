@@ -172,6 +172,16 @@ final class AppModel: ObservableObject {
     func saveCalibration() {
         guard let e = editor else { return }
         CalibrationStore.save(e.draft)
+        // Chiều cao camera và bù pitch là của giá gắn, không phụ thuộc ống kính: chép sang ống kính kia
+        for zoom in [1.0, 2.0] where CameraController.lens(zoom: zoom) != e.draft.lens {
+            var other = e.draft
+            other.lens = CameraController.lens(zoom: zoom)
+            if var saved = CalibrationStore.load(key: other.storageKey) {
+                saved.hCamM = e.draft.hCamM
+                saved.pitchOffsetDeg = e.draft.pitchOffsetDeg
+                CalibrationStore.save(saved)
+            }
+        }
         calibration = CalibrationStore.load(key: e.draft.storageKey) ?? e.draft
         pushParams()
         endCalibration()
