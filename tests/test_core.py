@@ -46,7 +46,8 @@ def test_fuse_prefers_width_when_far():
 
 
 # --- lane ---
-ROI = roi_to_pixels(CFG["roi"]["polygon"], 1920, 1080)
+# ROI cố định cho test, không phụ thuộc config/default.json (người dùng chỉnh ROI bằng viewer)
+ROI = roi_to_pixels([[0.42, 0.45], [0.58, 0.45], [0.80, 1.0], [0.20, 1.0]], 1920, 1080)
 
 
 def test_point_in_polygon():

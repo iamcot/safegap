@@ -2,8 +2,6 @@
  "comment": "Sinh bởi `python -m proto.fixtures`. Không sửa tay.",
  "law": {
   "source": "Thông tư 38/2024/TT-BGTVT",
-  "condition": "Đường khô ráo, không có biển 'Cự ly tối thiểu giữa hai xe'",
-  "note": "Cập nhật file này khi có văn bản mới. Tốc độ trên mốc cuối dùng d_min của mốc cuối.",
   "table": [
    {
     "max_kmh": 60,
@@ -4574,7 +4572,6 @@
      "bus": 2.5
     },
     "detection": {
-     "model": "yolo11n.pt",
      "classes": [
       "car",
       "truck",
@@ -4585,7 +4582,6 @@
      "max_bottom_ratio": 0.97
     },
     "roi": {
-     "comment": "Hình thang chọn xe cùng làn, toạ độ chuẩn hoá 0..1 (x, y), y tính từ trên xuống",
      "polygon": [
       [
        0.42,
@@ -10949,7 +10945,6 @@
      "bus": 2.5
     },
     "detection": {
-     "model": "yolo11n.pt",
      "classes": [
       "car",
       "truck",
@@ -10960,7 +10955,6 @@
      "max_bottom_ratio": 0.97
     },
     "roi": {
-     "comment": "Hình thang chọn xe cùng làn, toạ độ chuẩn hoá 0..1 (x, y), y tính từ trên xuống",
      "polygon": [
       [
        0.42,

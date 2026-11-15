@@ -13,7 +13,7 @@ import random
 import sys
 from pathlib import Path
 
-from . import config, distance as dist
+from . import distance as dist
 from .alert import AlertState, LawTable, classify
 from .lane import Detection, point_in_polygon, roi_to_pixels, select_ego
 from .pipeline import Pipeline
@@ -176,8 +176,27 @@ def pipeline_case(cfg, law, name, use_ground, seed):
     return {"name": name, "frame_w": W, "frame_h": H, "f_px": F, "config": c, "frames": frames}
 
 
+# Config cố định cho dữ liệu mẫu: không đọc config/default.json, để chỉnh tham số bằng viewer
+# không làm test Swift lệch. Các khoá giống default.json.
+FIXTURE_CFG = {
+    "camera": {"f_px": 1530.0, "f_px_image_width": 2100, "h_cam_m": 1.2},
+    "vehicle_width_m": {"car": 1.8, "truck": 2.5, "bus": 2.5},
+    "detection": {"classes": ["car", "truck", "bus"], "min_conf": 0.35, "max_width_ratio": 0.7, "max_bottom_ratio": 0.97},
+    "roi": {"polygon": [[0.42, 0.45], [0.58, 0.45], [0.80, 1.0], [0.20, 1.0]]},
+    "distance": {"use_ground": False, "y_horizon_norm": 0.45, "fuse_far_m": 40.0},
+    "tracker": {"iou_match": 0.3, "max_missed": 10, "accel_sigma": 3.0, "meas_rel_sigma": 0.08},
+    "alert": {"red_ratio": 0.9, "yellow_ratio": 1.1, "hold_s": 1.0, "min_speed_kmh": 40.0,
+              "sound_cooldown_s": 5.0, "manual_d_min_m": None},
+}
+FIXTURE_LAW = {
+    "source": "Thông tư 38/2024/TT-BGTVT",
+    "table": [{"max_kmh": 60, "d_min_m": 35}, {"max_kmh": 80, "d_min_m": 55},
+              {"max_kmh": 100, "d_min_m": 70}, {"max_kmh": 120, "d_min_m": 100}],
+}
+
+
 def build() -> dict:
-    cfg, law = config.load(), config.load_law()
+    cfg, law = copy.deepcopy(FIXTURE_CFG), copy.deepcopy(FIXTURE_LAW)
     return {
         "comment": "Sinh bởi `python -m proto.fixtures`. Không sửa tay.",
         "law": law,
