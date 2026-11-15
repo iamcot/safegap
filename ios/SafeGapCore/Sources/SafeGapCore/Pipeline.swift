@@ -16,6 +16,8 @@ public struct FrameResult: Equatable, Sendable {
     public var trackId: Int?
     /// Chỉ có ở bản Swift: box xe đang đo, để vẽ lên HUD.
     public var egoBox: Box?
+    /// Chỉ có ở bản Swift: id track của từng detection đầu vào (nil = bị lọc: capo / class lạ).
+    public var trackIds: [Int?] = []
 
     public init(frame: Int, t: Double, speedKmh: Double?) {
         self.frame = frame; self.t = t; self.speedKmh = speedKmh
@@ -38,6 +40,8 @@ public final class Pipeline {
     public let fuseFar: Double
     public let tracker: IoUTracker
     public let alert: AlertState
+    /// Track bị loại khỏi việc chọn xe phía trước (xe ngược chiều). Rỗng thì giống hệt bản Python.
+    public var excludedTracks: Set<Int> = []
     private var lastT: Double?
 
     public init(config cfg: AppConfig, law: LawConfig, frameWidth: Double, frameHeight: Double) {
@@ -64,10 +68,16 @@ public final class Pipeline {
     public func step(frame: Int, t: Double, speedKmh: Double?, detections: [Detection]) -> FrameResult {
         let dt = lastT.map { t - $0 } ?? 0.0
         lastT = t
-        let dets = detections.filter(keeps)
+        let keepMask = detections.map(keeps)
+        let dets = zip(detections, keepMask).filter(\.1).map(\.0)
         let ids = tracker.update(boxes: dets.map(\.box), classes: dets.map(\.cls))
         var r = FrameResult(frame: frame, t: t, speedKmh: speedKmh)
-        if let e = Lane.selectEgo(dets, roi: roi) {
+        var next = ids.makeIterator()
+        r.trackIds = keepMask.map { $0 ? next.next() : nil }
+        // chọn xe phía trước, bỏ qua track bị loại (nếu có)
+        let cand = dets.indices.filter { !excludedTracks.contains(ids[$0]) }
+        if let c = Lane.selectEgo(cand.map { dets[$0] }, roi: roi) {
+            let e = cand[c]
             let ego = dets[e]
             let tid = ids[e]
             if var dRaw = Distance.fromWidth(fPx: fPx, wRealM: widths[ego.cls]!, wPx: ego.width) {

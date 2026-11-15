@@ -83,6 +83,10 @@ struct FrameSnapshot {
     var laneRight: LaneCurve?
     /// Làn ổn định theo mét để vẽ màn lái.
     var roadLane = RoadLane()
+    /// Cùng thứ tự với detections: true = xe ngược chiều.
+    var oncoming: [Bool] = []
+    /// Vạch phân cách với chiều ngược lại: 1 = mép trái làn mình, 2 = mép trái làn bên trái, ... nil = chưa thấy.
+    var oncomingLane: Int?
     /// Chân trời (pixel) và góc ngẩng (độ) từ CoreMotion; nil nếu không có.
     var yHorizon: Double?
     var pitchDeg: Double?
@@ -124,6 +128,9 @@ final class FrameProcessor {
     private var thermalLevel: ThermalLevel = .nominal
     private var laneTracker = LaneTracker()
     private let roadLane = RoadLaneFilter()
+    private let oncoming = OncomingClassifier()
+    /// Làn có xe ngược chiều gần nhất (1 = làn sát bên trái) và lúc thấy lần cuối, để giữ vạch vàng vài giây.
+    private var oncomingLane: (index: Int, t: Double)?
 
     /// Gọi từ main khi iOS báo đổi mức nhiệt.
     func setThermal(_ level: ThermalLevel) {
@@ -261,6 +268,25 @@ final class FrameProcessor {
         let r = pipeline.step(frame: frameIndex, t: t, speedKmh: v, detections: dets)
         frameIndex += 1
 
+        // Xe ngược chiều: theo từng track, khoảng cách theo bề rộng + lệch ngang so với tâm làn mình.
+        var obs: [OncomingClassifier.Observation] = []
+        for (i, d) in dets.enumerated() {
+            guard i < r.trackIds.count, let id = r.trackIds[i], let wReal = p.config.vehicleWidthM[d.cls], d.width > 0, f > 0
+            else { continue }
+            let z = f * wReal / d.width
+            let x = ((d.x1 + d.x2) / 2 - w / 2) * z / f
+            obs.append(.init(id: id, distance: z, lateral: x - road.center(z)))
+        }
+        let oncomingIds = oncoming.update(t: t, ownSpeedMps: v.map { $0 / 3.6 }, laneHalfWidth: road.width / 2, observations: obs)
+        pipeline.excludedTracks = oncomingIds   // frame sau không chọn xe ngược chiều làm xe phía trước
+        let nearestLane = obs.filter { oncomingIds.contains($0.id) }
+            .map { max(1, Int(ceil((-$0.lateral - road.width / 2) / road.width))) }.min()
+        if let n = nearestLane {
+            oncomingLane = (n, t)
+        } else if let o = oncomingLane, t - o.t > 3 {
+            oncomingLane = nil
+        }
+
         if r.sound && p.settings.soundOn { sound.play() }
         let laneTag = (laneTracker.left != nil ? "L" : "") + (laneTracker.right != nil ? "R" : "")
         if p.settings.logOn {
@@ -292,6 +318,8 @@ final class FrameProcessor {
         s.laneLeft = laneTracker.left
         s.laneRight = laneTracker.right
         s.roadLane = road
+        s.oncoming = r.trackIds.map { $0.map(oncomingIds.contains) ?? false }
+        s.oncomingLane = oncomingLane?.index
         s.yHorizon = yHorizon
         s.pitchDeg = pitchDeg
         onSnapshot?(s)

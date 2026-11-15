@@ -66,7 +66,9 @@ Mỗi lần mở app ghi một file `logs/safegap_YYYYMMDD_HHmmss.csv` (app Tệ
   (tắt chạy mát: 30 → 20 → 12 → 6). HUD báo khi đang giảm.
 - **Ẩn hình camera** (mặc định bật): full màn hình là con đường vẽ lại theo mét (sáng/tối theo giao diện máy): vạch làn và các xe (khối 3D) chiếu từ ảnh xuống mặt
   đường (cần f, chiều cao camera và chân trời), làn mình tô xanh dương nhạt, dải từ đầu xe mình tới xe phía trước xanh lá khi an toàn, vàng/đỏ khi gần; xe là ảnh vẽ sẵn (Assets car_own, car_rear, truck_rear), vạch đứt là khoảng cách
-  tối thiểu. Viền màn hình sáng vàng/đỏ khi cần chú ý. Tắt đi thì về giao diện cũ (camera + bảng HUD).
+  tối thiểu. Viền màn hình sáng vàng/đỏ khi cần chú ý.
+  Xe ngược chiều (lại gần nhanh hơn tốc độ xe mình ≥ 15 km/h và ở bên trái làn mình) vẽ bằng ảnh nhìn từ đầu,
+  vạch phân cách hai chiều thành nét liền vàng, và không bao giờ được chọn làm xe phía trước. Tắt đi thì về giao diện cũ (camera + bảng HUD).
   Ngoài app: gắn máy ở khe gió điều hoà, tháo ốp, tránh sạc nhanh khi đang chạy.
 - **ROI bám vạch làn** (mặc định bật): tìm vạch kẻ đường hai bên làn mình, ROI uốn theo làn khi vào cua. Vạch xanh trên HUD
   là vạch nhận diện được. Không thấy vạch (đường không kẻ, trời tối) thì dùng hình thang đã hiệu chỉnh.

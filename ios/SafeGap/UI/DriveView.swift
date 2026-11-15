@@ -265,6 +265,12 @@ private struct RoadCanvas: View {
                 ctx.stroke(cam.path(edge), with: .color(real ? pal.lane : pal.laneFaint),
                            style: StrokeStyle(lineWidth: real ? 2.5 : 1.5, lineCap: .round, dash: [14, 16]))
             }
+            // có xe ngược chiều: vạch phân cách hai chiều là nét liền vàng
+            if let n = snapshot.oncomingLane {
+                let edge = left.map { Ground(x: $0.x - Double(n - 1) * Self.laneWidth, z: $0.z) }
+                ctx.stroke(cam.path(edge), with: .color(Color(red: 1.0, green: 0.76, blue: 0.0)),
+                           style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
+            }
 
             // dải đường đi giữa làn: từ đầu xe mình tới xe phía trước (không có xe thì dài bằng d_min, mờ dần)
             let target = cars.first { $0.isTarget }
@@ -319,7 +325,12 @@ private struct RoadCanvas: View {
     /// Xe là ảnh nhìn từ sau-trên. Bề rộng theo mét × tỉ lệ camera; chiều cao ảnh nén theo độ dài xe
     /// nhìn từ camera ảo (xe xa trông dẹt hơn), đuôi xe đặt đúng vị trí trên mặt đường.
     private func drawCar(_ ctx: GraphicsContext, _ cam: ChaseCamera, _ car: Car) {
-        let name = car.kind == .own ? "car_own" : (car.isTall ? "truck_rear" : "car_rear")
+        let name: String
+        switch car.kind {
+        case .own: name = "car_own"
+        case .oncoming: name = car.isTall ? "truck_front" : "car_front"
+        default: name = car.isTall ? "truck_rear" : "car_rear"
+        }
         let img = ctx.resolve(Image(name))
         let sz = img.size
         guard sz.width > 0 else { return }
@@ -385,14 +396,14 @@ private struct RoadCanvas: View {
             let x = ((d.x1 + d.x2) / 2 - s.frameWidth / 2) * z / s.fPx
             let isCar = d.cls == "car"
             out.append(Car(pos: Ground(x: x, z: z), widthM: wReal, heightM: isCar ? 1.45 : 3.0, lengthM: isCar ? 4.5 : 9.0,
-                           kind: isEgo ? .target : .other))
+                           kind: isEgo ? .target : (i < s.oncoming.count && s.oncoming[i] ? .oncoming : .other)))
         }
         return out
     }
 }
 
 private struct Car {
-    enum Kind { case own, target, other }
+    enum Kind { case own, target, other, oncoming }
     var pos: Ground
     var widthM: Double
     var heightM: Double
