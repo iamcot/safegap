@@ -54,6 +54,9 @@ Cài đặt (⚙) > "Tốc độ giả lập": đặt ví dụ 90 km/h để xem
 
 ## Log
 
+Phân tích trên Mac (AirDrop file từ app Tệp sang): `uv run python -m proto.triplog safegap_….csv` in tóm tắt chuyến đi và lưu biểu đồ PNG (D, d_min, tốc độ, nền màu theo mức cảnh báo) cạnh file.
+
+
 Mỗi lần mở app ghi một file `logs/safegap_YYYYMMDD_HHmmss.csv` (app Tệp > Trên iPhone > SafeGap).
 11 cột đầu giống CSV của `proto/run_video.py`, thêm `time, f_px, f_source, n_dets, infer_ms, speed_acc_kmh`.
 

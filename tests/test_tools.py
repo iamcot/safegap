@@ -26,3 +26,22 @@ def test_replay_matches_cached_dets():
     assert res[0].d == pytest.approx(40, rel=1e-3)
     assert res[44].level == "RED"
     assert res[45].d is None
+
+
+def test_triplog_summary(tmp_path):
+    from proto import triplog
+    head = "frame,t,speed_kmh,cls,w_px,d_raw,d,d_min,level,sound,track_id,time,f_px,f_source,n_dets,infer_ms,speed_acc_kmh,thermal,lane\n"
+    rows = []
+    for i in range(60):
+        lvl = "GREEN" if i < 30 else "RED"
+        rows.append(f"{i},{i / 30:.4f},90.0,car,60,45,45,70.0,{lvl},{'True' if i == 30 else 'False'},1,x,1450,intrinsics,1,20,,"
+                    f"nominal,{'LR' if i % 2 else ''}")
+    p = tmp_path / "log.csv"
+    p.write_text(head + "\n".join(rows) + "\n")
+    s = triplog.summarize(triplog.load(p))
+    assert s["frames"] == 60 and s["red_alerts"] == 1
+    assert s["fps"] == pytest.approx(30, rel=1e-3)
+    assert s["level_s"]["GREEN"] == pytest.approx(1.0, abs=0.05)
+    assert s["lane_pct"]["LR"] == pytest.approx(50)
+    assert "Số lần kêu (vào RED): 1" in triplog.report("log.csv", s)
+    assert triplog.plot(triplog.load(p), tmp_path / "log.png").exists()
