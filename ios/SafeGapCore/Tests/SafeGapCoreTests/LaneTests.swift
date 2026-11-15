@@ -27,23 +27,23 @@ final class LaneTests: XCTestCase {
 
     func center(_ y: Double) -> Double { LaneROI.center(at: y, left: nil, right: nil, calibrated: roi) }
 
-    func testStraightLanesWithNeighbourLane() {
+    func testStraightLanesWithNeighbourLane() throws {
         let left = { (y: Double) in 0.30 + (0.47 - 0.30) * (1 - y) / 0.55 }
         let right = { (y: Double) in 0.72 + (0.53 - 0.72) * (1 - y) / 0.55 }
         let far = { (y: Double) in 1.10 + (0.60 - 1.10) * (1 - y) / 0.55 }  // vạch làn bên phải nữa
         let d = LaneDetector.detect(road([(left, false), (right, true), (far, false)]), center: center)
-        let l = try! XCTUnwrap(d.left), r = try! XCTUnwrap(d.right)
+        let l = try XCTUnwrap(d.left), r = try XCTUnwrap(d.right)
         for y in [0.6, 0.75, 0.9] {
             XCTAssertEqual(l.x(at: y), left(y), accuracy: 0.012, "trái y=\(y)")
             XCTAssertEqual(r.x(at: y), right(y), accuracy: 0.012, "phải y=\(y)")
         }
     }
 
-    func testCurvedLane() {
+    func testCurvedLane() throws {
         let left = { (y: Double) in 0.32 + 0.6 * (1 - y) * (1 - y) + 0.05 * (1 - y) }
         let right = { (y: Double) in 0.70 + 0.6 * (1 - y) * (1 - y) - 0.30 * (1 - y) }
         let d = LaneDetector.detect(road([(left, false), (right, false)]), center: { y in (left(y) + right(y)) / 2 })
-        let l = try! XCTUnwrap(d.left), r = try! XCTUnwrap(d.right)
+        let l = try XCTUnwrap(d.left), r = try XCTUnwrap(d.right)
         XCTAssertNotEqual(l.c2, 0)
         for y in [0.6, 0.75, 0.9] {
             XCTAssertEqual(l.x(at: y), left(y), accuracy: 0.015)
@@ -58,9 +58,9 @@ final class LaneTests: XCTestCase {
         XCTAssertNil(LaneROI.polygon(left: nil, right: nil, calibrated: roi))
     }
 
-    func testPolygonFromOneSideUsesCalibratedWidth() {
+    func testPolygonFromOneSideUsesCalibratedWidth() throws {
         let l = LaneCurve(c0: 0.25, c1: -0.3, yRef: 1.0)  // x = 0.25 - 0.3*(y-1)
-        let poly = try! XCTUnwrap(LaneROI.polygon(left: l, right: nil, calibrated: roi, steps: 4))
+        let poly = try XCTUnwrap(LaneROI.polygon(left: l, right: nil, calibrated: roi, steps: 4))
         XCTAssertEqual(poly.count, 10)
         XCTAssertEqual(poly[4].y, 1.0, accuracy: 1e-12)
         XCTAssertEqual(poly[4].x, 0.25, accuracy: 1e-12)

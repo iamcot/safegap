@@ -104,27 +104,26 @@ public enum LaneDetector {
             }
             if start >= 0 { runs.append((start, W - w)) }
 
+            // giữ tối đa 3 vệt gần tâm nhất mỗi bên; chọn vạch của làn mình ở bước khớp đường
             let cx = center(yn)
-            var bestL: Double?, bestR: Double?
+            var ls: [Double] = [], rs: [Double] = []
             for run in runs where run.end - run.start <= maxRun {
                 let xn = (Double(run.start + run.end - 1) / 2.0 + 0.5) / Double(W)
-                if xn < cx {
-                    if bestL == nil || xn > bestL! { bestL = xn }
-                } else if bestR == nil || xn < bestR! {
-                    bestR = xn
-                }
+                if xn < cx { ls.append(xn) } else { rs.append(xn) }
             }
-            if let x = bestL { leftPts.append((yn, x)) }
-            if let x = bestR { rightPts.append((yn, x)) }
+            ls.sort { cx - $0 < cx - $1 }
+            rs.sort { $0 - cx < $1 - cx }
+            leftPts += ls.prefix(3).map { (y: yn, x: $0) }
+            rightPts += rs.prefix(3).map { (y: yn, x: $0) }
         }
 
-        var left = fitRobust(leftPts, config: c)
-        var right = fitRobust(rightPts, config: c)
-        // kiểm tra hình học: vạch trái nằm bên trái, bề rộng làn hợp lý
+        let cB = center(c.yBottom)
+        var left = chooseLane(leftPts, centerAtBottom: cB, config: c)
+        var right = chooseLane(rightPts, centerAtBottom: cB, config: c)
+        // kiểm tra hình học: bề rộng làn hợp lý
         if let l = left, let r = right {
             let width = r.curve.x(at: c.yBottom) - l.curve.x(at: c.yBottom)
             if width < c.minLaneWidth || width > c.maxLaneWidth {
-                // giữ bên có nhiều điểm hơn
                 if l.inliers >= r.inliers { right = nil } else { left = nil }
             }
         }
@@ -132,31 +131,54 @@ public enum LaneDetector {
                              leftPoints: left?.inliers ?? 0, rightPoints: right?.inliers ?? 0)
     }
 
-    /// Bình phương tối thiểu bậc 2 (bậc 1 nếu dải y quá hẹp), bỏ dần điểm lệch.
-    static func fitRobust(_ pts: [(y: Double, x: Double)], config c: LaneConfig) -> (curve: LaneCurve, inliers: Int)? {
-        var cur = pts
-        var last: LaneCurve?
-        for _ in 0..<4 {
-            guard cur.count >= c.minPoints, let f = fit(cur, yRef: c.yBottom) else { return nil }
-            last = f
-            let res = cur.map { abs($0.x - f.x(at: $0.y)) }
-            let sorted = res.sorted()
-            let med = sorted[sorted.count / 2]
-            let thr = max(c.maxResidual, 2.5 * med)
-            let kept = zip(cur, res).filter { $0.1 <= thr }.map(\.0)
-            if kept.count == cur.count { break }
-            cur = kept
+    /// Tách các đường thẳng bằng RANSAC (vét cạn cặp điểm, kết quả xác định), lấy đường gần tâm làn nhất
+    /// có đủ điểm (vạch làn mình, kể cả vạch đứt), rồi khớp lại bậc 2 và gom thêm điểm theo đường cong.
+    static func chooseLane(_ pts: [(y: Double, x: Double)], centerAtBottom cB: Double,
+                           config c: LaneConfig) -> (curve: LaneCurve, inliers: Int)? {
+        var rest = pts
+        var best: (group: [(y: Double, x: Double)], dist: Double)?
+        for _ in 0..<3 {
+            guard let g = ransacLine(rest, tol: c.maxResidual, minPoints: c.minPoints) else { break }
+            if let f = fit(g, yRef: c.yBottom, allowQuadratic: false) {
+                let d = abs(f.x(at: c.yBottom) - cB)
+                if best == nil || d < best!.dist { best = (g, d) }
+            }
+            let used = Set(g.map { "\($0.y),\($0.x)" })
+            rest = rest.filter { !used.contains("\($0.y),\($0.x)") }
         }
-        guard let curve = last, cur.count >= c.minPoints else { return nil }
-        let worst = cur.map { abs($0.x - curve.x(at: $0.y)) }.max() ?? 0
-        guard worst <= max(c.maxResidual * 2, 0.03) else { return nil }
-        return (curve, cur.count)
+        guard var group = best?.group else { return nil }
+        var curve: LaneCurve?
+        for _ in 0..<2 {
+            guard let f = fit(group, yRef: c.yBottom) else { return nil }
+            curve = f
+            group = pts.filter { abs($0.x - f.x(at: $0.y)) < c.maxResidual }
+            guard group.count >= c.minPoints else { return nil }
+        }
+        guard let final = fit(group, yRef: c.yBottom) ?? curve else { return nil }
+        return (final, group.count)
     }
 
-    static func fit(_ pts: [(y: Double, x: Double)], yRef: Double) -> LaneCurve? {
+    static func ransacLine(_ pts: [(y: Double, x: Double)], tol: Double, minPoints: Int) -> [(y: Double, x: Double)]? {
+        var bestCount = 0
+        var bestLine: (y1: Double, x1: Double, a: Double)?
+        let n = pts.count
+        guard n >= minPoints else { return nil }
+        for i in 0..<n {
+            for j in (i + 1)..<n where abs(pts[j].y - pts[i].y) >= 0.05 {
+                let a = (pts[j].x - pts[i].x) / (pts[j].y - pts[i].y)
+                var cnt = 0
+                for p in pts where abs(p.x - (pts[i].x + a * (p.y - pts[i].y))) < tol { cnt += 1 }
+                if cnt > bestCount { bestCount = cnt; bestLine = (pts[i].y, pts[i].x, a) }
+            }
+        }
+        guard let l = bestLine, bestCount >= minPoints else { return nil }
+        return pts.filter { abs($0.x - (l.x1 + l.a * ($0.y - l.y1))) < tol }
+    }
+
+    static func fit(_ pts: [(y: Double, x: Double)], yRef: Double, allowQuadratic: Bool = true) -> LaneCurve? {
         let ys = pts.map(\.y)
         guard let lo = ys.min(), let hi = ys.max(), hi - lo > 0.05 else { return nil }
-        let quadratic = hi - lo >= 0.2 && pts.count >= 10
+        let quadratic = allowQuadratic && hi - lo >= 0.2 && pts.count >= 10
         // tổng cho hệ phương trình chuẩn
         var s = [Double](repeating: 0, count: 5)   // Σu^k, k = 0..4
         var t = [Double](repeating: 0, count: 3)   // Σx·u^k, k = 0..2
