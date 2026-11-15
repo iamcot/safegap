@@ -41,3 +41,9 @@ Config: `config/law_vn.json` (bảng luật tốc độ → d_min), `config/defa
 
 Code Swift trong `ios/`: lõi `ios/SafeGapCore` (port từ `proto/`, test so khớp output Python) và app `ios/SafeGap.xcodeproj`.
 Cách build, cài lên iPhone và hiệu chỉnh camera theo máy: [ios/README.md](ios/README.md).
+
+```bash
+scripts/dev.sh           # export model nếu chưa có, test lõi Swift, mở Xcode
+scripts/dev.sh viewer    # viewer Python
+scripts/dev.sh test      # pytest + swift test
+```

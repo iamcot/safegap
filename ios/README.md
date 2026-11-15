@@ -23,6 +23,8 @@ uv run python -m proto.fixtures     # ghi ios/SafeGapCore/Tests/SafeGapCoreTests
 
 ## Cài lên iPhone
 
+Nhanh nhất: `scripts/dev.sh` (export model nếu chưa có, chạy test lõi, mở Xcode), rồi làm bước 2–3 dưới đây.
+
 1. Export model YOLO (một lần), xem `SafeGap/Models/README.md`:
    ```bash
    ./scripts/export_coreml.sh            # hoặc: ./scripts/export_coreml.sh yolov8n
