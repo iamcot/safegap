@@ -1,8 +1,9 @@
 // Màn hình lái khi ẩn camera: vẽ lại con đường theo mét, full màn hình, kiểu màn lái xe điện.
 // Vạch làn và các xe được chiếu ngược từ ảnh xuống mặt đường (X ngang, Z phía trước, mét),
-// rồi vẽ lại bằng một "camera ảo" đặt sau và cao hơn xe mình. Xe là khối 3D bo mềm, tông xám;
+// rồi vẽ lại bằng một "camera ảo" đặt sau và cao hơn xe mình. Đường vẽ 2D (Canvas), xe dựng 3D (SceneKit) cùng camera;
 // dải màu từ đầu xe mình tới xe phía trước báo mức an toàn. Sáng/tối theo giao diện máy.
 import SafeGapCore
+import SceneKit
 import SwiftUI
 
 struct DriveView: View {
@@ -15,8 +16,9 @@ struct DriveView: View {
         let r = s.result
         let pal = Palette.of(scheme)
         ZStack {
-            RoadCanvas(snapshot: s, calibration: model.calibration, config: model.config, pal: pal)
-                .ignoresSafeArea()
+            let road = RoadCanvas(snapshot: s, calibration: model.calibration, config: model.config, pal: pal)
+            road.ignoresSafeArea()
+            CarLayer(cars: road.vehicles() + [Car.own], dark: pal.dark).ignoresSafeArea()
             AlertGlow(level: r.level).ignoresSafeArea()
             VStack(spacing: 0) {
                 HStack(alignment: .top) {
@@ -99,10 +101,10 @@ struct Palette {
         ownTop: Color(white: 0.85), ownRear: Color(white: 0.66), ownSide: Color(white: 0.50), shadow: .black.opacity(0.6),
         text: .white, textDim: Color(white: 0.6), button: .white.opacity(0.12), dark: true)
 
-    /// Màu dải đường đi: xanh dương khi an toàn / chưa có, vàng, đỏ.
+    /// Màu dải khoảng cách tới xe trước: xanh lá khi an toàn / chưa có, vàng, đỏ khi quá gần.
     func path(_ l: Level) -> Color {
         switch l {
-        case .none, .green: return Color(red: 0.16, green: 0.48, blue: 1.0)
+        case .none, .green: return Color(red: 0.13, green: 0.75, blue: 0.35)
         case .yellow: return Color(red: 1.0, green: 0.72, blue: 0.0)
         case .red: return Color(red: 0.95, green: 0.18, blue: 0.16)
         }
@@ -256,6 +258,9 @@ private struct RoadCanvas: View {
             for edge in [leftNext, rightNext] {
                 ctx.stroke(cam.path(edge), with: .color(pal.laneFaint), style: StrokeStyle(lineWidth: 1.5, dash: [14, 16]))
             }
+            // làn mình tô xanh dương nhạt trong suốt
+            ctx.fill(cam.path(left + right.reversed(), closed: true),
+                     with: .color(Color(red: 0.45, green: 0.68, blue: 1.0).opacity(pal.dark ? 0.35 : 0.5)))
             let detected = (snapshot.laneLeft != nil, snapshot.laneRight != nil)
             for (edge, real) in [(left, detected.0), (right, detected.1)] {
                 ctx.stroke(cam.path(edge), with: .color(real ? pal.lane : pal.laneFaint),
@@ -298,94 +303,13 @@ private struct RoadCanvas: View {
                                                              .init(color: pal.bgTop.opacity(0), location: 1)]),
                                            startPoint: .zero, endPoint: CGPoint(x: 0, y: fadeEnd)))
 
-            // xe: xa vẽ trước, xe mình cuối cùng
-            for v in cars.sorted(by: { $0.pos.z > $1.pos.z }) {
-                drawCar(ctx, cam, v)
+            // xe được dựng 3D ở lớp CarLayer phía trên; ở đây chỉ ghi số mét trên nóc xe phía trước
+            if let t = target, let d = r.d {
+                let label = Text(String(format: "%.0f m", d)).font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundColor(pal.text)
+                let p = cam.point3(t.pos.x, t.heightM + 0.5, t.pos.z)
+                ctx.draw(label, at: p, anchor: .bottom)
             }
-            drawCar(ctx, cam, Car(pos: Ground(x: 0, z: -2.0), widthM: 1.85, heightM: 1.45, lengthM: 4.6, kind: .own))
-
-        }
-    }
-
-    // MARK: xe 3D
-
-    /// Khối xe bo mềm: thân dưới + cabin thu nhỏ, nhìn từ sau và trên. Mặt bên chỉ vẽ phía camera thấy.
-    private func drawCar(_ ctx: GraphicsContext, _ cam: ChaseCamera, _ car: Car) {
-        let W = car.widthM, L = car.lengthM, H = car.heightM
-        let x0 = car.pos.x, z0 = car.pos.z
-        guard cam.scale(z0) * W > 3 else { return }
-        let own = car.isOwn
-        let top = own ? pal.ownTop : pal.carTop
-        let rear = own ? pal.ownRear : pal.carRear
-        let side = own ? pal.ownSide : pal.carSide
-        let tall = H > 2
-
-        func p(_ x: Double, _ y: Double, _ z: Double) -> CGPoint { cam.point3(x0 + x, y, z0 + z) }
-        func quad(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint, _ d: CGPoint, r: CGFloat = 0) -> Path {
-            var path = Path()
-            let pts = [a, b, c, d]
-            guard r > 0 else { path.addLines(pts); path.closeSubpath(); return path }
-            path.move(to: CGPoint(x: (d.x + a.x) / 2, y: (d.y + a.y) / 2))
-            for i in 0..<4 { path.addArc(tangent1End: pts[i], tangent2End: pts[(i + 1) % 4], radius: r) }
-            path.closeSubpath()
-            return path
-        }
-        let k = CGFloat(cam.scale(z0))
-        let rad = max(1, k * 0.18)
-        let hw = W / 2
-
-        // bóng
-        var sh = ctx
-        sh.addFilter(.blur(radius: max(1, k * 0.25)))
-        sh.fill(quad(p(-hw - 0.15, 0, -0.2), p(hw + 0.15, 0, -0.2), p(hw + 0.15, 0, L), p(-hw - 0.15, 0, L), r: rad),
-                with: .color(pal.shadow))
-
-        // thân dưới (cao hb), cabin (hb → H) thu vào hai bên và trước/sau. Xe tải/buýt: một khối thùng.
-        let hb = tall ? H : H * 0.55
-        let sx = x0 > 0 ? -1.0 : 1.0   // mặt bên nhìn thấy: xe bên phải thấy hông trái
-        let showSide = abs(x0) > 0.4
-        if showSide {
-            ctx.fill(quad(p(sx * hw, 0.15, 0), p(sx * hw, 0.15, L), p(sx * hw, hb, L), p(sx * hw, hb, 0), r: rad * 0.6),
-                     with: .color(side))
-        }
-        ctx.fill(quad(p(-hw, hb, 0), p(hw, hb, 0), p(hw, hb, L), p(-hw, hb, L), r: rad), with: .color(top))
-        if !tall {
-            let cw = hw - 0.17 * W
-            let cz0 = 1.0, cz1 = L - 1.45
-            if showSide {
-                ctx.fill(quad(p(sx * (hw - 0.06), hb, cz0 - 0.35), p(sx * (hw - 0.06), hb, cz1 + 0.5),
-                              p(sx * cw, H, cz1), p(sx * cw, H, cz0 + 0.3)),
-                         with: .color(pal.glass.opacity(0.85)))
-            }
-            ctx.fill(quad(p(-hw + 0.06, hb, cz0 - 0.35), p(hw - 0.06, hb, cz0 - 0.35), p(cw, H, cz0 + 0.3), p(-cw, H, cz0 + 0.3),
-                          r: rad * 0.7),
-                     with: .color(pal.glass))  // kính sau
-            ctx.fill(quad(p(-cw, H, cz0 + 0.3), p(cw, H, cz0 + 0.3), p(cw, H, cz1), p(-cw, H, cz1), r: rad * 0.8),
-                     with: .color(top))  // nóc
-        }
-        // bánh sau: chỉ lộ phần dưới cản
-        for s in [-1.0, 1.0] {
-            let cx = s * (hw - 0.2)
-            ctx.fill(quad(p(cx - 0.13, 0, 0.1), p(cx + 0.13, 0, 0.1), p(cx + 0.13, 0.3, 0.1), p(cx - 0.13, 0.3, 0.1), r: rad * 0.3),
-                     with: .color(Color(white: 0.1)))
-        }
-        // mặt sau
-        ctx.fill(quad(p(-hw, 0.18, 0), p(hw, 0.18, 0), p(hw, hb, 0), p(-hw, hb, 0), r: rad * 0.8),
-                 with: .linearGradient(Gradient(colors: [rear, side]), startPoint: p(0, hb, 0), endPoint: p(0, 0.18, 0)))
-        // đèn hậu
-        let ly = tall ? 0.6 : hb * 0.78
-        for s in [-1.0, 1.0] {
-            var l = Path()
-            l.move(to: p(s * (hw - 0.08), ly, 0))
-            l.addLine(to: p(s * (hw - (tall ? 0.35 : 0.5)), ly, 0))
-            ctx.stroke(l, with: .color(Color(red: 0.9, green: 0.15, blue: 0.15).opacity(own ? 0.9 : 0.75)),
-                       style: StrokeStyle(lineWidth: max(1, k * 0.12), lineCap: .round))
-        }
-        if car.isTarget, let d = snapshot.result.d {
-            let label = Text(String(format: "%.0f m", d)).font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundColor(pal.text)
-            let t = p(0, H, 0)
-            ctx.draw(label, at: CGPoint(x: t.x, y: t.y - 6), anchor: .bottom)
         }
     }
 
@@ -442,7 +366,7 @@ private struct RoadCanvas: View {
         return lerp(pts[pts.count - 2], pts[pts.count - 1])
     }
 
-    private func vehicles() -> [Car] {
+    func vehicles() -> [Car] {
         let s = snapshot
         var out: [Car] = []
         for (i, d) in s.detections.enumerated() {
@@ -469,6 +393,8 @@ private struct Car {
     var kind: Kind
 
     var isTarget: Bool { kind == .target }
+    var isTall: Bool { heightM > 2 }
+    static let own = Car(pos: Ground(x: 0, z: -2.0), widthM: 1.85, heightM: 1.45, lengthM: 4.6, kind: .own)
     var isOwn: Bool { kind == .own }
 }
 
@@ -500,5 +426,225 @@ private struct ChaseCamera {
         for g in pts.dropFirst() { p.addLine(to: point(g)) }
         if closed { p.closeSubpath() }
         return p
+    }
+}
+
+// MARK: - Xe 3D (SceneKit)
+
+/// Lớp xe 3D trong suốt đặt trên con đường. Camera SceneKit trùng với ChaseCamera:
+/// scale = focal / (depth·z + back) = (focal/depth) / (z + back/depth) → camera lỗ kim tiêu cự focal/depth,
+/// đặt sau camera thật back/depth mét, cao `height`, trục nhìn nằm ngang, tâm ảnh ở đường chân trời.
+private struct CarLayer: UIViewRepresentable {
+    let cars: [Car]
+    let dark: Bool
+
+    func makeCoordinator() -> CarScene { CarScene() }
+
+    func makeUIView(context: Context) -> CarSCNView {
+        let v = CarSCNView(frame: .zero, options: nil)
+        v.scene = context.coordinator.scene
+        v.pointOfView = context.coordinator.cameraNode
+        v.backgroundColor = .clear
+        v.isOpaque = false
+        v.antialiasingMode = .multisampling4X
+        v.preferredFramesPerSecond = 30
+        v.isUserInteractionEnabled = false
+        let scene = context.coordinator
+        v.onLayout = { scene.setViewport($0) }
+        return v
+    }
+
+    func updateUIView(_ v: CarSCNView, context: Context) {
+        context.coordinator.update(cars: cars, dark: dark)
+    }
+}
+
+private final class CarSCNView: SCNView {
+    var onLayout: ((CGSize) -> Void)?
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onLayout?(bounds.size)
+    }
+}
+
+private final class CarScene {
+    let scene = SCNScene()
+    let cameraNode = SCNNode()
+    private var carPool: [SCNNode] = []
+    private var truckPool: [SCNNode] = []
+    private let ownNode: SCNNode
+    private let bodyMat = CarScene.mat(white: 0.93, rough: 0.45)
+    private let ownMat = CarScene.mat(white: 0.22, rough: 0.35)
+    private let glassMat = CarScene.mat(white: 0.07, rough: 0.12)
+    private let tireMat = CarScene.mat(white: 0.05, rough: 0.9)
+    private let lightMat: SCNMaterial = {
+        let m = SCNMaterial()
+        m.diffuse.contents = UIColor(red: 0.85, green: 0.05, blue: 0.05, alpha: 1)
+        m.emission.contents = UIColor(red: 1, green: 0.12, blue: 0.1, alpha: 1)
+        m.lightingModel = .constant
+        return m
+    }()
+    private var dark: Bool?
+    private var viewport: CGSize = .zero
+
+    init() {
+        let cam = SCNCamera()
+        cam.zNear = 0.5
+        cam.zFar = 600
+        cameraNode.camera = cam
+        scene.rootNode.addChildNode(cameraNode)
+
+        let ambient = SCNNode()
+        ambient.light = SCNLight()
+        ambient.light!.type = .ambient
+        ambient.light!.intensity = 550
+        scene.rootNode.addChildNode(ambient)
+
+        let sun = SCNNode()
+        let l = SCNLight()
+        l.type = .directional
+        l.intensity = 900
+        l.castsShadow = true
+        l.shadowMode = .deferred
+        l.shadowColor = UIColor(white: 0, alpha: 0.28)
+        l.shadowRadius = 6
+        l.shadowSampleCount = 8
+        l.automaticallyAdjustsShadowProjection = true
+        l.maximumShadowDistance = 120
+        sun.light = l
+        sun.eulerAngles = SCNVector3(-Float.pi * 0.38, Float.pi * 0.12, 0)
+        scene.rootNode.addChildNode(sun)
+
+        // mặt đất trong suốt chỉ để hứng bóng
+        let floor = SCNFloor()
+        floor.reflectivity = 0
+        let fm = SCNMaterial()
+        fm.lightingModel = .shadowOnly
+        floor.materials = [fm]
+        scene.rootNode.addChildNode(SCNNode(geometry: floor))
+
+        ownNode = SCNNode()
+        ownNode.addChildNode(CarScene.carBody(body: ownMat, glass: glassMat, tire: tireMat, light: lightMat))
+        scene.rootNode.addChildNode(ownNode)
+    }
+
+    static func mat(white: CGFloat, rough: CGFloat) -> SCNMaterial {
+        let m = SCNMaterial()
+        m.lightingModel = .physicallyBased
+        m.diffuse.contents = UIColor(white: white, alpha: 1)
+        m.roughness.contents = rough
+        m.metalness.contents = 0.05
+        return m
+    }
+
+    func setViewport(_ size: CGSize) {
+        guard size.width > 0, size.height > 0, size != viewport else { return }
+        viewport = size
+        let c = ChaseCamera(size: size)
+        let f = Float(c.focal / c.depth)
+        cameraNode.position = SCNVector3(0, Float(c.height), Float(c.back / c.depth))
+        // khung nhìn lệch tâm: tâm ảnh (W/2, horizonY) thay vì giữa màn hình
+        let n: Float = 0.5, far: Float = 600
+        let w = Float(size.width), h = Float(size.height), cy = Float(c.horizonY)
+        let l = -w / 2 / f * n, r = w / 2 / f * n
+        let t = cy / f * n, b = -(h - cy) / f * n
+        let m = simd_float4x4(columns: (
+            SIMD4<Float>(2 * n / (r - l), 0, 0, 0),
+            SIMD4<Float>(0, 2 * n / (t - b), 0, 0),
+            SIMD4<Float>((r + l) / (r - l), (t + b) / (t - b), -(far + n) / (far - n), -1),
+            SIMD4<Float>(0, 0, -2 * far * n / (far - n), 0)))
+        cameraNode.camera?.projectionTransform = SCNMatrix4(m)
+    }
+
+    func update(cars: [Car], dark: Bool) {
+        if dark != self.dark {
+            self.dark = dark
+            bodyMat.diffuse.contents = UIColor(white: dark ? 0.55 : 0.93, alpha: 1)
+            ownMat.diffuse.contents = UIColor(white: dark ? 0.8 : 0.22, alpha: 1)
+        }
+        let others = cars.filter { $0.kind != .own }
+        let small = others.filter { !$0.isTall }.sorted { $0.pos.z < $1.pos.z }
+        let tall = others.filter(\.isTall).sorted { $0.pos.z < $1.pos.z }
+        while carPool.count < small.count { carPool.append(add(CarScene.carBody(body: bodyMat, glass: glassMat, tire: tireMat, light: lightMat))) }
+        while truckPool.count < tall.count { truckPool.append(add(CarScene.truckBody(body: bodyMat, tire: tireMat, light: lightMat))) }
+
+        SCNTransaction.begin()
+        SCNTransaction.animationDuration = 0.1   // trượt mượt giữa hai lần nhận diện
+        place(ownNode, Car.own, base: (1.85, 1.45, 4.6))
+        for (i, n) in carPool.enumerated() {
+            n.isHidden = i >= small.count
+            if i < small.count { place(n, small[i], base: (1.85, 1.45, 4.6)) }
+        }
+        for (i, n) in truckPool.enumerated() {
+            n.isHidden = i >= tall.count
+            if i < tall.count { place(n, tall[i], base: (2.5, 3.0, 9.0)) }
+        }
+        SCNTransaction.commit()
+    }
+
+    private func add(_ child: SCNNode) -> SCNNode {
+        let n = SCNNode()
+        n.addChildNode(child)
+        n.isHidden = true
+        scene.rootNode.addChildNode(n)
+        return n
+    }
+
+    private func place(_ n: SCNNode, _ c: Car, base: (Double, Double, Double)) {
+        n.position = SCNVector3(Float(c.pos.x), 0, Float(-c.pos.z))
+        n.scale = SCNVector3(Float(c.widthM / base.0), Float(c.heightM / base.1), Float(c.lengthM / base.2))
+    }
+
+    /// Xe con bo tròn: đuôi xe ở z = 0, đầu xe về phía -z. Kích thước chuẩn 1.85 × 1.45 × 4.6 m.
+    static func carBody(body: SCNMaterial, glass: SCNMaterial, tire: SCNMaterial, light: SCNMaterial) -> SCNNode {
+        let root = SCNNode()
+        func box(_ w: CGFloat, _ h: CGFloat, _ l: CGFloat, _ r: CGFloat, _ m: SCNMaterial, _ p: SCNVector3) {
+            let g = SCNBox(width: w, height: h, length: l, chamferRadius: r)
+            g.chamferSegmentCount = 6
+            g.materials = [m]
+            let n = SCNNode(geometry: g)
+            n.position = p
+            root.addChildNode(n)
+        }
+        box(1.85, 0.64, 4.6, 0.3, body, SCNVector3(0, 0.55, -2.3))          // thân
+        box(1.52, 0.56, 2.5, 0.27, glass, SCNVector3(0, 1.07, -2.35))       // cabin kính
+        box(1.30, 0.1, 1.55, 0.05, body, SCNVector3(0, 1.36, -2.4))         // nóc
+        box(1.45, 0.07, 0.08, 0.03, light, SCNVector3(0, 0.74, -0.01))      // dải đèn hậu
+        for (x, z) in [(-0.82, -0.85), (0.82, -0.85), (-0.82, -3.75), (0.82, -3.75)] as [(Float, Float)] {
+            let c = SCNCylinder(radius: 0.34, height: 0.26)
+            c.materials = [tire]
+            let n = SCNNode(geometry: c)
+            n.eulerAngles = SCNVector3(0, 0, Float.pi / 2)
+            n.position = SCNVector3(x, 0.34, z)
+            root.addChildNode(n)
+        }
+        return root
+    }
+
+    /// Xe tải / buýt: thùng bo góc 2.5 × 3.0 × 9 m.
+    static func truckBody(body: SCNMaterial, tire: SCNMaterial, light: SCNMaterial) -> SCNNode {
+        let root = SCNNode()
+        let g = SCNBox(width: 2.5, height: 2.6, length: 9.0, chamferRadius: 0.22)
+        g.chamferSegmentCount = 5
+        g.materials = [body]
+        let n = SCNNode(geometry: g)
+        n.position = SCNVector3(0, 1.7, -4.5)
+        root.addChildNode(n)
+        for x in [-0.95, 0.95] as [Float] {
+            let lg = SCNBox(width: 0.4, height: 0.12, length: 0.06, chamferRadius: 0.04)
+            lg.materials = [light]
+            let ln = SCNNode(geometry: lg)
+            ln.position = SCNVector3(x, 0.75, 0.02)
+            root.addChildNode(ln)
+        }
+        for (x, z) in [(-1.05, -1.2), (1.05, -1.2), (-1.05, -7.5), (1.05, -7.5)] as [(Float, Float)] {
+            let c = SCNCylinder(radius: 0.48, height: 0.32)
+            c.materials = [tire]
+            let w = SCNNode(geometry: c)
+            w.eulerAngles = SCNVector3(0, 0, Float.pi / 2)
+            w.position = SCNVector3(x, 0.48, z)
+            root.addChildNode(w)
+        }
+        return root
     }
 }
