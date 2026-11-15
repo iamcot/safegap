@@ -380,7 +380,7 @@ private struct RoadCanvas: View {
             guard kept, let wReal = config.vehicleWidthM[d.cls], d.width > 0, s.fPx > 0 else { continue }
             let isEgo = d.box == s.result.egoBox
             let z = isEgo ? (s.result.d ?? s.fPx * wReal / d.width) : s.fPx * wReal / d.width
-            guard z > 3, z < Self.farZ + 20 else { continue }  // gần hơn 3 m là nhận nhầm / capo
+            guard z > 1.0, z < Self.farZ + 20 else { continue }  // gần hơn 1 m là capo xe mình
             let x = ((d.x1 + d.x2) / 2 - s.frameWidth / 2) * z / s.fPx
             let isCar = d.cls == "car"
             out.append(Car(pos: Ground(x: x, z: z), widthM: wReal, heightM: isCar ? 1.45 : 3.0, lengthM: isCar ? 4.5 : 9.0,
@@ -400,7 +400,7 @@ private struct Car {
 
     var isTarget: Bool { kind == .target }
     var isTall: Bool { heightM > 2 }
-    static let own = Car(pos: Ground(x: 0, z: -2.0), widthM: 1.85, heightM: 1.45, lengthM: 4.6, kind: .own)
+    static let own = Car(pos: Ground(x: 0, z: -3.2), widthM: 1.85, heightM: 1.45, lengthM: 4.6, kind: .own)
     var isOwn: Bool { kind == .own }
 }
 
