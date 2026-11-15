@@ -170,14 +170,16 @@ private struct AlertGlow: View {
 
 extension Level {
     /// Màu nhấn trên nền tối.
-    var accent: Color {
+    var accentRGB: (Double, Double, Double) {
         switch self {
-        case .none: return Color(white: 0.6)
-        case .green: return Color(red: 0.20, green: 0.85, blue: 0.45)
-        case .yellow: return Color(red: 1.00, green: 0.80, blue: 0.15)
-        case .red: return Color(red: 1.00, green: 0.22, blue: 0.20)
+        case .none: return (0.6, 0.6, 0.6)
+        case .green: return (0.20, 0.85, 0.45)
+        case .yellow: return (1.00, 0.80, 0.15)
+        case .red: return (1.00, 0.22, 0.20)
         }
     }
+
+    var accent: Color { Color(red: accentRGB.0, green: accentRGB.1, blue: accentRGB.2) }
 }
 
 // MARK: - Con đường
@@ -270,42 +272,104 @@ private struct RoadCanvas: View {
                                        center: CGPoint(x: size.width / 2, y: cam.horizonY), startRadius: 0, endRadius: size.width * 0.35))
     }
 
+    /// Xe nhìn từ sau, hơi từ trên xuống (camera ảo cao hơn xe): cản, cốp + dải đèn hậu, kính sau, nóc.
+    /// Toạ độ (u, v) tính theo bề rộng xe: u ngang (-0.5…0.5), v cao từ mặt đường lên.
     private func drawCar(_ ctx: GraphicsContext, _ cam: ChaseCamera, _ car: Car) {
         let base = cam.point(car.pos)
-        let k = cam.scale(car.pos.z)
-        let w = CGFloat(car.widthM * k), h = CGFloat(car.heightM * k)
-        guard w > 2 else { return }
-        let body = CGRect(x: base.x - w / 2, y: base.y - h * 0.62, width: w, height: h * 0.62)
-        let cabin = CGRect(x: base.x - w * 0.36, y: base.y - h, width: w * 0.72, height: h * 0.42)
-        let (fill, edge): (Color, Color) = {
-            switch car.kind {
-            case .own: return (Color(white: 0.88), .white)
-            case .target(let level): return (level == .none ? Color(white: 0.75) : level.accent, .white)
-            case .other: return (Color(white: 0.38), Color(white: 0.55))
+        let w = CGFloat(car.widthM * cam.scale(car.pos.z))
+        guard w > 3 else { return }
+        func pt(_ u: CGFloat, _ v: CGFloat) -> CGPoint { CGPoint(x: base.x + u * w, y: base.y - v * w) }
+        func shape(_ uv: [(CGFloat, CGFloat)], r: CGFloat) -> Path {
+            let pts = uv.map { pt($0.0, $0.1) }
+            var p = Path()
+            let n = pts.count
+            p.move(to: CGPoint(x: (pts[n - 1].x + pts[0].x) / 2, y: (pts[n - 1].y + pts[0].y) / 2))
+            for i in 0..<n {
+                p.addArc(tangent1End: pts[i], tangent2End: pts[(i + 1) % n], radius: r * w)
             }
-        }()
-        var g = ctx
-        if case .target = car.kind {
-            g.addFilter(.shadow(color: fill.opacity(0.8), radius: 14))
+            p.closeSubpath()
+            return p
         }
-        // bóng dưới gầm
-        g.fill(Path(ellipseIn: CGRect(x: base.x - w * 0.6, y: base.y - h * 0.06, width: w * 1.2, height: h * 0.16)),
-               with: .color(.black.opacity(0.5)))
-        g.fill(Path(roundedRect: cabin, cornerRadius: w * 0.12), with: .color(fill.opacity(0.75)))
-        g.fill(Path(roundedRect: cabin.insetBy(dx: w * 0.05, dy: h * 0.07), cornerRadius: w * 0.07),
-               with: .color(Color(white: 0.08).opacity(0.85)))
-        g.fill(Path(roundedRect: body, cornerRadius: w * 0.14), with: .color(fill))
-        g.stroke(Path(roundedRect: body, cornerRadius: w * 0.14), with: .color(edge.opacity(0.6)), lineWidth: max(0.5, w * 0.012))
-        // đèn hậu
-        let lw = w * 0.2, lh = max(1, h * 0.07)
-        for x in [body.minX + w * 0.06, body.maxX - w * 0.06 - lw] {
-            g.fill(Path(roundedRect: CGRect(x: x, y: body.minY + h * 0.1, width: lw, height: lh), cornerRadius: lh / 2),
-                   with: .color(Color(red: 1, green: 0.15, blue: 0.15)))
+        func vGrad(_ top: Color, _ bottom: Color, _ v0: CGFloat, _ v1: CGFloat) -> GraphicsContext.Shading {
+            .linearGradient(Gradient(colors: [top, bottom]), startPoint: pt(0, v1), endPoint: pt(0, v0))
         }
-        if case .target = car.kind, let d = snapshot.result.d {
+
+        let rgb: (Double, Double, Double)
+        switch car.kind {
+        case .own: rgb = (0.86, 0.86, 0.88)
+        case .target(let level): rgb = level == .none ? (0.55, 0.62, 0.72) : level.accentRGB
+        case .other: rgb = (0.30, 0.33, 0.38)
+        }
+        func tone(_ t: Double, toward x: Double) -> Color {  // trộn màu sơn với đen (x = 0) hoặc trắng (x = 1)
+            Color(red: rgb.0 + (x - rgb.0) * t, green: rgb.1 + (x - rgb.1) * t, blue: rgb.2 + (x - rgb.2) * t)
+        }
+        let paint = tone(0, toward: 0)
+        let dark = tone(0.55, toward: 0)
+        let light = tone(0.35, toward: 1)
+        let isTarget: Bool = { if case .target = car.kind { return true } else { return false } }()
+        let tall = car.heightM > 2   // xe tải, buýt: thùng vuông cao
+        let topV: CGFloat = tall ? CGFloat(car.heightM / car.widthM) : 0.86
+
+        // bóng đổ + quầng sáng dưới xe đang bám
+        ctx.fill(Path(ellipseIn: CGRect(x: base.x - w * 0.62, y: base.y - w * 0.07, width: w * 1.24, height: w * 0.16)),
+                 with: .color(.black.opacity(0.55)))
+        if isTarget {
+            var glow = ctx
+            glow.addFilter(.blur(radius: w * 0.18))
+            glow.fill(Path(ellipseIn: CGRect(x: base.x - w * 0.75, y: base.y - w * 0.12, width: w * 1.5, height: w * 0.26)),
+                      with: .color(paint.opacity(0.7)))
+        }
+        // bánh xe
+        for u in [-0.44, 0.30] as [CGFloat] {
+            ctx.fill(Path(roundedRect: CGRect(origin: pt(u, 0.16), size: CGSize(width: w * 0.14, height: w * 0.16)),
+                          cornerRadius: w * 0.03), with: .color(Color(white: 0.05)))
+        }
+
+        if tall {
+            // thùng xe tải / buýt
+            let box = shape([(-0.5, topV), (0.5, topV), (0.5, 0.08), (-0.5, 0.08)], r: 0.05)
+            ctx.fill(box, with: vGrad(light, dark, 0.08, topV))
+            ctx.fill(shape([(-0.47, topV + 0.12), (0.47, topV + 0.12), (0.5, topV), (-0.5, topV)], r: 0.03),
+                     with: .color(light))  // nóc thùng
+            var seam = Path(); seam.move(to: pt(0, topV - 0.06)); seam.addLine(to: pt(0, 0.22))
+            ctx.stroke(seam, with: .color(.black.opacity(0.35)), lineWidth: max(0.5, w * 0.012))
+            for u in [-0.45, 0.33] as [CGFloat] {
+                ctx.fill(Path(roundedRect: CGRect(origin: pt(u, 0.26), size: CGSize(width: w * 0.12, height: w * 0.08)),
+                              cornerRadius: w * 0.02), with: .color(Color(red: 1, green: 0.2, blue: 0.15)))
+            }
+        } else {
+            // cản sau
+            ctx.fill(shape([(-0.5, 0.31), (0.5, 0.31), (0.48, 0.07), (-0.48, 0.07)], r: 0.06), with: vGrad(paint, dark, 0.07, 0.31))
+            ctx.fill(Path(roundedRect: CGRect(origin: pt(-0.18, 0.17), size: CGSize(width: w * 0.36, height: w * 0.07)),
+                          cornerRadius: w * 0.01), with: .color(Color(white: 0.92).opacity(0.85)))  // biển số
+            // cốp
+            ctx.fill(shape([(-0.46, 0.50), (0.46, 0.50), (0.5, 0.31), (-0.5, 0.31)], r: 0.05), with: vGrad(light, paint, 0.31, 0.50))
+            // dải đèn hậu
+            var lights = ctx
+            lights.addFilter(.shadow(color: Color.red.opacity(0.9), radius: w * 0.06))
+            lights.fill(shape([(-0.47, 0.43), (0.47, 0.43), (0.48, 0.385), (-0.48, 0.385)], r: 0.02),
+                        with: .color(Color(red: 1, green: 0.12, blue: 0.12)))
+            // kính sau
+            ctx.fill(shape([(-0.33, 0.70), (0.33, 0.70), (0.41, 0.51), (-0.41, 0.51)], r: 0.04),
+                     with: vGrad(Color(red: 0.25, green: 0.3, blue: 0.38), Color(white: 0.05), 0.51, 0.70))
+            var shine = Path()  // vệt phản chiếu trên kính
+            shine.move(to: pt(-0.22, 0.68)); shine.addLine(to: pt(-0.06, 0.68)); shine.addLine(to: pt(-0.18, 0.53)); shine.addLine(to: pt(-0.30, 0.53))
+            shine.closeSubpath()
+            ctx.fill(shine, with: .color(.white.opacity(0.08)))
+            // nóc
+            ctx.fill(shape([(-0.29, topV), (0.29, topV), (0.33, 0.70), (-0.33, 0.70)], r: 0.06), with: vGrad(light, paint, 0.70, topV))
+        }
+        // viền sáng mép trên
+        var rim = Path()
+        rim.move(to: pt(tall ? -0.47 : -0.27, topV + (tall ? 0.12 : 0)))
+        rim.addLine(to: pt(tall ? 0.47 : 0.27, topV + (tall ? 0.12 : 0)))
+        ctx.stroke(rim, with: .color(.white.opacity(0.35)), lineWidth: max(0.5, w * 0.012))
+
+        if isTarget, let d = snapshot.result.d {
             let label = Text(String(format: "%.0f m", d)).font(.system(size: 15, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
-            ctx.draw(label, at: CGPoint(x: base.x, y: base.y - h - 14), anchor: .bottom)
+            let top = pt(0, topV + (tall ? 0.12 : 0))
+            ctx.draw(label, at: CGPoint(x: top.x, y: top.y - 8), anchor: .bottom)
         }
     }
 
