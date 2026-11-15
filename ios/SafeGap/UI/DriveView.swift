@@ -45,6 +45,7 @@ struct DriveView: View {
             GlassButton(pal: pal) { model.toggleZoom() } label: {
                 Text(model.settings.zoom2x ? "2x" : "1x").font(.system(size: 16, weight: .bold, design: .rounded))
             }
+            GlassButton(pal: pal) { model.settings.hidePreview = false } label: { Image(systemName: "video.fill") }
             GlassButton(pal: pal) { model.beginCalibration() } label: { Image(systemName: "scope") }
             GlassButton(pal: pal) { showSettings = true } label: { Image(systemName: "gearshape.fill") }
         }
@@ -261,8 +262,8 @@ private struct RoadCanvas: View {
             // làn mình tô xanh dương nhạt trong suốt
             ctx.fill(cam.path(left + right.reversed(), closed: true),
                      with: .color(Color(red: 0.45, green: 0.68, blue: 1.0).opacity(pal.dark ? 0.35 : 0.5)))
-            let detected = (snapshot.laneLeft != nil, snapshot.laneRight != nil)
-            for (edge, real) in [(left, detected.0), (right, detected.1)] {
+            let real = snapshot.roadLane.tracked
+            for edge in [left, right] {
                 ctx.stroke(cam.path(edge), with: .color(real ? pal.lane : pal.laneFaint),
                            style: StrokeStyle(lineWidth: real ? 2.5 : 1.5, lineCap: .round))
             }
@@ -326,35 +327,18 @@ private struct RoadCanvas: View {
         return Ground(x: (xPx - snapshot.frameWidth / 2) * z / f, z: z)
     }
 
-    /// Hai mép làn mình theo mét. Thiếu vạch thì dựng thẳng / song song vạch còn lại.
+    /// Hai mép làn mình theo mét, lấy từ mô hình làn đã lọc (RoadLaneFilter): thẳng hoặc cong nhẹ, đổi chậm.
+    /// Xa hơn 60 m thì kéo thẳng theo hướng tại 60 m để đường cong không văng ra ngoài.
     private func laneEdges() -> ([Ground], [Ground]) {
         // từ dưới gầm xe mình (mặt đường chạm đáy màn hình) tới thật xa (đường tan vào chân trời, không bị cụt)
         let zs = Array(stride(from: -14.0, through: Self.farZ, by: 2.5)) + Array(stride(from: Self.farZ + 20, through: 300, by: 20))
-        func sample(_ c: LaneCurve?) -> [Ground]? {
-            guard let c else { return nil }
-            var pts: [Ground] = []
-            for i in 0...30 {
-                let yn = 0.5 + 0.5 * Double(i) / 30
-                if let g = toGround(xPx: c.x(at: yn) * snapshot.frameWidth, yPx: yn * snapshot.frameHeight), g.z < 120 {
-                    pts.append(g)
-                }
-            }
-            guard pts.count >= 3 else { return nil }
-            pts.sort { $0.z < $1.z }
-            return zs.map { z in Ground(x: interp(pts, z), z: z) }
+        let lane = snapshot.roadLane
+        func x(_ z: Double, _ side: Double) -> Double {
+            let zc = min(z, 60)
+            let slope = lane.heading + lane.curvature * zc
+            return lane.center(zc) + slope * (z - zc) + side * lane.width / 2
         }
-        let half = Self.laneWidth / 2
-        var l = sample(snapshot.laneLeft), r = sample(snapshot.laneRight)
-        if let ll = l, let rr = r, abs(rr[0].x - ll[0].x) < 2.2 { r = nil }  // hai vạch quá sát: coi như chỉ có vạch trái
-        switch (l, r) {
-        case let (ll?, nil): r = ll.map { Ground(x: $0.x + Self.laneWidth, z: $0.z) }
-        case let (nil, rr?): l = rr.map { Ground(x: $0.x - Self.laneWidth, z: $0.z) }
-        case (nil, nil):
-            l = zs.map { Ground(x: -half, z: $0) }
-            r = zs.map { Ground(x: half, z: $0) }
-        default: break
-        }
-        return (l!, r!)
+        return (zs.map { Ground(x: x($0, -1), z: $0) }, zs.map { Ground(x: x($0, 1), z: $0) })
     }
 
     /// x tại z trên đường gấp khúc (sắp theo z); ngoài khoảng thì kéo thẳng theo hai điểm đầu/cuối.
@@ -374,7 +358,7 @@ private struct RoadCanvas: View {
             guard kept, let wReal = config.vehicleWidthM[d.cls], d.width > 0, s.fPx > 0 else { continue }
             let isEgo = d.box == s.result.egoBox
             let z = isEgo ? (s.result.d ?? s.fPx * wReal / d.width) : s.fPx * wReal / d.width
-            guard z < Self.farZ + 20 else { continue }
+            guard z > 3, z < Self.farZ + 20 else { continue }  // gần hơn 3 m là nhận nhầm / capo
             let x = ((d.x1 + d.x2) / 2 - s.frameWidth / 2) * z / s.fPx
             let isCar = d.cls == "car"
             out.append(Car(pos: Ground(x: x, z: z), widthM: wReal, heightM: isCar ? 1.45 : 3.0, lengthM: isCar ? 4.5 : 9.0,

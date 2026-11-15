@@ -20,6 +20,7 @@ struct HUDPanel: View {
                         .frame(width: 40, height: 30)
                         .overlay(Capsule().stroke(lineWidth: 2))
                 }
+                Button { model.settings.hidePreview = true } label: { Image(systemName: "video.slash.fill") }
                 Button { model.beginCalibration() } label: { Image(systemName: "scope") }
                 Button { showSettings = true } label: { Image(systemName: "gearshape.fill") }
             }

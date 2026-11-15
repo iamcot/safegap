@@ -81,6 +81,8 @@ struct FrameSnapshot {
     var roiNorm: [Point]?
     var laneLeft: LaneCurve?
     var laneRight: LaneCurve?
+    /// Làn ổn định theo mét để vẽ màn lái.
+    var roadLane = RoadLane()
     /// Chân trời (pixel) và góc ngẩng (độ) từ CoreMotion; nil nếu không có.
     var yHorizon: Double?
     var pitchDeg: Double?
@@ -121,6 +123,7 @@ final class FrameProcessor {
     private var throttle = FrameThrottle()
     private var thermalLevel: ThermalLevel = .nominal
     private var laneTracker = LaneTracker()
+    private let roadLane = RoadLaneFilter()
 
     /// Gọi từ main khi iOS báo đổi mức nhiệt.
     func setThermal(_ level: ThermalLevel) {
@@ -223,6 +226,19 @@ final class FrameProcessor {
         }
         pipeline.roi = Lane.roiToPixels(roiNorm, width: w, height: h)
 
+        // Mô hình làn ổn định (mét) cho màn lái: chiếu vạch xuống mặt đường, lọc chậm.
+        let yH = yHorizon ?? p.config.distance.yHorizonNorm * h
+        func ground(_ c: LaneCurve?) -> [(x: Double, z: Double)]? {
+            guard let c, f > 0 else { return nil }
+            return stride(from: 0.5, through: 1.0, by: 0.02).compactMap { yn -> (x: Double, z: Double)? in
+                let dy = yn * h - yH
+                guard dy > 1 else { return nil }
+                let z = f * p.calibration.hCamM / dy
+                return ((c.x(at: yn) * w - w / 2) * z / f, z)
+            }
+        }
+        let road = roadLane.update(left: ground(laneTracker.left), right: ground(laneTracker.right))
+
         let t0 = CACurrentMediaTime()
         var dets: [Detection] = []
         if let detector {
@@ -275,6 +291,7 @@ final class FrameProcessor {
         s.roiNorm = roiNorm
         s.laneLeft = laneTracker.left
         s.laneRight = laneTracker.right
+        s.roadLane = road
         s.yHorizon = yHorizon
         s.pitchDeg = pitchDeg
         onSnapshot?(s)
