@@ -37,6 +37,10 @@ class Pipeline:
         self.h_cam = cam.get("h_cam_m", 1.2)
         self.widths = cfg["vehicle_width_m"]
         self.roi = roi_to_pixels(cfg["roi"]["polygon"], frame_w, frame_h)
+        # Bỏ box của chính xe mình (capo, taplo): YOLO hay nhận nhầm là "car", box rộng gần hết khung / chạm đáy ảnh
+        det_cfg = cfg.get("detection", {})
+        self.max_w_px = det_cfg.get("max_width_ratio", 0.7) * frame_w
+        self.max_y2_px = det_cfg.get("max_bottom_ratio", 0.97) * frame_h
         dcfg = cfg.get("distance", {})
         self.use_ground = dcfg.get("use_ground", False)
         self.y_horizon = dcfg.get("y_horizon_norm", 0.45) * frame_h
@@ -49,7 +53,7 @@ class Pipeline:
     def step(self, frame_idx: int, t: float, speed_kmh: Optional[float], dets: Sequence[Detection]) -> FrameResult:
         dt = 0.0 if self._last_t is None else t - self._last_t
         self._last_t = t
-        dets = [d for d in dets if d.cls in self.widths and d.width > 0]
+        dets = [d for d in dets if d.cls in self.widths and 0 < d.width <= self.max_w_px and d.y2 <= self.max_y2_px]
         ids = self.tracker.update([d.box() for d in dets], [d.cls for d in dets])
         r = FrameResult(frame_idx, t, speed_kmh)
         ego = select_ego(dets, self.roi)

@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SafeGap viewer</title>
+<style>
+  :root {
+    --bg: #111418; --panel: #1a1e24; --line: #2a3038; --text: #e6e8eb; --muted: #8a929c;
+    --accent: #4aa8ff; --green: #2ecc40; --yellow: #ffd23f; --red: #ff4136; --none: #9aa0a6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .app { display: grid; grid-template-columns: 300px 1fr; min-height: 100vh; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); padding: 12px 14px; overflow-y: auto; max-height: 100vh; position: sticky; top: 0; }
+  main { padding: 12px 16px; min-width: 0; }
+  h1 { font-size: 16px; margin: 0 0 10px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 16px 0 6px; }
+  label { display: block; margin: 6px 0 2px; color: var(--muted); font-size: 12px; }
+  label b { color: var(--text); font-weight: 600; float: right; }
+  input[type=range] { width: 100%; }
+  input[type=text], input[type=number], select { width: 100%; background: #0d1014; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 5px 6px; }
+  button { background: #252b33; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 5px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #001; font-weight: 600; }
+  button:disabled { opacity: .4; cursor: default; }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .row > * { flex: 1; }
+  .radio { display: flex; gap: 10px; font-size: 12px; }
+  .radio label { display: inline; margin: 0; color: var(--text); }
+  details summary { cursor: pointer; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; margin-top: 16px; }
+  .hint { color: var(--muted); font-size: 12px; }
+  .stage { position: relative; width: 100%; background: #000; border-radius: 6px; overflow: hidden; }
+  .stage video { display: block; width: 100%; height: auto; }
+  .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  #cover { display: block; width: 100%; height: 14px; margin-top: 6px; cursor: pointer; border-radius: 3px; }
+  .controls { display: flex; gap: 6px; margin: 8px 0; flex-wrap: wrap; align-items: center; }
+  .controls .sp { flex: 1; }
+  .metrics { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 8px 0; }
+  .metric { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
+  .metric .k { color: var(--muted); font-size: 11px; }
+  .metric .v { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  #chart { display: block; width: 100%; height: 200px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; cursor: crosshair; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin: 4px 0 0; }
+  .legend i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 4px; }
+  .status { font-size: 12px; color: var(--muted); }
+  .err { color: var(--red); }
+  .empty { padding: 60px 20px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; }
+  @media (max-width: 800px) { .app { grid-template-columns: 1fr; } aside { position: static; max-height: none; } .metrics { grid-template-columns: repeat(3, 1fr); } }
+</style>
+</head>
+<body>
+<div class="app">
+<aside>
+  <h1>SafeGap viewer</h1>
+  <h2>Video</h2>
+  <select id="vidSel"></select>
+  <label>…hoặc đường dẫn file</label>
+  <div class="row"><input type="text" id="vidPath" placeholder="/Users/…/clip.mov"><button id="openBtn" style="flex:0">Mở</button></div>
+  <label>…hoặc kéo thả / chọn file</label>
+  <input type="file" id="upload" accept="video/*">
+
+  <h2>Tốc độ xe mình</h2>
+  <label>File tốc độ CSV (t_s,speed_kmh)</label>
+  <input type="file" id="speedCsv" accept=".csv">
+  <div id="speedConstBox"><label>Tốc độ cố định <b id="v_speed"></b></label><input type="range" id="speed" min="0" max="130" step="5" value="90"></div>
+  <div id="speedCsvInfo" class="hint" hidden></div>
+
+  <h2>Tiêu cự f</h2>
+  <div class="radio">
+    <label><input type="radio" name="fmode" value="config" checked> Theo config</label>
+    <label><input type="radio" name="fmode" value="manual"> Nhập f</label>
+    <label><input type="radio" name="fmode" value="hfov"> Từ HFOV</label>
+  </div>
+  <div id="fManualBox" hidden><label>f (px, ở độ rộng video này)</label><input type="number" id="fManual" step="10"></div>
+  <div id="hfovBox" hidden><label>HFOV <b id="v_hfov"></b></label><input type="range" id="hfov" min="30" max="110" step="0.5" value="69">
+    <div class="hint">iPhone camera 1x quay video khoảng 63–70°, tuỳ máy và chống rung</div></div>
+  <div class="hint" id="fInfo"></div>
+
+  <h2>Bề rộng xe (m)</h2>
+  <div id="widths"></div>
+
+  <h2>ROI (xe cùng làn)</h2>
+  <label>Cạnh trên (y) <b id="v_topY"></b></label><input type="range" id="topY" min="0.2" max="0.9" step="0.01">
+  <label>Cạnh trên: trái <b id="v_topL"></b></label><input type="range" id="topL" min="0" max="1" step="0.01">
+  <label>Cạnh trên: phải <b id="v_topR"></b></label><input type="range" id="topR" min="0" max="1" step="0.01">
+  <label>Cạnh dưới: trái <b id="v_botL"></b></label><input type="range" id="botL" min="0" max="1" step="0.01">
+  <label>Cạnh dưới: phải <b id="v_botR"></b></label><input type="range" id="botR" min="0" max="1" step="0.01">
+
+  <details>
+    <summary>Cảnh báo & lọc</summary>
+    <label>Ngưỡng ĐỎ (× d_min) <b id="v_red"></b></label><input type="range" id="red" min="0.5" max="1" step="0.05">
+    <label>Ngưỡng VÀNG (× d_min) <b id="v_yellow"></b></label><input type="range" id="yellow" min="1" max="1.5" step="0.05">
+    <label>Giữ ổn định (s) <b id="v_hold"></b></label><input type="range" id="hold" min="0" max="3" step="0.1">
+    <label>Không cảnh báo dưới (km/h) <b id="v_minSpeed"></b></label><input type="range" id="minSpeed" min="0" max="80" step="5">
+    <label>d_min chỉnh tay (m, 0 = theo luật)</label><input type="number" id="manualDmin" min="0" max="200" step="5">
+    <label>Nhiễu đo Kalman (tương đối) <b id="v_measSigma"></b></label><input type="range" id="measSigma" min="0.01" max="0.3" step="0.01">
+    <label>Gia tốc Kalman (m/s²) <b id="v_accSigma"></b></label><input type="range" id="accSigma" min="0.5" max="10" step="0.5">
+    <label>Độ tin cậy tối thiểu <b id="v_minConf"></b></label><input type="range" id="minConf" min="0" max="0.9" step="0.05">
+    <div class="hint">Chỉ lọc được trên kết quả YOLO đã có (không thấp hơn ngưỡng lúc chạy YOLO).</div>
+    <label>Bỏ box rộng hơn (× bề ngang khung) <b id="v_maxW"></b></label><input type="range" id="maxW" min="0.3" max="1" step="0.05">
+    <label>Bỏ box có đáy thấp hơn (× chiều cao khung) <b id="v_maxBottom"></b></label><input type="range" id="maxBottom" min="0.5" max="1" step="0.01">
+    <div class="hint">Hai ngưỡng trên để bỏ box của chính xe mình (capo, taplo) mà YOLO nhận nhầm là xe. Box bị bỏ vẽ nét đứt.</div>
+  </details>
+
+  <h2>Lưu</h2>
+  <div class="row"><button id="saveCfg">Lưu config</button><button id="csvBtn">Tải CSV log</button></div>
+  <div class="hint" id="saveMsg"></div>
+</aside>
+
+<main>
+  <div id="empty" class="empty">Chọn video ở thanh bên (để video trong <code>data/clips/</code>, nhập đường dẫn, hoặc kéo thả file).</div>
+  <div id="view" hidden>
+    <div class="row" style="justify-content:space-between"><h1 id="title" style="flex:0 1 auto"></h1><span class="status" id="yoloStatus" style="flex:0 1 auto"></span></div>
+    <div class="stage" id="stage">
+      <video id="video" controls playsinline preload="auto"></video>
+      <canvas id="overlay"></canvas>
+    </div>
+    <canvas id="cover" title="Phần đã nhận diện (bấm để tua)"></canvas>
+    <div class="controls">
+      <button id="back1s">◀ 1 giây</button><button id="back1f">◀ 1 frame</button>
+      <button id="fwd1f">1 frame ▶</button><button id="fwd1s">1 giây ▶</button>
+      <button id="nextRed">Lần ĐỎ tiếp ▶</button>
+      <label class="status" style="display:inline;margin:0 0 0 8px" title="YOLO chậm hơn tốc độ phát (máy không có GPU): tạm dừng chờ YOLO bắt kịp rồi phát tiếp"><input type="checkbox" id="waitYolo" checked> Chờ YOLO khi phát</label>
+      <span class="sp status" id="redCount"></span>
+      <span class="status" id="frameInfo"></span>
+    </div>
+    <div class="metrics">
+      <div class="metric"><div class="k">Thời điểm</div><div class="v" id="m_t">--</div></div>
+      <div class="metric"><div class="k">D (lọc)</div><div class="v" id="m_d">--</div></div>
+      <div class="metric"><div class="k">D (thô)</div><div class="v" id="m_draw">--</div></div>
+      <div class="metric"><div class="k">d_min</div><div class="v" id="m_dmin">--</div></div>
+      <div class="metric"><div class="k">Tốc độ</div><div class="v" id="m_speed">--</div></div>
+      <div class="metric"><div class="k">Trạng thái</div><div class="v" id="m_level">--</div></div>
+    </div>
+    <div class="hint" id="egoInfo">&nbsp;</div>
+    <h2>Khoảng cách theo thời gian</h2>
+    <canvas id="chart" title="Bấm để tua tới thời điểm này"></canvas>
+    <div class="legend"><span><i style="background:#8a929c"></i>D thô</span><span><i style="background:#4aa8ff"></i>D lọc</span><span><i style="background:#ff4136"></i>d_min</span><span class="hint">Phím: Space phát/dừng, ←/→ 1 frame, Shift+←/→ 1 giây</span></div>
+  </div>
+</main>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const EGO_COLOR = "#00ff66";
+const COLORS = { GREEN: "#2ecc40", YELLOW: "#ffd23f", RED: "#ff4136", NONE: "#9aa0a6" };
+const video = $("video"), overlay = $("overlay"), ctx = overlay.getContext("2d");
+
+let baseCfg = null;      // config/default.json
+let meta = null;         // video đang mở: fps, width, height, n_frames
+let res = null;          // kết quả pipeline theo cột (t, d, level…)
+let resVersion = -1, resPending = false, resDirty = true, lastResAt = 0;
+let dets = [];           // detection theo frame (null = YOLO chưa tới)
+let detsVersion = -1, detsWin = [0, 0];
+let coverage = [];
+let speedCsv = null;     // {t:[], v:[]}
+
+async function api(path, body) {
+  const opt = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  const r = await fetch(path, opt);
+  if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch (e) {} throw new Error(m); }
+  return r.json();
+}
+
+// ---------------- Tham số ----------------
+function bindRange(id, fmt) {
+  const el = $(id), out = $("v_" + id);
+  const show = () => { if (out) out.textContent = fmt ? fmt(+el.value) : el.value; };
+  el.addEventListener("input", () => { show(); paramsChanged(); });
+  show();
+  return { set(v) { el.value = v; show(); } };
+}
+
+function initParams(cfg) {
+  baseCfg = cfg;
+  const poly = cfg.roi.polygon;
+  const wbox = $("widths"); wbox.innerHTML = "";
+  for (const [k, v] of Object.entries(cfg.vehicle_width_m)) {
+    wbox.insertAdjacentHTML("beforeend", `<label>${k} <b id="v_w_${k}"></b></label><input type="range" id="w_${k}" min="1.4" max="3" step="0.05" value="${v}">`);
+    bindRange("w_" + k, (x) => x.toFixed(2));
+  }
+  const pairs = [["topY", poly[0][1]], ["topL", poly[0][0]], ["topR", poly[1][0]], ["botL", poly[3][0]], ["botR", poly[2][0]],
+    ["red", cfg.alert.red_ratio], ["yellow", cfg.alert.yellow_ratio], ["hold", cfg.alert.hold_s], ["minSpeed", cfg.alert.min_speed_kmh],
+    ["measSigma", cfg.tracker.meas_rel_sigma], ["accSigma", cfg.tracker.accel_sigma], ["minConf", cfg.detection.min_conf],
+    ["maxW", cfg.detection.max_width_ratio ?? 0.7], ["maxBottom", cfg.detection.max_bottom_ratio ?? 0.97]];
+  for (const [id, v] of pairs) { $(id).value = v; $(id).dispatchEvent(new Event("input")); }
+  $("manualDmin").value = cfg.alert.manual_d_min_m || 0;
+}
+for (const id of ["topY", "topL", "topR", "botL", "botR", "red", "yellow", "hold", "minSpeed", "measSigma", "accSigma", "minConf", "maxW", "maxBottom"]) bindRange(id);
+bindRange("speed", (x) => x + " km/h");
+bindRange("hfov", (x) => x + "°");
+$("manualDmin").addEventListener("input", paramsChanged);
+$("fManual").addEventListener("input", paramsChanged);
+document.querySelectorAll("input[name=fmode]").forEach((el) => el.addEventListener("change", () => {
+  const m = fMode();
+  $("fManualBox").hidden = m !== "manual"; $("hfovBox").hidden = m !== "hfov";
+  if (m === "manual" && meta) $("fManual").value = fConfig().toFixed(1);
+  paramsChanged();
+}));
+const fMode = () => document.querySelector("input[name=fmode]:checked").value;
+const fConfig = () => baseCfg.camera.f_px * meta.width / baseCfg.camera.f_px_image_width;
+function fFrame() {
+  const m = fMode();
+  if (m === "manual") return +$("fManual").value || fConfig();
+  if (m === "hfov") return (meta.width / 2) / Math.tan((+$("hfov").value * Math.PI / 180) / 2);
+  return fConfig();
+}
+
+function currentCfg() {
+  const cfg = JSON.parse(JSON.stringify(baseCfg));
+  if (meta) { const f = fFrame(); cfg.camera.f_px = Math.round(f * 10) / 10; cfg.camera.f_px_image_width = meta.width; $("fInfo").textContent = `f = ${f.toFixed(0)} px @ ${meta.width} px`; }
+  for (const k of Object.keys(cfg.vehicle_width_m)) cfg.vehicle_width_m[k] = +$("w_" + k).value;
+  const ty = +$("topY").value;
+  cfg.roi.polygon = [[+$("topL").value, ty], [+$("topR").value, ty], [+$("botR").value, 1.0], [+$("botL").value, 1.0]];
+  const a = cfg.alert;
+  a.red_ratio = +$("red").value; a.yellow_ratio = +$("yellow").value; a.hold_s = +$("hold").value;
+  a.min_speed_kmh = +$("minSpeed").value; a.manual_d_min_m = (+$("manualDmin").value) || null;
+  cfg.tracker.meas_rel_sigma = +$("measSigma").value; cfg.tracker.accel_sigma = +$("accSigma").value;
+  cfg.detection.min_conf = +$("minConf").value;
+  cfg.detection.max_width_ratio = +$("maxW").value; cfg.detection.max_bottom_ratio = +$("maxBottom").value;
+  return cfg;
+}
+
+let paramTimer = null;
+function paramsChanged() { resDirty = true; clearTimeout(paramTimer); paramTimer = setTimeout(() => fetchResults(true), 120); }
+
+$("speedCsv").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) { speedCsv = null; } else {
+    const lines = (await file.text()).trim().split(/\r?\n/);
+    const head = lines.shift().split(",").map((s) => s.trim());
+    const it = head.indexOf("t_s"), iv = head.indexOf("speed_kmh");
+    const rows = lines.map((l) => l.split(",")).map((c) => [+c[it], +c[iv]]).filter((r) => isFinite(r[0]) && isFinite(r[1])).sort((a, b) => a[0] - b[0]);
+    speedCsv = { t: rows.map((r) => r[0]), v: rows.map((r) => r[1]) };
+    $("speedCsvInfo").textContent = `${file.name}: ${rows.length} dòng`;
+  }
+  $("speedConstBox").hidden = !!speedCsv; $("speedCsvInfo").hidden = !speedCsv;
+  paramsChanged();
+});
+
+// ---------------- Video ----------------
+async function loadVideos(select) {
+  const r = await api("/api/videos");
+  if (!baseCfg) initParams(r.config);
+  const sel = $("vidSel");
+  sel.innerHTML = `<option value="">— chọn video —</option>` + r.videos.map((p) => `<option value="${p}">${p.split(/[\\/]/).pop()}</option>`).join("");
+  if (select) sel.value = select;
+}
+$("vidSel").addEventListener("change", (e) => e.target.value && openVideo(e.target.value));
+$("openBtn").addEventListener("click", () => $("vidPath").value.trim() && openVideo($("vidPath").value.trim()));
+$("upload").addEventListener("change", async (e) => {
+  const file = e.target.files[0]; if (!file) return;
+  $("saveMsg").textContent = `Đang chép ${file.name}…`;
+  try {
+    const r = await fetch(`/api/upload?name=${encodeURIComponent(file.name)}`, { method: "POST", body: file });
+    if (!r.ok) throw new Error((await r.json()).detail);
+    const { path } = await r.json();
+    $("saveMsg").textContent = "";
+    await loadVideos(path); openVideo(path);
+  } catch (err) { $("saveMsg").textContent = "Lỗi: " + err.message; }
+});
+
+async function openVideo(path) {
+  try { meta = await api("/api/open", { path }); }
+  catch (err) { alertMsg(err.message); return; }
+  $("empty").hidden = true; $("view").hidden = false;
+  $("title").textContent = meta.name;
+  $("stage").style.aspectRatio = `${meta.width} / ${meta.height}`;
+  dets = new Array(meta.n_frames).fill(null); detsVersion = -1; detsWin = [0, 0]; res = null; resVersion = -1; resDirty = true;
+  if (fMode() === "manual") $("fManual").value = fConfig().toFixed(1);
+  video.src = "/api/video?ts=" + Date.now();
+  paramsChanged();
+  poll();
+}
+function alertMsg(m) { $("empty").hidden = false; $("view").hidden = true; $("empty").innerHTML = `<span class="err">${m}</span>`; }
+
+const curFrame = () => meta ? Math.max(0, Math.min(meta.n_frames - 1, Math.floor(video.currentTime * meta.fps + 1e-3))) : 0;
+const seekFrame = (f) => { video.currentTime = (Math.max(0, Math.min(meta.n_frames - 1, f)) + 0.5) / meta.fps; };
+$("back1s").onclick = () => { seekFrame(curFrame() - Math.round(meta.fps)); };
+$("fwd1s").onclick = () => { seekFrame(curFrame() + Math.round(meta.fps)); };
+$("back1f").onclick = () => { video.pause(); seekFrame(curFrame() - 1); };
+$("fwd1f").onclick = () => { video.pause(); seekFrame(curFrame() + 1); };
+$("nextRed").onclick = () => {
+  if (!res) return;
+  const reds = res.sound.map((s, i) => s ? i : -1).filter((i) => i >= 0);
+  if (!reds.length) return;
+  const c = curFrame(); seekFrame(reds.find((i) => i > c) ?? reds[0]);
+};
+document.addEventListener("keydown", (e) => {
+  if (!meta || ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName)) return;
+  if (e.key === " ") { e.preventDefault(); video.paused ? video.play() : video.pause(); }
+  else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+    e.preventDefault();
+    const step = e.shiftKey ? Math.round(meta.fps) : 1;
+    if (!e.shiftKey) video.pause();
+    seekFrame(curFrame() + (e.key === "ArrowLeft" ? -step : step));
+  }
+});
+
+// ---------------- Đồng bộ với backend ----------------
+let polling = false;
+async function poll() {
+  if (polling) return; polling = true;
+  while (meta) {
+    try {
+      const s = await api("/api/state", { playhead: curFrame() });
+      coverage = s.coverage;
+      const pct = s.n_frames ? (100 * s.done / s.n_frames) : 0;
+      $("yoloStatus").innerHTML = s.error ? `<span class="err">${s.error}</span>` :
+        (s.done >= s.n_frames ? `YOLO xong cả clip (${s.n_frames} frame)` : `YOLO đang chạy: ${s.done}/${s.n_frames} frame (${pct.toFixed(0)}%)`);
+      if (s.n_frames !== meta.n_frames) { meta.n_frames = s.n_frames; dets.length = s.n_frames; }
+      const c = curFrame();
+      if (s.version !== detsVersion || (c - 30 < detsWin[0] && detsWin[0] > 0) || (c + 300 > detsWin[1] && detsWin[1] < meta.n_frames)) {
+        // Detection + kết quả quanh chỗ đang xem: server tính tiếp phần YOLO mới chạy, không tính lại cả clip.
+        const d = await api(`/api/frames?start=${c - 60}&end=${c + 600}`);
+        d.dets.forEach((fr, k) => { dets[d.start + k] = fr; });
+        if (res && !resPending) for (const k of Object.keys(d.res)) d.res[k].forEach((v, j) => { res[k][d.start + j] = v; });
+        detsVersion = s.version; detsWin = [Math.max(0, c - 60), Math.min(meta.n_frames, c + 600)];
+      }
+      // Cả clip (biểu đồ, số lần ĐỎ): ~2 giây 1 lần khi YOLO đang chạy.
+      if (s.version !== resVersion && performance.now() - lastResAt > 2000) fetchResults(false);
+      drawCover();
+    } catch (e) { /* server tắt / đổi video: thử lại */ }
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  polling = false;
+}
+
+async function fetchResults(paramsChanged = true) {
+  if (!meta || !baseCfg) return;
+  if (resPending) { if (paramsChanged) resDirty = true; return; }
+  resPending = true; lastResAt = performance.now();
+  if (paramsChanged) resDirty = false;
+  try {
+    if (paramsChanged) {
+      const body = { cfg: currentCfg(), min_conf: +$("minConf").value };
+      if (speedCsv && speedCsv.t.length) { body.speed_t = speedCsv.t; body.speed_v = speedCsv.v; }
+      else { body.speed_t = [0]; body.speed_v = [+$("speed").value]; }
+      res = await api("/api/params", body);
+    } else {
+      res = await api("/api/results");
+    }
+    resVersion = res.version;
+    const reds = res.sound.filter(Boolean).length;
+    $("redCount").textContent = `${reds} lần vào ĐỎ (trong phần đã nhận diện)`;
+    $("nextRed").disabled = !reds;
+    drawChart();
+  } catch (e) { /* bỏ qua, lần poll sau thử lại */ }
+  resPending = false;
+  if (resDirty) fetchResults();
+}
+
+// ---------------- Vẽ ----------------
+function fitCanvas(cv) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.round(cv.clientWidth * dpr), h = Math.round(cv.clientHeight * dpr);
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  return dpr;
+}
+
+let autoPaused = false;
+function waitForYolo(i) {
+  const ready = res ? res.t[i] !== null && res.t[i] !== undefined : dets[i] !== null && dets[i] !== undefined;
+  if (!video.paused && !ready && $("waitYolo").checked) { autoPaused = true; video.pause(); }
+  else if (autoPaused && ready) { autoPaused = false; video.play().catch(() => {}); }
+}
+$("waitYolo").addEventListener("change", (e) => { if (!e.target.checked && autoPaused) { autoPaused = false; video.play(); } });
+
+function drawOverlay() {
+  requestAnimationFrame(drawOverlay);
+  if (!meta) return;
+  waitForYolo(curFrame());
+  const dpr = fitCanvas(overlay);
+  const W = overlay.width, H = overlay.height, s = W / meta.width;
+  ctx.clearRect(0, 0, W, H);
+  const i = curFrame();
+  const fr = dets[i];
+  const r = res && i < res.t.length && res.t[i] !== null ? i : -1;
+  const level = r >= 0 ? res.level[r] : "NONE";
+  const color = COLORS[level] || COLORS.NONE;
+  // ROI
+  if (res && res.roi) {
+    ctx.strokeStyle = "#00e5ff"; ctx.lineWidth = 2 * dpr; ctx.beginPath();
+    res.roi.forEach(([x, y], k) => k ? ctx.lineTo(x * s, y * s) : ctx.moveTo(x * s, y * s));
+    ctx.closePath(); ctx.stroke();
+  }
+  const minConf = +$("minConf").value;
+  const maxW = +$("maxW").value * meta.width, maxY2 = +$("maxBottom").value * meta.height;
+  if (fr) {
+    const wpx = r >= 0 ? res.w_px[r] : null;
+    let egoDrawn = false;
+    for (const [x1, y1, x2, y2, cls, conf] of fr) {
+      if (conf < minConf) continue;
+      const dropped = x2 - x1 > maxW || y2 > maxY2;
+      const ego = !dropped && !egoDrawn && wpx !== null && Math.abs((x2 - x1) - wpx) < 1e-3 && res.d[r] !== null;
+      // Xe đang đo: xanh lá đậm. Xe khác: hồng tím (dễ thấy trên nền đường/trời). Box bị bỏ: nét đứt, mờ hơn.
+      ctx.strokeStyle = ego ? EGO_COLOR : dropped ? "rgba(255,77,255,.55)" : "#ff4dff";
+      ctx.lineWidth = (ego ? 4 : 2) * dpr;
+      ctx.setLineDash(dropped ? [6 * dpr, 6 * dpr] : []);
+      ctx.strokeRect(x1 * s, y1 * s, (x2 - x1) * s, (y2 - y1) * s);
+      ctx.setLineDash([]);
+      if (ego) {
+        egoDrawn = true;
+        const fs = 22 * dpr, label = `${res.d[r].toFixed(1)} m`;
+        ctx.font = `bold ${fs}px system-ui`;
+        const tw = ctx.measureText(label).width, ph = fs * 1.3;
+        const lx = Math.min(Math.max(x1 * s, 0), W - tw - 12 * dpr);
+        const ly = Math.max(y1 * s - ph - 4 * dpr, 30 * dpr + 4 * dpr);   // không đè thanh trạng thái
+        ctx.fillStyle = "rgba(0,0,0,.7)"; ctx.fillRect(lx, ly, tw + 12 * dpr, ph);
+        ctx.fillStyle = EGO_COLOR; ctx.fillText(label, lx + 6 * dpr, ly + fs * 1.0);
+      }
+    }
+  }
+  // Thanh trạng thái trên cùng
+  const bar = 30 * dpr;
+  ctx.fillStyle = color; ctx.globalAlpha = 0.85; ctx.fillRect(0, 0, W, bar); ctx.globalAlpha = 1;
+  ctx.fillStyle = "#000"; ctx.font = `600 ${16 * dpr}px system-ui`;
+  let txt;
+  if (!fr) txt = autoPaused ? "Chờ YOLO bắt kịp…" : "YOLO chưa tới frame này… (đang chạy nền từ chỗ đang xem)";
+  else if (r < 0) txt = "Đang tính…";
+  else {
+    const f1 = (v, u) => v === null ? "--" : v.toFixed(0) + u;
+    txt = `D=${f1(res.d[r], "m")}   d_min=${f1(res.d_min[r], "m")}   v=${f1(res.speed_kmh[r], "km/h")}   ${level}`;
+  }
+  ctx.fillText(txt, 10 * dpr, bar * 0.7);
+  updateMetrics(r, i);
+}
+
+let lastMetricsKey = "";
+function updateMetrics(r, i) {
+  const key = `${i}:${r}:${resVersion}:${res ? res.t.length : 0}`;
+  if (key === lastMetricsKey) return; lastMetricsKey = key;
+  const f = (v, u, d = 1) => v === null || v === undefined ? "--" : v.toFixed(d) + " " + u;
+  $("m_t").textContent = (i / meta.fps).toFixed(1) + " s";
+  $("frameInfo").textContent = `frame ${i}/${meta.n_frames - 1}`;
+  if (r < 0) { for (const id of ["m_d", "m_draw", "m_dmin", "m_speed", "m_level"]) $(id).textContent = "--"; $("egoInfo").innerHTML = "&nbsp;"; drawChartCursor(); return; }
+  $("m_d").textContent = f(res.d[r], "m"); $("m_draw").textContent = f(res.d_raw[r], "m");
+  $("m_dmin").textContent = f(res.d_min[r], "m", 0); $("m_speed").textContent = f(res.speed_kmh[r], "km/h", 0);
+  $("m_level").textContent = res.level[r]; $("m_level").style.color = COLORS[res.level[r]];
+  $("egoInfo").textContent = res.w_px[r] !== null ? `Xe: ${res.cls[r]}, rộng ${res.w_px[r].toFixed(1)} px, track #${res.track_id[r]}` : "Không có xe trong ROI";
+  drawChartCursor();
+}
+
+function drawCover() {
+  const cv = $("cover"); fitCanvas(cv);
+  const c = cv.getContext("2d"), W = cv.width, H = cv.height;
+  c.fillStyle = "#2a3038"; c.fillRect(0, 0, W, H);
+  const n = coverage.length;
+  coverage.forEach((v, k) => { if (v > 0) { c.fillStyle = `rgba(74,168,255,${0.25 + 0.75 * v})`; c.fillRect(k * W / n, 0, Math.ceil(W / n), H); } });
+  if (meta) { c.fillStyle = "#fff"; c.fillRect(curFrame() / meta.n_frames * W - 1, 0, 2, H); }
+}
+$("cover").addEventListener("click", (e) => { if (!meta) return; const b = e.target.getBoundingClientRect(); seekFrame(Math.floor((e.clientX - b.left) / b.width * meta.n_frames)); });
+
+// Biểu đồ: vẽ nền vào canvas phụ, con trỏ vẽ chồng lên mỗi frame.
+const chartBg = document.createElement("canvas");
+let chartYMax = 100;
+function drawChart() {
+  const cv = $("chart"); const dpr = fitCanvas(cv);
+  chartBg.width = cv.width; chartBg.height = cv.height;
+  const c = chartBg.getContext("2d"), W = cv.width, H = cv.height, pad = 30 * dpr;
+  c.clearRect(0, 0, W, H);
+  if (!res || !meta) return;
+  const n = meta.n_frames, T = n / meta.fps;
+  let ymax = 20;
+  for (let i = 0; i < res.t.length; i++) for (const k of ["d", "d_min"]) { const v = res[k][i]; if (v !== null && v > ymax && v < 300) ymax = v; }
+  chartYMax = ymax = Math.ceil(ymax * 1.1 / 10) * 10;
+  const X = (i) => pad + (W - pad - 8 * dpr) * i / n, Y = (v) => H - pad * 0.6 - (H - pad * 1.2) * Math.min(v, ymax) / ymax;
+  c.strokeStyle = "#2a3038"; c.fillStyle = "#8a929c"; c.font = `${11 * dpr}px system-ui`; c.lineWidth = 1;
+  for (let v = 0; v <= ymax; v += ymax > 100 ? 50 : 20) { c.beginPath(); c.moveTo(pad, Y(v)); c.lineTo(W, Y(v)); c.stroke(); c.fillText(v + "m", 2, Y(v) + 4 * dpr); }
+  const step = T > 300 ? 60 : T > 60 ? 10 : 5;
+  for (let t = 0; t <= T; t += step) c.fillText(t + "s", X(t * meta.fps) - 6 * dpr, H - 4 * dpr);
+  // nền màu theo mức cảnh báo
+  for (let i = 0; i < res.level.length; i++) {
+    const l = res.level[i]; if (l !== "RED" && l !== "YELLOW") continue;
+    c.fillStyle = l === "RED" ? "rgba(255,65,54,.18)" : "rgba(255,210,63,.12)";
+    c.fillRect(X(i), pad * 0.6, Math.max(1, X(i + 1) - X(i)), H - pad * 1.2);
+  }
+  const line = (key, color, w) => {
+    c.strokeStyle = color; c.lineWidth = w * dpr; c.beginPath(); let on = false;
+    for (let i = 0; i < res[key].length; i++) {
+      const v = res[key][i];
+      if (v === null) { on = false; continue; }
+      on ? c.lineTo(X(i), Y(v)) : c.moveTo(X(i), Y(v)); on = true;
+    }
+    c.stroke();
+  };
+  line("d_raw", "#8a929c", 1); line("d", "#4aa8ff", 2); line("d_min", "#ff4136", 1.5);
+  drawChartCursor();
+}
+function drawChartCursor() {
+  const cv = $("chart"); if (!meta || !chartBg.width) return;
+  fitCanvas(cv);
+  const c = cv.getContext("2d"), dpr = window.devicePixelRatio || 1, pad = 30 * dpr;
+  c.clearRect(0, 0, cv.width, cv.height); c.drawImage(chartBg, 0, 0);
+  const x = pad + (cv.width - pad - 8 * dpr) * curFrame() / meta.n_frames;
+  c.strokeStyle = "#fff"; c.lineWidth = 1 * dpr; c.beginPath(); c.moveTo(x, 0); c.lineTo(x, cv.height); c.stroke();
+}
+$("chart").addEventListener("click", (e) => {
+  if (!meta) return; const b = e.target.getBoundingClientRect(), dpr = window.devicePixelRatio || 1, pad = 30;
+  seekFrame(Math.floor((e.clientX - b.left - pad) / (b.width - pad - 8) * meta.n_frames));
+});
+window.addEventListener("resize", () => { drawChart(); drawCover(); });
+setInterval(drawCover, 500);
+
+// ---------------- Lưu ----------------
+$("saveCfg").onclick = async () => {
+  const cfg = currentCfg();
+  try { await api("/api/save_config", { cfg }); baseCfg = cfg; $("saveMsg").textContent = "Đã lưu config/default.json"; }
+  catch (e) { $("saveMsg").textContent = "Lỗi: " + e.message; }
+};
+$("csvBtn").onclick = () => {
+  if (!res) return;
+  const keys = ["frame", "t", "speed_kmh", "cls", "w_px", "d_raw", "d", "d_min", "level", "sound", "track_id"];
+  const rows = [keys.join(",")];
+  for (let i = 0; i < res.t.length; i++) {
+    if (res.t[i] === null) continue;
+    rows.push(keys.map((k) => { const v = k === "frame" ? i : res[k][i]; return v === null ? "" : v === true ? "True" : v === false ? "False" : v; }).join(","));
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([rows.join("\n")], { type: "text/csv" }));
+  a.download = meta.name.replace(/\.[^.]+$/, "") + ".csv"; a.click();
+};
+
+loadVideos().catch((e) => alertMsg("Không kết nối được server: " + e.message));
+requestAnimationFrame(drawOverlay);
+</script>
+</body>
+</html>

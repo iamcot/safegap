@@ -12,7 +12,9 @@
   "detection": {
     "model": "yolo11n.pt",
     "classes": ["car", "truck", "bus"],
-    "min_conf": 0.35
+    "min_conf": 0.35,
+    "max_width_ratio": 0.7,
+    "max_bottom_ratio": 0.97
   },
   "roi": {
     "comment": "Hình thang chọn xe cùng làn, toạ độ chuẩn hoá 0..1 (x, y), y tính từ trên xuống",

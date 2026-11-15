@@ -22,12 +22,17 @@ Thêm thư viện: `uv add <tên>` (tự cập nhật `pyproject.toml` và `uv.l
 ### Xem và debug video trên Mac (web local)
 
 ```bash
-uv run streamlit run proto/viewer.py
+uv run python -m proto.viewer      # tự mở http://127.0.0.1:8501
 ```
 
-Kéo thả video đã quay vào thanh bên (hoặc để trong `data/clips/`), bấm **Chạy YOLO** một lần (có cache),
-rồi tua frame, xem box / D / d_min / màu cảnh báo, biểu đồ D theo thời gian. Chỉnh f (config / nhập tay / từ HFOV),
-bề rộng xe, ROI, ngưỡng ở thanh bên: kết quả đổi ngay mà không chạy lại YOLO. Không có file tốc độ thì dùng thanh trượt
-tốc độ cố định. Bấm **Lưu config** để ghi tham số vào `config/default.json`.
+Chọn video ở thanh bên (để trong `data/clips/`, nhập đường dẫn, hoặc kéo thả file). Video phát thẳng trong trình duyệt,
+box / ROI / D / màu cảnh báo vẽ chồng lên. **YOLO chạy nền bắt đầu từ chỗ đang xem**: kéo tới đâu nhận diện tới đó,
+không phải chờ chạy hết clip. Máy chậm (không GPU) thì bật "Chờ YOLO khi phát" để video tự dừng chờ YOLO bắt kịp.
+Trên Mac chip Apple, YOLO tự dùng GPU (MPS). Kết quả lưu ở `out/<tên>_dets.json`, mở lại clip là có sẵn.
+
+Chỉnh f (config / nhập tay / từ HFOV), bề rộng xe, ROI, ngưỡng ở thanh bên: kết quả đổi ngay, không chạy lại YOLO.
+Không có file tốc độ thì dùng thanh trượt tốc độ cố định. Thanh xanh dưới video là phần đã nhận diện, biểu đồ D theo
+thời gian bấm vào để tua. Phím: Space phát/dừng, ←/→ 1 frame, Shift+←/→ 1 giây. **Lưu config** ghi tham số vào
+`config/default.json`, **Tải CSV log** xuất kết quả từng frame.
 
 Config: `config/law_vn.json` (bảng luật tốc độ → d_min), `config/default.json` (f, bề rộng xe, ROI, ngưỡng).
