@@ -25,11 +25,7 @@ uv run python -m proto.fixtures     # ghi ios/SafeGapCore/Tests/SafeGapCoreTests
 
 1. Export model YOLO (một lần), xem `SafeGap/Models/README.md`:
    ```bash
-   uv run --isolated --no-project --python 3.11 \
-     --with ultralytics --with "torch==2.7.1" --with "torchvision==0.22.1" \
-     --with "coremltools==8.3.0" --with "numpy<2" \
-     yolo export model=yolo11n.pt format=coreml nms=True imgsz=384,640
-   mv yolo11n.mlpackage ios/SafeGap/Models/
+   ./scripts/export_coreml.sh            # hoặc: ./scripts/export_coreml.sh yolov8n
    ```
 2. Mở `ios/SafeGap.xcodeproj`. Target SafeGap > Signing & Capabilities: chọn Team (Apple ID miễn phí được).
    Nếu báo trùng bundle id thì đổi `com.iamcot.safegap` thành tên khác.
