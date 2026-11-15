@@ -4,20 +4,25 @@ Cảnh báo khoảng cách an toàn trên cao tốc bằng camera iPhone. Kế h
 
 ## Prototype Python (Phase 1)
 
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r proto/requirements.txt
+Dùng [uv](https://docs.astral.sh/uv/): **không cần cài Python**, uv tự tải Python 3.11 và cài thư viện
+đúng phiên bản trong `uv.lock` vào `.venv`.
 
-pytest tests                                   # unit test, không cần video
-python -m proto.calib a4 --w-px <px> --dist 3  # tính f từ ảnh tờ A4
-python -m proto.run_video data/clips/<clip>.mp4 --speed data/clips/<clip>_speed.csv --out out/
-python -m proto.eval data/groundtruth.csv --logs out/
+```bash
+brew install uv          # macOS (hoặc: curl -LsSf https://astral.sh/uv/install.sh | sh)
+uv sync                  # lần đầu: tải Python 3.11 + thư viện
+
+uv run pytest                                          # unit test, không cần video
+uv run python -m proto.calib a4 --w-px <px> --dist 3   # tính f từ ảnh tờ A4
+uv run python -m proto.run_video data/clips/<clip>.mp4 --speed data/clips/<clip>_speed.csv --out out/
+uv run python -m proto.eval data/groundtruth.csv --logs out/
 ```
+
+Thêm thư viện: `uv add <tên>` (tự cập nhật `pyproject.toml` và `uv.lock`).
 
 ### Xem và debug video trên Mac (web local)
 
 ```bash
-streamlit run proto/viewer.py
+uv run streamlit run proto/viewer.py
 ```
 
 Kéo thả video đã quay vào thanh bên (hoặc để trong `data/clips/`), bấm **Chạy YOLO** một lần (có cache),
