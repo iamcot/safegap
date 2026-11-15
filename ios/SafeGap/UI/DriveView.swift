@@ -295,10 +295,11 @@ private struct RoadCanvas: View {
             }
 
             // đường tan dần ở xa (vẽ trước xe để xe không bị mờ)
-            let fadeEnd = cam.horizonY + size.height * 0.13
+            let fadeStart = max(0, cam.horizonY)
+            let fadeEnd = fadeStart + size.height * 0.13
             ctx.fill(Path(CGRect(x: 0, y: 0, width: size.width, height: fadeEnd)),
                      with: .linearGradient(Gradient(stops: [.init(color: pal.bgTop, location: 0),
-                                                             .init(color: pal.bgTop, location: cam.horizonY / fadeEnd),
+                                                             .init(color: pal.bgTop, location: fadeStart / fadeEnd),
                                                              .init(color: pal.bgTop.opacity(0), location: 1)]),
                                            startPoint: .zero, endPoint: CGPoint(x: 0, y: fadeEnd)))
 
@@ -404,23 +405,33 @@ private struct Car {
     var isOwn: Bool { kind == .own }
 }
 
-/// Camera ảo: cao 5.5 m, lùi sau camera thật 10 m, nhìn ra trước. Chiều sâu được nén lại (depth < 1)
-/// để xe ở 20–60 m không bị dồn sát chân trời; số mét hiển thị vẫn là số thật.
+/// Camera ảo: cao 8 m, lùi sau camera thật 10 m, chúc xuống 28° (cùng góc nhìn với ảnh xe vẽ sẵn).
+/// Chiều sâu được nén lại (depth < 1) để thấy tới ~60 m; số mét hiển thị vẫn là số thật.
 private struct ChaseCamera {
     let size: CGSize
-    let height = 5.5
+    let height = 8.0
     let back = 10.0
     let depth = 0.5
+    let pitch = 28.0 * Double.pi / 180
 
-    var horizonY: CGFloat { size.height * 0.14 }
-    var focal: Double { Double(size.height) * 1.1 }
+    var focal: Double { Double(size.height) * 1.2 }
+    var cy: Double { Double(size.height) * 0.5 }
+    /// Đường chân trời (thường nằm trên mép màn hình vì camera chúc xuống).
+    var horizonY: CGFloat { CGFloat(cy - focal * tan(pitch)) }
 
-    func scale(_ z: Double) -> Double { focal / max(z * depth + back, 0.5) }
+    /// Độ sâu theo trục nhìn và độ lệch dọc (xuống là dương) của điểm cao y, cách z phía trước.
+    private func view(_ y: Double, _ z: Double) -> (d: Double, v: Double) {
+        let dz = z * depth + back, dy = height - y
+        return (max(dz * cos(pitch) + dy * sin(pitch), 0.3), dy * cos(pitch) - dz * sin(pitch))
+    }
+
+    /// Số điểm màn hình cho 1 m bề ngang ở mặt đường, cách z phía trước.
+    func scale(_ z: Double) -> Double { focal / view(0, z).d }
 
     /// Điểm 3D: x ngang, y cao so với mặt đường, z phía trước (mét).
     func point3(_ x: Double, _ y: Double, _ z: Double) -> CGPoint {
-        let k = scale(z)
-        return CGPoint(x: size.width / 2 + CGFloat(x * k), y: horizonY + CGFloat((height - y) * k))
+        let (d, v) = view(y, z)
+        return CGPoint(x: size.width / 2 + CGFloat(focal * x / d), y: CGFloat(cy + focal * v / d))
     }
 
     func point(_ g: Ground) -> CGPoint { point3(g.x, 0, g.z) }
