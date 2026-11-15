@@ -24,6 +24,11 @@ public struct DeviceCalibration: Codable, Equatable, Sendable {
     public var hCamM: Double
     /// Bù lệch góc ngẩng (độ) nếu chân trời từ CoreMotion lệch với chân trời thật trên ảnh. nil = 0.
     public var pitchOffsetDeg: Double?
+    /// Lần đo tờ A4 gần nhất của ống kính này (vị trí 2 vạch theo pixel frame, khoảng cách, bề rộng vật).
+    public var a4LeftPx: Double?
+    public var a4RightPx: Double?
+    public var a4DistanceM: Double?
+    public var a4WidthM: Double?
     public var updatedAt: Date?
 
     public init(deviceModel: String, lens: String, frameWidth: Double, frameHeight: Double, manualFPx: Double? = nil,
@@ -93,6 +98,9 @@ extension DeviceCalibration {
         c.roi = roiNew
         c.maxBottomRatio = min(1.0, 0.5 + r * (maxBottomRatio - 0.5))
         c.manualFPx = manualFPx.map { $0 * r }
+        let cx = frameWidth / 2
+        c.a4LeftPx = a4LeftPx.map { min(max(cx + r * ($0 - cx), 0), frameWidth) }
+        c.a4RightPx = a4RightPx.map { min(max(cx + r * ($0 - cx), 0), frameWidth) }
         return c
     }
 }

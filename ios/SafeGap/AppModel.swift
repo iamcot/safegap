@@ -200,19 +200,22 @@ final class AppModel: ObservableObject {
 }
 
 /// Bản nháp khi đang ở màn hiệu chỉnh. Chỉ áp dụng khi bấm Lưu.
+/// Vạch A4 nằm trong bản nháp nên lưu cùng hiệu chỉnh, theo từng ống kính.
 final class CalibrationEditor: ObservableObject {
     @Published var draft: DeviceCalibration
     // Đo tờ A4: 2 vạch dọc (pixel của frame) ở 2 mép tờ giấy dán ngang trên tường.
     @Published var a4On = false
-    @Published var a4Left: Double
-    @Published var a4Right: Double
-    @Published var a4DistanceM = 2.0
-    @Published var a4WidthM = FocalLength.a4LongSideM
+    @Published var a4Left: Double { didSet { draft.a4LeftPx = a4Left } }
+    @Published var a4Right: Double { didSet { draft.a4RightPx = a4Right } }
+    @Published var a4DistanceM: Double { didSet { draft.a4DistanceM = a4DistanceM } }
+    @Published var a4WidthM: Double { didSet { draft.a4WidthM = a4WidthM } }
 
     init(calibration: DeviceCalibration) {
         draft = calibration
-        a4Left = calibration.frameWidth / 2 - 100
-        a4Right = calibration.frameWidth / 2 + 100
+        a4Left = calibration.a4LeftPx ?? calibration.frameWidth / 2 - 100
+        a4Right = calibration.a4RightPx ?? calibration.frameWidth / 2 + 100
+        a4DistanceM = calibration.a4DistanceM ?? 2.0
+        a4WidthM = calibration.a4WidthM ?? FocalLength.a4LongSideM
     }
 
     var a4F: Double? {

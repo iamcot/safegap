@@ -144,7 +144,12 @@ final class ZoomCalibrationTests: XCTestCase {
         let cal = DeviceCalibration(deviceModel: "x", lens: "wide1x", frameWidth: 1920, frameHeight: 1080, manualFPx: 1450,
                                     roi: [Point(0.42, 0.45), Point(0.58, 0.45), Point(0.80, 1.0), Point(0.20, 1.0)],
                                     maxWidthRatio: 0.7, maxBottomRatio: 0.97, hCamM: 1.3)
-        let z = cal.converted(zoomRatio: 2, lens: "wide2x")
+        var cal1 = cal
+        cal1.a4LeftPx = 900
+        cal1.a4RightPx = 1060
+        let z = cal1.converted(zoomRatio: 2, lens: "wide2x")
+        XCTAssertEqual(z.a4LeftPx, 840)
+        XCTAssertEqual(z.a4RightPx, 1160)
         XCTAssertEqual(z.storageKey, "calib.x.wide2x.1920x1080")
         XCTAssertEqual(z.manualFPx, 2900)
         XCTAssertEqual(z.hCamM, 1.3)
