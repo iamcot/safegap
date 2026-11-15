@@ -138,7 +138,7 @@ Code đã có, có unit test (`pytest tests`). Còn lại là chạy trên dữ 
 - [x] `alert.py`: đọc `law_vn.json`, hysteresis, cooldown âm thanh, d_min chỉnh tay.
 - [x] `run_video.py`: xuất video có overlay + CSV log mỗi frame.
 - [x] `eval.py`: báo cáo sai số % theo từng mốc ground truth.
-- [ ] Calibrate f thật bằng ảnh A4, cập nhật `config/default.json`.
+- [~] ~~Calibrate f thật bằng ảnh A4~~: bỏ, hiệu chỉnh trong app iOS theo từng máy (xem Phase 2). Prototype dùng f mặc định / HFOV trên viewer.
 - [ ] Chạy `eval.py` trên clip ground truth, chỉnh `W_real`/ROI nếu cần.
 - [ ] Chạy `run_video.py` trên clip cao tốc, xem overlay.
 
@@ -146,6 +146,7 @@ Code đã có, có unit test (`pytest tests`). Còn lại là chạy trên dữ 
 
 ### Phase 2 – App iPhone MVP
 - [ ] Camera pipeline AVFoundation: khóa lens 1x, độ phân giải, tắt chống rung (hoặc ghi lại chế độ đang dùng), lấy intrinsics.
+- [ ] Hiệu chỉnh theo máy, không cố định trong code: f lấy từ intrinsics của AVFoundation (`cameraIntrinsicMatrix`) theo máy + lens + độ phân giải đang dùng, có màn hiệu chỉnh trong app (ROI theo vị trí gắn máy, kiểm tra/chỉnh f nếu cần). Lưu theo từng máy trên điện thoại, không dùng `config/default.json` chung.
 - [ ] Export YOLO sang CoreML, chạy qua Vision, mục tiêu ≥ 15 fps.
 - [ ] Port `lane`, `distance`, `tracker`, `alert` sang Swift. Viết unit test với cùng input/output như bản Python.
 - [ ] GPS speed (CoreLocation, `kCLLocationAccuracyBestForNavigation`).
