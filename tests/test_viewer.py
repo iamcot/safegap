@@ -99,3 +99,16 @@ def test_incremental_replay_matches_full_replay():
                 inc.update(frames)
         got = inc.update(frames)
         assert [r.row() for r in got] == [r.row() for r in expect]
+
+
+def test_pipeline_ignores_own_hood_box():
+    from proto.lane import Detection
+    from proto.pipeline import Pipeline
+
+    w = 1530 * 1.8 / 40
+    car = Detection(1050 - w / 2, 700, 1050 + w / 2, 760, "car", 0.9)
+    hood = Detection(10, 650, 2090, 1181, "car", 0.8)   # capo xe mình: rộng hết khung, chạm đáy
+    r = Pipeline(CFG, LAW, 2100, 1181).step(0, 0.0, 100, [hood, car])
+    assert r.d == pytest.approx(40, rel=1e-3)
+    r = Pipeline(CFG, LAW, 2100, 1181).step(0, 0.0, 100, [hood])
+    assert r.d is None

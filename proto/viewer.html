@@ -98,6 +98,9 @@
     <label>Gia tốc Kalman (m/s²) <b id="v_accSigma"></b></label><input type="range" id="accSigma" min="0.5" max="10" step="0.5">
     <label>Độ tin cậy tối thiểu <b id="v_minConf"></b></label><input type="range" id="minConf" min="0" max="0.9" step="0.05">
     <div class="hint">Chỉ lọc được trên kết quả YOLO đã có (không thấp hơn ngưỡng lúc chạy YOLO).</div>
+    <label>Bỏ box rộng hơn (× bề ngang khung) <b id="v_maxW"></b></label><input type="range" id="maxW" min="0.3" max="1" step="0.05">
+    <label>Bỏ box có đáy thấp hơn (× chiều cao khung) <b id="v_maxBottom"></b></label><input type="range" id="maxBottom" min="0.5" max="1" step="0.01">
+    <div class="hint">Hai ngưỡng trên để bỏ box của chính xe mình (capo, taplo) mà YOLO nhận nhầm là xe. Box bị bỏ vẽ nét đứt.</div>
   </details>
 
   <h2>Lưu</h2>
@@ -178,11 +181,12 @@ function initParams(cfg) {
   }
   const pairs = [["topY", poly[0][1]], ["topL", poly[0][0]], ["topR", poly[1][0]], ["botL", poly[3][0]], ["botR", poly[2][0]],
     ["red", cfg.alert.red_ratio], ["yellow", cfg.alert.yellow_ratio], ["hold", cfg.alert.hold_s], ["minSpeed", cfg.alert.min_speed_kmh],
-    ["measSigma", cfg.tracker.meas_rel_sigma], ["accSigma", cfg.tracker.accel_sigma], ["minConf", cfg.detection.min_conf]];
+    ["measSigma", cfg.tracker.meas_rel_sigma], ["accSigma", cfg.tracker.accel_sigma], ["minConf", cfg.detection.min_conf],
+    ["maxW", cfg.detection.max_width_ratio ?? 0.7], ["maxBottom", cfg.detection.max_bottom_ratio ?? 0.97]];
   for (const [id, v] of pairs) { $(id).value = v; $(id).dispatchEvent(new Event("input")); }
   $("manualDmin").value = cfg.alert.manual_d_min_m || 0;
 }
-for (const id of ["topY", "topL", "topR", "botL", "botR", "red", "yellow", "hold", "minSpeed", "measSigma", "accSigma", "minConf"]) bindRange(id);
+for (const id of ["topY", "topL", "topR", "botL", "botR", "red", "yellow", "hold", "minSpeed", "measSigma", "accSigma", "minConf", "maxW", "maxBottom"]) bindRange(id);
 bindRange("speed", (x) => x + " km/h");
 bindRange("hfov", (x) => x + "°");
 $("manualDmin").addEventListener("input", paramsChanged);
@@ -213,6 +217,7 @@ function currentCfg() {
   a.min_speed_kmh = +$("minSpeed").value; a.manual_d_min_m = (+$("manualDmin").value) || null;
   cfg.tracker.meas_rel_sigma = +$("measSigma").value; cfg.tracker.accel_sigma = +$("accSigma").value;
   cfg.detection.min_conf = +$("minConf").value;
+  cfg.detection.max_width_ratio = +$("maxW").value; cfg.detection.max_bottom_ratio = +$("maxBottom").value;
   return cfg;
 }
 
@@ -380,15 +385,19 @@ function drawOverlay() {
     ctx.closePath(); ctx.stroke();
   }
   const minConf = +$("minConf").value;
+  const maxW = +$("maxW").value * meta.width, maxY2 = +$("maxBottom").value * meta.height;
   if (fr) {
     const wpx = r >= 0 ? res.w_px[r] : null;
     let egoDrawn = false;
     for (const [x1, y1, x2, y2, cls, conf] of fr) {
       if (conf < minConf) continue;
-      const ego = !egoDrawn && wpx !== null && Math.abs((x2 - x1) - wpx) < 1e-3 && res.d[r] !== null;
-      ctx.strokeStyle = ego ? color : "rgba(220,220,220,.8)";
+      const dropped = x2 - x1 > maxW || y2 > maxY2;
+      const ego = !dropped && !egoDrawn && wpx !== null && Math.abs((x2 - x1) - wpx) < 1e-3 && res.d[r] !== null;
+      ctx.strokeStyle = ego ? color : dropped ? "rgba(220,220,220,.45)" : "rgba(220,220,220,.8)";
       ctx.lineWidth = (ego ? 3 : 1) * dpr;
+      ctx.setLineDash(dropped ? [6 * dpr, 6 * dpr] : []);
       ctx.strokeRect(x1 * s, y1 * s, (x2 - x1) * s, (y2 - y1) * s);
+      ctx.setLineDash([]);
       if (ego) {
         egoDrawn = true;
         const fs = Math.max(14, 20 * dpr);
