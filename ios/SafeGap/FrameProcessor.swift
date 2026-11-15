@@ -20,6 +20,10 @@ struct UserSettings: Codable, Equatable {
     var groundFusion = true
     /// Zoom 2x trên camera chính để đo xa (hiệu chỉnh lưu riêng cho chế độ này).
     var zoom2x = false
+    /// Chạy mát: YOLO 15 fps (giảm tiếp khi nóng) thay vì 30.
+    var coolMode = true
+    /// Ẩn hình camera trên HUD (chỉ số và màu), đỡ tốn GPU vẽ hình.
+    var hidePreview = false
 
     var zoom: Double { zoom2x ? 2 : 1 }
 
@@ -36,6 +40,8 @@ struct UserSettings: Codable, Equatable {
         laneFollow = try c.decodeIfPresent(Bool.self, forKey: .laneFollow) ?? d.laneFollow
         groundFusion = try c.decodeIfPresent(Bool.self, forKey: .groundFusion) ?? d.groundFusion
         zoom2x = try c.decodeIfPresent(Bool.self, forKey: .zoom2x) ?? d.zoom2x
+        coolMode = try c.decodeIfPresent(Bool.self, forKey: .coolMode) ?? d.coolMode
+        hidePreview = try c.decodeIfPresent(Bool.self, forKey: .hidePreview) ?? d.hidePreview
     }
 
     static let key = "settings.v1"
@@ -111,7 +117,7 @@ final class FrameProcessor {
     let logger: CSVLogger
     let sound: AlertSound
     var hfovDeg: Double?
-    let thermalPolicy = ThermalPolicy()
+    static func policy(_ s: UserSettings) -> ThermalPolicy { s.coolMode ? .cool : ThermalPolicy() }
     private var throttle = FrameThrottle()
     private var thermalLevel: ThermalLevel = .nominal
     private var laneTracker = LaneTracker()
@@ -162,7 +168,7 @@ final class FrameProcessor {
         let t = CMSampleBufferGetPresentationTimeStamp(sb).seconds
         let p = currentParams()
         let thermal = currentThermal()
-        let targetFps = thermalPolicy.targetFps(thermal)
+        let targetFps = Self.policy(p.settings).targetFps(thermal)
         // Máy nóng: bỏ bớt frame (YOLO là phần tốn pin / nhiệt nhất). Kalman dùng dt thật nên vẫn đúng.
         guard throttle.shouldProcess(t: t, targetFps: targetFps) else { return }
 

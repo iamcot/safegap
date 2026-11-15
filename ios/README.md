@@ -62,7 +62,9 @@ Mỗi lần mở app ghi một file `logs/safegap_YYYYMMDD_HHmmss.csv` (app Tệ
 
 ## Phase 3 (trong Cài đặt ⚙)
 
-- **Máy nóng**: app theo dõi nhiệt độ máy (`thermalState`), tự giảm 30 → 20 → 12 → 6 fps cho camera và YOLO. HUD báo khi đang giảm.
+- **Chạy mát** (mặc định bật): YOLO 15 fps trên Neural Engine. Máy nóng (`thermalState`) thì tự giảm tiếp 12 → 8 → 5 fps
+  (tắt chạy mát: 30 → 20 → 12 → 6). Có tuỳ chọn ẩn hình camera trên HUD. HUD báo khi đang giảm.
+  Ngoài app: gắn máy ở khe gió điều hoà, tháo ốp, tránh sạc nhanh khi đang chạy.
 - **ROI bám vạch làn** (mặc định bật): tìm vạch kẻ đường hai bên làn mình, ROI uốn theo làn khi vào cua. Vạch xanh trên HUD
   là vạch nhận diện được. Không thấy vạch (đường không kẻ, trời tối) thì dùng hình thang đã hiệu chỉnh.
 - **Kết hợp đo theo mặt đường** (mặc định bật): chân trời tính từ góc nghiêng máy (CoreMotion), đo thêm theo vị trí đáy xe.

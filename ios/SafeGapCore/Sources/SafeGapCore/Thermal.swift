@@ -14,6 +14,9 @@ public struct ThermalPolicy: Equatable, Sendable {
         self.fps = fps
     }
 
+    /// Chế độ chạy mát: 15 fps là đủ cho cảnh báo khoảng cách, giảm tiếp khi nóng.
+    public static let cool = ThermalPolicy(fps: [.nominal: 15, .fair: 12, .serious: 8, .critical: 5])
+
     public func targetFps(_ level: ThermalLevel) -> Double {
         fps[level] ?? 30
     }

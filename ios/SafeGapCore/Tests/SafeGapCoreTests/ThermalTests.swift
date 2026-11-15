@@ -39,5 +39,7 @@ final class ThermalTests: XCTestCase {
     func testPolicy() {
         let p = ThermalPolicy()
         XCTAssertEqual(ThermalLevel.allCases.map(p.targetFps), [30, 20, 12, 6])
+        XCTAssertEqual(ThermalLevel.allCases.map(ThermalPolicy.cool.targetFps), [15, 12, 8, 5])
+        XCTAssertEqual(Double(count(fpsIn: 30, target: 15)), 150, accuracy: 2)
     }
 }

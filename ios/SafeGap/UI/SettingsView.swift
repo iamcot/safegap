@@ -51,6 +51,14 @@ struct SettingsView: View {
                     Text("Mở app Tệp > Trên iPhone > SafeGap > logs. Cột giống CSV của proto/run_video.py nên chạy được proto.eval.")
                 }
                 Section {
+                    Toggle("Chạy mát (15 fps)", isOn: $model.settings.coolMode)
+                    Toggle("Ẩn hình camera trên màn hình chính", isOn: $model.settings.hidePreview)
+                } header: {
+                    Text("Nhiệt độ máy")
+                } footer: {
+                    Text("Chạy mát: YOLO 15 fps thay vì 30, máy nóng thì giảm tiếp. Ẩn hình camera: chỉ hiện box, số và màu, bớt việc cho GPU. Gắn máy ở khe gió điều hoà, tháo ốp, tránh sạc nhanh khi đang chạy.")
+                }
+                Section {
                     Toggle("ROI bám theo vạch làn", isOn: $model.settings.laneFollow)
                 } header: {
                     Text("Chọn xe cùng làn")

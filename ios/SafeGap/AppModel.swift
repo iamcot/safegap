@@ -20,6 +20,7 @@ final class AppModel: ObservableObject {
             settings.save()
             applyLogging()
             if settings.zoom2x != oldValue.zoom2x { applyZoom(from: oldValue.zoom) }
+            if settings.coolMode != oldValue.coolMode { applyThermal() }
             pushParams()
         }
     }
@@ -82,7 +83,7 @@ final class AppModel: ObservableObject {
     private func applyThermal() {
         let level = Self.thermalLevel(ProcessInfo.processInfo.thermalState)
         processor.setThermal(level)
-        camera.setFrameRate(processor.thermalPolicy.targetFps(level))
+        camera.setFrameRate(FrameProcessor.policy(settings).targetFps(level))
     }
 
     /// Giá trị dự phòng nếu file config hỏng; bình thường luôn đọc từ config/*.json trong app.

@@ -11,10 +11,14 @@ struct ContentView: View {
             HStack(spacing: 0) {
                 ZStack {
                     Color.black
-                    CameraPreview(session: model.camera.session)
                     if let editor = model.editor, model.screen == .calibration {
+                        CameraPreview(session: model.camera.session)
                         CalibrationOverlay(editor: editor, snapshot: model.snapshot)
+                    } else if model.settings.hidePreview {
+                        // chạy mát: không vẽ hình camera, chỉ box và ROI
+                        DetectionOverlay(snapshot: model.snapshot, calibration: model.calibration)
                     } else {
+                        CameraPreview(session: model.camera.session)
                         DetectionOverlay(snapshot: model.snapshot, calibration: model.calibration)
                     }
                 }

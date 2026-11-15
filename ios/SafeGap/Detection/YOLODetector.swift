@@ -22,7 +22,7 @@ final class YOLODetector {
             throw DetectorError.modelMissing
         }
         let cfg = MLModelConfiguration()
-        cfg.computeUnits = .all
+        cfg.computeUnits = .cpuAndNeuralEngine  // Neural Engine: ít tốn điện / ít nóng hơn GPU
         let ml = try MLModel(contentsOf: url, configuration: cfg)
         request = VNCoreMLRequest(model: try VNCoreMLModel(for: ml))
         // Model export với imgsz 384x640 (gần 16:9) nên scaleFill gần như không méo ảnh
