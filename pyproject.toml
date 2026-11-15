@@ -1,0 +1,23 @@
+[project]
+name = "safegap"
+version = "0.1.0"
+description = "SafeGap – cảnh báo khoảng cách an toàn trên cao tốc (prototype Python)"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "numpy>=1.26",
+    "opencv-python>=4.9",
+    "ultralytics>=8.3",
+    "streamlit>=1.35",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.uv]
+# proto/ chạy bằng `python -m proto.xxx`, không cần build thành gói
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
