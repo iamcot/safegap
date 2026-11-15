@@ -15,9 +15,9 @@ final class ThermalTests: XCTestCase {
     }
 
     func testThrottledRates() {
-        XCTAssertEqual(Double(count(fpsIn: 30, target: 12)), 120, accuracy: 25)  // khung 30 fps: được 10–15 fps
-        XCTAssertEqual(Double(count(fpsIn: 30, target: 6)), 60, accuracy: 6)
-        XCTAssertLessThan(count(fpsIn: 30, target: 20), 300)
+        XCTAssertEqual(Double(count(fpsIn: 30, target: 20)), 200, accuracy: 2)
+        XCTAssertEqual(Double(count(fpsIn: 30, target: 12)), 120, accuracy: 2)
+        XCTAssertEqual(Double(count(fpsIn: 30, target: 6)), 60, accuracy: 2)
     }
 
     func testJitterDoesNotDropAtFullRate() {

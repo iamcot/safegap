@@ -19,20 +19,26 @@ public struct ThermalPolicy: Equatable, Sendable {
     }
 }
 
-/// Bỏ bớt frame để đạt fps mục tiêu. Dùng thời gian của frame (giây), không dùng đồng hồ máy.
+/// Bỏ bớt frame để đạt fps mục tiêu (bình quân đúng mục tiêu). Dùng thời gian của frame (giây), không dùng đồng hồ máy.
 public struct FrameThrottle: Equatable, Sendable {
-    public private(set) var lastProcessed: Double?
-    /// Cho phép sớm hơn chu kỳ một chút để camera 30 fps vẫn xử lý đủ 30 (thời gian frame có nhiễu).
+    public private(set) var nextDue: Double?
+    /// Cho phép sớm hơn hạn một phần chu kỳ (thời gian frame có nhiễu vài ms).
     public var tolerance: Double
 
     public init(tolerance: Double = 0.25) { self.tolerance = tolerance }
 
     public mutating func shouldProcess(t: Double, targetFps: Double) -> Bool {
         guard targetFps > 0 else { return false }
-        if let last = lastProcessed, t > last, t - last < (1.0 - tolerance) / targetFps {
-            return false
+        let period = 1.0 / targetFps
+        // lần đầu, thời gian tua lại (camera khởi động lại) hoặc tụt lại quá xa: bắt đầu lại từ frame này
+        guard let due = nextDue, t >= due - 2 * period, t < due + period else {
+            nextDue = t + period
+            return true
         }
-        lastProcessed = t
-        return true
+        if t >= due - tolerance * period {
+            nextDue = due + period
+            return true
+        }
+        return false
     }
 }
