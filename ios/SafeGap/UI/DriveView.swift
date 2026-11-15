@@ -1,51 +1,54 @@
-// Màn hình lái khi ẩn camera: vẽ lại con đường theo mét (kiểu bảng đồng hồ xe điện), full màn hình.
+// Màn hình lái khi ẩn camera: vẽ lại con đường theo mét, full màn hình, kiểu màn lái xe điện.
 // Vạch làn và các xe được chiếu ngược từ ảnh xuống mặt đường (X ngang, Z phía trước, mét),
-// rồi vẽ lại bằng một "camera ảo" đặt sau và cao hơn xe mình.
+// rồi vẽ lại bằng một "camera ảo" đặt sau và cao hơn xe mình. Xe là khối 3D bo mềm, tông xám;
+// dải màu từ đầu xe mình tới xe phía trước báo mức an toàn. Sáng/tối theo giao diện máy.
 import SafeGapCore
 import SwiftUI
 
 struct DriveView: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.colorScheme) private var scheme
     @Binding var showSettings: Bool
 
     var body: some View {
         let s = model.snapshot
         let r = s.result
+        let pal = Palette.of(scheme)
         ZStack {
-            RoadCanvas(snapshot: s, calibration: model.calibration, config: model.config)
+            RoadCanvas(snapshot: s, calibration: model.calibration, config: model.config, pal: pal)
                 .ignoresSafeArea()
             AlertGlow(level: r.level).ignoresSafeArea()
             VStack(spacing: 0) {
                 HStack(alignment: .top) {
-                    SpeedBlock(snapshot: s)
+                    SpeedBlock(snapshot: s, pal: pal)
                     Spacer()
-                    controls
+                    controls(pal)
                 }
                 Spacer()
                 HStack(alignment: .bottom) {
-                    statusLine(s)
+                    statusLine(s, pal)
                     Spacer()
-                    DistanceBlock(result: r)
+                    DistanceBlock(result: r, pal: pal)
                 }
             }
             .padding(.horizontal, 22)
             .padding(.vertical, 14)
         }
-        .background(Color.black)
+        .background(pal.bgTop)
         .animation(.easeInOut(duration: 0.25), value: r.level)
     }
 
-    private var controls: some View {
+    private func controls(_ pal: Palette) -> some View {
         HStack(spacing: 10) {
-            GlassButton { model.toggleZoom() } label: {
+            GlassButton(pal: pal) { model.toggleZoom() } label: {
                 Text(model.settings.zoom2x ? "2x" : "1x").font(.system(size: 16, weight: .bold, design: .rounded))
             }
-            GlassButton { model.beginCalibration() } label: { Image(systemName: "scope") }
-            GlassButton { showSettings = true } label: { Image(systemName: "gearshape.fill") }
+            GlassButton(pal: pal) { model.beginCalibration() } label: { Image(systemName: "scope") }
+            GlassButton(pal: pal) { showSettings = true } label: { Image(systemName: "gearshape.fill") }
         }
     }
 
-    private func statusLine(_ s: FrameSnapshot) -> some View {
+    private func statusLine(_ s: FrameSnapshot, _ pal: Palette) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             if let err = s.detectorError {
                 Label(err, systemImage: "exclamationmark.triangle.fill").lineLimit(2)
@@ -57,7 +60,7 @@ struct DriveView: View {
                     .foregroundStyle(.orange)
             }
             if !model.isCalibrated {
-                Label("Chưa hiệu chỉnh máy này: bấm ◎", systemImage: "scope").foregroundStyle(.yellow)
+                Label("Chưa hiệu chỉnh máy này: bấm ◎", systemImage: "scope").foregroundStyle(.orange)
             }
             HStack(spacing: 8) {
                 if model.logURL != nil {
@@ -65,10 +68,44 @@ struct DriveView: View {
                 }
                 Text(String(format: "%.0f fps · YOLO %.0f ms · f %.0f px", s.fps, s.inferMs, s.fPx)).monospacedDigit()
             }
-            .foregroundStyle(.white.opacity(0.45))
+            .foregroundStyle(pal.textDim.opacity(0.8))
         }
         .font(.system(size: 12, weight: .semibold))
-        .foregroundStyle(.white.opacity(0.8))
+        .foregroundStyle(pal.text.opacity(0.8))
+    }
+}
+
+// MARK: - Bảng màu
+
+struct Palette {
+    var bgTop, bgBottom, road, roadEdge, lane, laneFaint: Color
+    var carTop, carRear, carSide, glass, ownTop, ownRear, ownSide, shadow: Color
+    var text, textDim, button: Color
+    var dark: Bool
+
+    static func of(_ s: ColorScheme) -> Palette { s == .dark ? .night : .day }
+
+    static let day = Palette(
+        bgTop: Color(white: 0.80), bgBottom: Color(white: 0.92), road: Color(white: 0.965), roadEdge: Color(white: 0.86),
+        lane: Color(white: 0.62), laneFaint: Color(white: 0.75),
+        carTop: Color(white: 0.97), carRear: Color(white: 0.84), carSide: Color(white: 0.74), glass: Color(white: 0.55),
+        ownTop: Color(white: 0.30), ownRear: Color(white: 0.16), ownSide: Color(white: 0.10), shadow: .black.opacity(0.18),
+        text: Color(white: 0.08), textDim: Color(white: 0.40), button: .white.opacity(0.7), dark: false)
+
+    static let night = Palette(
+        bgTop: Color(red: 0.03, green: 0.035, blue: 0.045), bgBottom: Color(red: 0.07, green: 0.075, blue: 0.09),
+        road: Color(white: 0.13), roadEdge: Color(white: 0.09), lane: Color(white: 0.55), laneFaint: Color(white: 0.30),
+        carTop: Color(white: 0.62), carRear: Color(white: 0.44), carSide: Color(white: 0.32), glass: Color(white: 0.12),
+        ownTop: Color(white: 0.85), ownRear: Color(white: 0.66), ownSide: Color(white: 0.50), shadow: .black.opacity(0.6),
+        text: .white, textDim: Color(white: 0.6), button: .white.opacity(0.12), dark: true)
+
+    /// Màu dải đường đi: xanh dương khi an toàn / chưa có, vàng, đỏ.
+    func path(_ l: Level) -> Color {
+        switch l {
+        case .none, .green: return Color(red: 0.16, green: 0.48, blue: 1.0)
+        case .yellow: return Color(red: 1.0, green: 0.72, blue: 0.0)
+        case .red: return Color(red: 0.95, green: 0.18, blue: 0.16)
+        }
     }
 }
 
@@ -76,30 +113,31 @@ struct DriveView: View {
 
 private struct SpeedBlock: View {
     let snapshot: FrameSnapshot
+    let pal: Palette
 
     var body: some View {
         VStack(alignment: .leading, spacing: -6) {
             Text(snapshot.result.speedKmh.map { String(format: "%.0f", $0) } ?? "--")
-                .font(.system(size: 72, weight: .semibold, design: .rounded))
+                .font(.system(size: 68, weight: .medium, design: .rounded))
                 .monospacedDigit()
                 .contentTransition(.numericText())
             HStack(spacing: 6) {
                 Text("km/h").font(.system(size: 15, weight: .semibold))
                 if snapshot.speedSimulated {
-                    Chip(text: "giả lập")
+                    Chip(text: "giả lập", pal: pal)
                 } else if !snapshot.gpsOK {
-                    Chip(text: "chưa có GPS")
+                    Chip(text: "chưa có GPS", pal: pal)
                 }
             }
-            .foregroundStyle(.white.opacity(0.6))
+            .foregroundStyle(pal.textDim)
         }
-        .foregroundStyle(.white)
-        .shadow(color: .black.opacity(0.6), radius: 8)
+        .foregroundStyle(pal.text)
     }
 }
 
 private struct DistanceBlock: View {
     let result: FrameResult
+    let pal: Palette
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 2) {
@@ -107,34 +145,35 @@ private struct DistanceBlock: View {
                 .font(.system(size: 13, weight: .heavy))
                 .tracking(1.5)
                 .padding(.horizontal, 12).padding(.vertical, 5)
-                .background(result.level.accent.opacity(result.level == .none ? 0.25 : 0.9), in: Capsule())
+                .background(result.level == .none ? pal.textDim.opacity(0.25) : pal.path(result.level), in: Capsule())
                 .foregroundStyle(result.level == .yellow ? .black : .white)
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(result.d.map { String(format: "%.0f", $0) } ?? "--")
-                    .font(.system(size: 64, weight: .semibold, design: .rounded))
+                    .font(.system(size: 60, weight: .medium, design: .rounded))
                     .monospacedDigit()
                     .contentTransition(.numericText())
-                Text("m").font(.system(size: 22, weight: .semibold)).foregroundStyle(.white.opacity(0.6))
+                Text("m").font(.system(size: 22, weight: .semibold)).foregroundStyle(pal.textDim)
             }
             Text("Cần giữ ≥ " + (result.dMin.map { String(format: "%.0f m", $0) } ?? "--"))
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(pal.textDim)
         }
-        .foregroundStyle(.white)
-        .shadow(color: .black.opacity(0.6), radius: 8)
+        .foregroundStyle(pal.text)
     }
 }
 
 private struct Chip: View {
     let text: String
+    let pal: Palette
     var body: some View {
         Text(text).font(.system(size: 11, weight: .bold))
             .padding(.horizontal, 7).padding(.vertical, 2)
-            .background(.white.opacity(0.12), in: Capsule())
+            .background(pal.textDim.opacity(0.18), in: Capsule())
     }
 }
 
 private struct GlassButton<L: View>: View {
+    let pal: Palette
     let action: () -> Void
     @ViewBuilder let label: () -> L
 
@@ -142,12 +181,12 @@ private struct GlassButton<L: View>: View {
         Button(action: action) {
             label()
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(pal.text)
                 .frame(width: 46, height: 40)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(.white.opacity(0.12)))
+                .background(pal.button, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(pal.textDim.opacity(0.2)))
+                .shadow(color: .black.opacity(pal.dark ? 0 : 0.08), radius: 6, y: 2)
         }
-        .environment(\.colorScheme, .dark)
     }
 }
 
@@ -169,17 +208,14 @@ private struct AlertGlow: View {
 }
 
 extension Level {
-    /// Màu nhấn trên nền tối.
-    var accentRGB: (Double, Double, Double) {
+    var accent: Color {
         switch self {
-        case .none: return (0.6, 0.6, 0.6)
-        case .green: return (0.20, 0.85, 0.45)
-        case .yellow: return (1.00, 0.80, 0.15)
-        case .red: return (1.00, 0.22, 0.20)
+        case .none: return Color(white: 0.6)
+        case .green: return Color(red: 0.20, green: 0.85, blue: 0.45)
+        case .yellow: return Color(red: 1.00, green: 0.80, blue: 0.15)
+        case .red: return Color(red: 1.00, green: 0.22, blue: 0.20)
         }
     }
-
-    var accent: Color { Color(red: accentRGB.0, green: accentRGB.1, blue: accentRGB.2) }
 }
 
 // MARK: - Con đường
@@ -191,176 +227,165 @@ private struct RoadCanvas: View {
     let snapshot: FrameSnapshot
     let calibration: DeviceCalibration
     let config: AppConfig
+    let pal: Palette
 
     static let laneWidth = 3.5
-    static let farZ = 70.0
-    static let bg = Color(red: 0.035, green: 0.04, blue: 0.05)
+    static let farZ = 80.0
 
     var body: some View {
         Canvas { ctx, size in
             let cam = ChaseCamera(size: size)
-            drawBackdrop(ctx, size, cam)
+            // nền: một dải chuyển nhẹ từ trên xuống
+            ctx.fill(Path(CGRect(origin: .zero, size: size)),
+                     with: .linearGradient(Gradient(colors: [pal.bgTop, pal.bgBottom]),
+                                           startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
 
             let (left, right) = laneEdges()
             let r = snapshot.result
-            let accent = r.level == .none ? Color(red: 0.45, green: 0.75, blue: 1.0) : r.level.accent
-
-            // mặt làn mình: chỉ một lớp sáng rất nhẹ
-            ctx.fill(cam.path(left + right.reversed(), closed: true),
-                     with: .linearGradient(Gradient(colors: [.white.opacity(0.07), .white.opacity(0.0)]),
-                                           startPoint: CGPoint(x: 0, y: size.height), endPoint: CGPoint(x: 0, y: cam.horizonY)))
-            // vạch làn bên cạnh: nét mảnh mờ
-            for side in [-1.0, 1.0] {
-                let edge = side < 0 ? left : right
-                let outer = edge.map { Ground(x: $0.x + side * Self.laneWidth, z: $0.z) }
-                ctx.stroke(cam.path(outer), with: .color(.white.opacity(0.13)), lineWidth: 1)
+            let cars = vehicles()
+            // mặt đường: làn mình + 2 làn mỗi bên
+            let leftmost = left.map { Ground(x: $0.x - 2 * Self.laneWidth, z: $0.z) }
+            let rightmost = right.map { Ground(x: $0.x + 2 * Self.laneWidth, z: $0.z) }
+            ctx.fill(cam.path(leftmost + rightmost.reversed(), closed: true), with: .color(pal.road))
+            for edge in [leftmost, rightmost] {
+                ctx.stroke(cam.path(edge), with: .color(pal.roadEdge), lineWidth: 2)
             }
-            // vạch ngang mỗi 10 m trong làn mình + số mét
-            for z in stride(from: 10.0, through: 60.0, by: 10.0) {
-                guard let li = left.firstIndex(where: { $0.z >= z }), li < right.count else { continue }
-                var tick = Path()
-                tick.move(to: cam.point(left[li])); tick.addLine(to: cam.point(right[li]))
-                ctx.stroke(tick, with: .color(.white.opacity(0.06)), lineWidth: 1)
-                let fs = CGFloat(max(8, 12 * cam.scale(z) / cam.scale(10)))
-                ctx.draw(Text("\(Int(z))").font(.system(size: fs, weight: .medium, design: .monospaced))
-                            .foregroundColor(.white.opacity(0.28)),
-                         at: cam.point(Ground(x: right[li].x + 0.5, z: z)), anchor: .leading)
+            // vạch làn: làn mình nét liền, vạch giữa các làn bên nét đứt
+            let leftNext = left.map { Ground(x: $0.x - Self.laneWidth, z: $0.z) }
+            let rightNext = right.map { Ground(x: $0.x + Self.laneWidth, z: $0.z) }
+            for edge in [leftNext, rightNext] {
+                ctx.stroke(cam.path(edge), with: .color(pal.laneFaint), style: StrokeStyle(lineWidth: 1.5, dash: [14, 16]))
             }
-            // thảm khoảng cách an toàn: từ đầu xe mình tới d_min, sáng dần về cuối, vạch cuối phát sáng
-            if let dMin = r.dMin, dMin > 0 {
-                let zEnd = min(dMin, Self.farZ)
-                let l = left.filter { $0.z >= 0 && $0.z <= zEnd }, rr = right.filter { $0.z >= 0 && $0.z <= zEnd }
-                if l.count > 1, rr.count > 1 {
-                    ctx.fill(cam.path(l + rr.reversed(), closed: true),
-                             with: .linearGradient(Gradient(colors: [accent.opacity(0.0), accent.opacity(0.28)]),
-                                                   startPoint: cam.point(Ground(x: 0, z: 0)),
-                                                   endPoint: cam.point(Ground(x: 0, z: zEnd))))
-                    var end = Path()
-                    end.move(to: cam.point(l.last!)); end.addLine(to: cam.point(rr.last!))
-                    var g = ctx
-                    g.addFilter(.shadow(color: accent, radius: 6))
-                    g.stroke(end, with: .color(accent), style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                }
-            }
-            // vạch làn mình: nét liền mảnh phát sáng; vạch tự dựng (không thấy) thì mờ
             let detected = (snapshot.laneLeft != nil, snapshot.laneRight != nil)
             for (edge, real) in [(left, detected.0), (right, detected.1)] {
-                var g = ctx
-                if real { g.addFilter(.shadow(color: .white.opacity(0.8), radius: 5)) }
-                g.stroke(cam.path(edge), with: .color(.white.opacity(real ? 0.9 : 0.25)),
-                         style: StrokeStyle(lineWidth: real ? 2 : 1.2, lineCap: .round))
+                ctx.stroke(cam.path(edge), with: .color(real ? pal.lane : pal.laneFaint),
+                           style: StrokeStyle(lineWidth: real ? 2.5 : 1.5, lineCap: .round))
             }
-            // đường tan dần vào bóng tối ở xa
-            let fadeEnd = cam.horizonY + size.height * 0.14
-            ctx.fill(Path(CGRect(x: 0, y: cam.horizonY - 2, width: size.width, height: fadeEnd - cam.horizonY + 2)),
-                     with: .linearGradient(Gradient(colors: [Self.bg, Self.bg.opacity(0)]),
-                                           startPoint: CGPoint(x: 0, y: cam.horizonY), endPoint: CGPoint(x: 0, y: fadeEnd)))
 
-            // xe: xa vẽ trước
-            for v in vehicles().sorted(by: { $0.pos.z > $1.pos.z }) {
+            // dải đường đi giữa làn: từ đầu xe mình tới xe phía trước (không có xe thì dài bằng d_min, mờ dần)
+            let target = cars.first { $0.isTarget }
+            let pathEnd = target.map { $0.pos.z - 0.6 } ?? min(r.dMin ?? 25, Self.farZ)
+            if pathEnd > 1 {
+                let color = pal.path(r.level)
+                let half = 0.75
+                var lp: [Ground] = [], rp: [Ground] = []
+                for i in 0...24 {
+                    let z = 0.8 + (pathEnd - 0.8) * Double(i) / 24
+                    let c = (interp(left, z) + interp(right, z)) / 2
+                    lp.append(Ground(x: c - half, z: z))
+                    rp.append(Ground(x: c + half, z: z))
+                }
+                let band = cam.path(lp + rp.reversed(), closed: true)
+                var g = ctx
+                g.addFilter(.shadow(color: color.opacity(0.5), radius: 8))
+                g.fill(band, with: .linearGradient(
+                    Gradient(colors: [color.opacity(0.95), color.opacity(target == nil ? 0.0 : 0.85)]),
+                    startPoint: cam.point(Ground(x: 0, z: 0.8)), endPoint: cam.point(Ground(x: 0, z: pathEnd))))
+                // vạch d_min ngang làn khi có xe phía trước
+                if target != nil, let dMin = r.dMin, dMin < Self.farZ {
+                    var m = Path()
+                    m.move(to: cam.point(Ground(x: interp(left, dMin), z: dMin)))
+                    m.addLine(to: cam.point(Ground(x: interp(right, dMin), z: dMin)))
+                    ctx.stroke(m, with: .color(color.opacity(0.7)), style: StrokeStyle(lineWidth: 2, lineCap: .round, dash: [6, 5]))
+                }
+            }
+
+            // đường tan dần ở xa (vẽ trước xe để xe không bị mờ)
+            let fadeEnd = cam.horizonY + size.height * 0.13
+            ctx.fill(Path(CGRect(x: 0, y: 0, width: size.width, height: fadeEnd)),
+                     with: .linearGradient(Gradient(stops: [.init(color: pal.bgTop, location: 0),
+                                                             .init(color: pal.bgTop, location: cam.horizonY / fadeEnd),
+                                                             .init(color: pal.bgTop.opacity(0), location: 1)]),
+                                           startPoint: .zero, endPoint: CGPoint(x: 0, y: fadeEnd)))
+
+            // xe: xa vẽ trước, xe mình cuối cùng
+            for v in cars.sorted(by: { $0.pos.z > $1.pos.z }) {
                 drawCar(ctx, cam, v)
             }
-            // xe mình
-            drawCar(ctx, cam, Car(pos: Ground(x: 0, z: -1.5), widthM: 1.8, heightM: 1.45, kind: .own))
+            drawCar(ctx, cam, Car(pos: Ground(x: 0, z: -2.0), widthM: 1.85, heightM: 1.45, lengthM: 4.6, kind: .own))
+
         }
     }
 
-    // MARK: dựng hình
+    // MARK: xe 3D
 
-    private func drawBackdrop(_ ctx: GraphicsContext, _ size: CGSize, _ cam: ChaseCamera) {
-        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Self.bg))
-        // quầng sáng rất nhẹ quanh điểm tụ
-        ctx.fill(Path(CGRect(origin: .zero, size: size)),
-                 with: .radialGradient(Gradient(colors: [Color(red: 0.3, green: 0.4, blue: 0.55).opacity(0.12), .clear]),
-                                       center: CGPoint(x: size.width / 2, y: cam.horizonY), startRadius: 0, endRadius: size.width * 0.45))
-    }
-
-    /// Xe vẽ nét (line art) nhìn từ sau, hơi từ trên xuống: viền thân, kính sau, dải đèn hậu, cản.
-    /// Toạ độ (u, v) tính theo bề rộng xe: u ngang (-0.5…0.5), v cao từ mặt đường lên.
+    /// Khối xe bo mềm: thân dưới + cabin thu nhỏ, nhìn từ sau và trên. Mặt bên chỉ vẽ phía camera thấy.
     private func drawCar(_ ctx: GraphicsContext, _ cam: ChaseCamera, _ car: Car) {
-        let base = cam.point(car.pos)
-        let w = CGFloat(car.widthM * cam.scale(car.pos.z))
-        guard w > 3 else { return }
-        func pt(_ u: CGFloat, _ v: CGFloat) -> CGPoint { CGPoint(x: base.x + u * w, y: base.y - v * w) }
-        func shape(_ uv: [(CGFloat, CGFloat)], r: CGFloat, closed: Bool = true) -> Path {
-            let pts = uv.map { pt($0.0, $0.1) }
-            var p = Path()
-            guard pts.count > 1 else { return p }
-            if !closed {
-                p.move(to: pts[0])
-                for i in 1..<pts.count - 1 { p.addArc(tangent1End: pts[i], tangent2End: pts[i + 1], radius: r * w) }
-                p.addLine(to: pts[pts.count - 1])
-                return p
+        let W = car.widthM, L = car.lengthM, H = car.heightM
+        let x0 = car.pos.x, z0 = car.pos.z
+        guard cam.scale(z0) * W > 3 else { return }
+        let own = car.isOwn
+        let top = own ? pal.ownTop : pal.carTop
+        let rear = own ? pal.ownRear : pal.carRear
+        let side = own ? pal.ownSide : pal.carSide
+        let tall = H > 2
+
+        func p(_ x: Double, _ y: Double, _ z: Double) -> CGPoint { cam.point3(x0 + x, y, z0 + z) }
+        func quad(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint, _ d: CGPoint, r: CGFloat = 0) -> Path {
+            var path = Path()
+            let pts = [a, b, c, d]
+            guard r > 0 else { path.addLines(pts); path.closeSubpath(); return path }
+            path.move(to: CGPoint(x: (d.x + a.x) / 2, y: (d.y + a.y) / 2))
+            for i in 0..<4 { path.addArc(tangent1End: pts[i], tangent2End: pts[(i + 1) % 4], radius: r) }
+            path.closeSubpath()
+            return path
+        }
+        let k = CGFloat(cam.scale(z0))
+        let rad = max(1, k * 0.18)
+        let hw = W / 2
+
+        // bóng
+        var sh = ctx
+        sh.addFilter(.blur(radius: max(1, k * 0.25)))
+        sh.fill(quad(p(-hw - 0.15, 0, -0.2), p(hw + 0.15, 0, -0.2), p(hw + 0.15, 0, L), p(-hw - 0.15, 0, L), r: rad),
+                with: .color(pal.shadow))
+
+        // thân dưới (cao hb), cabin (hb → H) thu vào hai bên và trước/sau. Xe tải/buýt: một khối thùng.
+        let hb = tall ? H : H * 0.55
+        let sx = x0 > 0 ? -1.0 : 1.0   // mặt bên nhìn thấy: xe bên phải thấy hông trái
+        let showSide = abs(x0) > 0.4
+        if showSide {
+            ctx.fill(quad(p(sx * hw, 0.15, 0), p(sx * hw, 0.15, L), p(sx * hw, hb, L), p(sx * hw, hb, 0), r: rad * 0.6),
+                     with: .color(side))
+        }
+        ctx.fill(quad(p(-hw, hb, 0), p(hw, hb, 0), p(hw, hb, L), p(-hw, hb, L), r: rad), with: .color(top))
+        if !tall {
+            let cw = hw - 0.17 * W
+            let cz0 = 1.0, cz1 = L - 1.45
+            if showSide {
+                ctx.fill(quad(p(sx * (hw - 0.06), hb, cz0 - 0.35), p(sx * (hw - 0.06), hb, cz1 + 0.5),
+                              p(sx * cw, H, cz1), p(sx * cw, H, cz0 + 0.3)),
+                         with: .color(pal.glass.opacity(0.85)))
             }
-            let n = pts.count
-            p.move(to: CGPoint(x: (pts[n - 1].x + pts[0].x) / 2, y: (pts[n - 1].y + pts[0].y) / 2))
-            for i in 0..<n { p.addArc(tangent1End: pts[i], tangent2End: pts[(i + 1) % n], radius: r * w) }
-            p.closeSubpath()
-            return p
+            ctx.fill(quad(p(-hw + 0.06, hb, cz0 - 0.35), p(hw - 0.06, hb, cz0 - 0.35), p(cw, H, cz0 + 0.3), p(-cw, H, cz0 + 0.3),
+                          r: rad * 0.7),
+                     with: .color(pal.glass))  // kính sau
+            ctx.fill(quad(p(-cw, H, cz0 + 0.3), p(cw, H, cz0 + 0.3), p(cw, H, cz1), p(-cw, H, cz1), r: rad * 0.8),
+                     with: .color(top))  // nóc
         }
-
-        let line: Color, glow: Color?, fillTop: Double
-        var isTarget = false
-        switch car.kind {
-        case .own: line = .white.opacity(0.75); glow = .white.opacity(0.3); fillTop = 0.10
-        case .target(let level):
-            isTarget = true
-            line = level == .none ? Color(red: 0.45, green: 0.75, blue: 1.0) : level.accent
-            glow = line; fillTop = 0.22
-        case .other: line = .white.opacity(0.45); glow = nil; fillTop = 0.05
+        // bánh sau: chỉ lộ phần dưới cản
+        for s in [-1.0, 1.0] {
+            let cx = s * (hw - 0.2)
+            ctx.fill(quad(p(cx - 0.13, 0, 0.1), p(cx + 0.13, 0, 0.1), p(cx + 0.13, 0.3, 0.1), p(cx - 0.13, 0.3, 0.1), r: rad * 0.3),
+                     with: .color(Color(white: 0.1)))
         }
-        let lw = max(0.8, min(2.2, w * 0.012))
-        let tall = car.heightM > 2
-        let topV: CGFloat = tall ? CGFloat(car.heightM / car.widthM) : 0.80
-
-        // bóng mềm dưới xe
-        var shadow = ctx
-        shadow.addFilter(.blur(radius: w * 0.06))
-        shadow.fill(Path(ellipseIn: CGRect(x: base.x - w * 0.6, y: base.y - w * 0.06, width: w * 1.2, height: w * 0.13)),
-                    with: .color(isTarget ? line.opacity(0.35) : .black.opacity(0.6)))
-
-        let outline: Path
-        var details: [(Path, Double)] = []   // (nét, độ sáng)
-        if tall {
-            outline = shape([(-0.5, 0.06), (-0.5, topV), (-0.46, topV + 0.12), (0.46, topV + 0.12), (0.5, topV), (0.5, 0.06)], r: 0.04)
-            var roof = Path(); roof.move(to: pt(-0.5, topV)); roof.addLine(to: pt(0.5, topV))
-            var seam = Path(); seam.move(to: pt(0, topV - 0.08)); seam.addLine(to: pt(0, 0.24))
-            var bumper = Path(); bumper.move(to: pt(-0.46, 0.2)); bumper.addLine(to: pt(0.46, 0.2))
-            details = [(roof, 0.7), (seam, 0.35), (bumper, 0.5)]
-        } else {
-            outline = shape([(-0.47, 0.05), (-0.5, 0.30), (-0.45, 0.50), (-0.31, topV), (0.31, topV), (0.45, 0.50), (0.5, 0.30), (0.47, 0.05)],
-                            r: 0.09)
-            let window = shape([(-0.38, 0.52), (-0.28, 0.73), (0.28, 0.73), (0.38, 0.52)], r: 0.05)
-            var bumper = Path(); bumper.move(to: pt(-0.42, 0.19)); bumper.addLine(to: pt(0.42, 0.19))
-            var trunk = Path(); trunk.move(to: pt(-0.45, 0.50)); trunk.addLine(to: pt(0.45, 0.50))
-            details = [(window, 0.8), (bumper, 0.4), (trunk, 0.3)]
+        // mặt sau
+        ctx.fill(quad(p(-hw, 0.18, 0), p(hw, 0.18, 0), p(hw, hb, 0), p(-hw, hb, 0), r: rad * 0.8),
+                 with: .linearGradient(Gradient(colors: [rear, side]), startPoint: p(0, hb, 0), endPoint: p(0, 0.18, 0)))
+        // đèn hậu
+        let ly = tall ? 0.6 : hb * 0.78
+        for s in [-1.0, 1.0] {
+            var l = Path()
+            l.move(to: p(s * (hw - 0.08), ly, 0))
+            l.addLine(to: p(s * (hw - (tall ? 0.35 : 0.5)), ly, 0))
+            ctx.stroke(l, with: .color(Color(red: 0.9, green: 0.15, blue: 0.15).opacity(own ? 0.9 : 0.75)),
+                       style: StrokeStyle(lineWidth: max(1, k * 0.12), lineCap: .round))
         }
-        // thân: che đường phía sau, phủ nhẹ từ trên xuống rồi viền
-        ctx.fill(outline, with: .color(Self.bg))
-        ctx.fill(outline, with: .linearGradient(Gradient(colors: [line.opacity(fillTop), line.opacity(0.0)]),
-                                                startPoint: pt(0, topV), endPoint: pt(0, 0)))
-        var g = ctx
-        if let glow { g.addFilter(.shadow(color: glow, radius: isTarget ? 8 : 4)) }
-        g.stroke(outline, with: .color(line), style: StrokeStyle(lineWidth: lw * (isTarget ? 1.4 : 1), lineJoin: .round))
-        for (p, a) in details {
-            ctx.stroke(p, with: .color(line.opacity(a)), style: StrokeStyle(lineWidth: lw * 0.8, lineCap: .round))
-        }
-        // dải đèn hậu: nét đỏ sáng
-        var lights = ctx
-        lights.addFilter(.shadow(color: .red, radius: max(2, w * 0.04)))
-        let ly: CGFloat = tall ? 0.28 : 0.40
-        let lightSpans: [(CGFloat, CGFloat)] = tall ? [(-0.46, -0.34), (0.34, 0.46)] : [(-0.44, 0.44)]
-        for (u0, u1) in lightSpans {
-            var p = Path(); p.move(to: pt(u0, ly)); p.addLine(to: pt(u1, ly))
-            lights.stroke(p, with: .color(Color(red: 1, green: 0.25, blue: 0.25).opacity(car.kind.isOther ? 0.6 : 0.95)),
-                          style: StrokeStyle(lineWidth: lw * 1.6, lineCap: .round))
-        }
-
-        if isTarget, let d = snapshot.result.d {
+        if car.isTarget, let d = snapshot.result.d {
             let label = Text(String(format: "%.0f m", d)).font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundColor(.white)
-            let top = pt(0, topV + (tall ? 0.12 : 0))
-            ctx.draw(label, at: CGPoint(x: top.x, y: top.y - 8), anchor: .bottom)
+                .foregroundColor(pal.text)
+            let t = p(0, H, 0)
+            ctx.draw(label, at: CGPoint(x: t.x, y: t.y - 6), anchor: .bottom)
         }
     }
 
@@ -377,12 +402,12 @@ private struct RoadCanvas: View {
         return Ground(x: (xPx - snapshot.frameWidth / 2) * z / f, z: z)
     }
 
-    /// Hai mép làn mình theo mét, từ z = 0 tới farZ. Thiếu vạch thì dựng thẳng / song song vạch còn lại.
+    /// Hai mép làn mình theo mét. Thiếu vạch thì dựng thẳng / song song vạch còn lại.
     private func laneEdges() -> ([Ground], [Ground]) {
-        let zs = stride(from: -12.0, through: Self.farZ, by: 2.5).map { $0 }  // từ dưới gầm xe mình để mặt đường chạm đáy màn hình
+        // từ dưới gầm xe mình (mặt đường chạm đáy màn hình) tới thật xa (đường tan vào chân trời, không bị cụt)
+        let zs = Array(stride(from: -14.0, through: Self.farZ, by: 2.5)) + Array(stride(from: Self.farZ + 20, through: 300, by: 20))
         func sample(_ c: LaneCurve?) -> [Ground]? {
             guard let c else { return nil }
-            // lấy điểm ảnh trong vùng tin được (dưới chân trời, tới đáy ảnh) rồi nội suy theo z
             var pts: [Ground] = []
             for i in 0...30 {
                 let yn = 0.5 + 0.5 * Double(i) / 30
@@ -408,18 +433,13 @@ private struct RoadCanvas: View {
         return (l!, r!)
     }
 
+    /// x tại z trên đường gấp khúc (sắp theo z); ngoài khoảng thì kéo thẳng theo hai điểm đầu/cuối.
     private func interp(_ pts: [Ground], _ z: Double) -> Double {
-        if z <= pts[0].z {
-            // ngoài tầm ảnh phía gần: kéo thẳng theo hướng hai điểm gần nhất
-            let a = pts[0], b = pts[min(1, pts.count - 1)]
-            return b.z == a.z ? a.x : a.x + (z - a.z) * (b.x - a.x) / (b.z - a.z)
-        }
-        for i in 1..<pts.count where pts[i].z >= z {
-            let a = pts[i - 1], b = pts[i]
-            return b.z == a.z ? a.x : a.x + (z - a.z) * (b.x - a.x) / (b.z - a.z)
-        }
-        let a = pts[max(0, pts.count - 2)], b = pts[pts.count - 1]
-        return b.z == a.z ? b.x : b.x + (z - b.z) * (b.x - a.x) / (b.z - a.z)
+        guard pts.count > 1 else { return pts.first?.x ?? 0 }
+        func lerp(_ a: Ground, _ b: Ground) -> Double { b.z == a.z ? a.x : a.x + (z - a.z) * (b.x - a.x) / (b.z - a.z) }
+        if z <= pts[0].z { return lerp(pts[0], pts[1]) }
+        for i in 1..<pts.count where pts[i].z >= z { return lerp(pts[i - 1], pts[i]) }
+        return lerp(pts[pts.count - 2], pts[pts.count - 1])
     }
 
     private func vehicles() -> [Car] {
@@ -432,42 +452,46 @@ private struct RoadCanvas: View {
             let z = isEgo ? (s.result.d ?? s.fPx * wReal / d.width) : s.fPx * wReal / d.width
             guard z < Self.farZ + 20 else { continue }
             let x = ((d.x1 + d.x2) / 2 - s.frameWidth / 2) * z / s.fPx
-            let height = d.cls == "car" ? 1.5 : 2.8
-            out.append(Car(pos: Ground(x: x, z: z), widthM: wReal, heightM: height,
-                           kind: isEgo ? .target(s.result.level) : .other))
+            let isCar = d.cls == "car"
+            out.append(Car(pos: Ground(x: x, z: z), widthM: wReal, heightM: isCar ? 1.45 : 3.0, lengthM: isCar ? 4.5 : 9.0,
+                           kind: isEgo ? .target : .other))
         }
         return out
     }
 }
 
 private struct Car {
-    enum Kind {
-        case own, target(Level), other
-        var isOther: Bool { if case .other = self { return true } else { return false } }
-    }
+    enum Kind { case own, target, other }
     var pos: Ground
     var widthM: Double
     var heightM: Double
+    var lengthM: Double
     var kind: Kind
+
+    var isTarget: Bool { kind == .target }
+    var isOwn: Bool { kind == .own }
 }
 
-/// Camera ảo: cao 3.2 m, lùi sau camera thật 7 m, nhìn thẳng ra trước. Chiều sâu được nén lại
-/// (depth < 1) để xe ở 20–60 m không bị dồn sát chân trời; số mét hiển thị vẫn là số thật.
+/// Camera ảo: cao 5.5 m, lùi sau camera thật 10 m, nhìn ra trước. Chiều sâu được nén lại (depth < 1)
+/// để xe ở 20–60 m không bị dồn sát chân trời; số mét hiển thị vẫn là số thật.
 private struct ChaseCamera {
     let size: CGSize
-    let height = 3.2
-    let back = 7.0
-    let depth = 0.45
+    let height = 5.5
+    let back = 10.0
+    let depth = 0.5
 
-    var horizonY: CGFloat { size.height * 0.30 }
-    var focal: Double { Double(size.height) * 1.05 }
+    var horizonY: CGFloat { size.height * 0.14 }
+    var focal: Double { Double(size.height) * 1.1 }
 
     func scale(_ z: Double) -> Double { focal / max(z * depth + back, 0.5) }
 
-    func point(_ g: Ground) -> CGPoint {
-        let k = scale(g.z)
-        return CGPoint(x: size.width / 2 + CGFloat(g.x * k), y: horizonY + CGFloat(height * k))
+    /// Điểm 3D: x ngang, y cao so với mặt đường, z phía trước (mét).
+    func point3(_ x: Double, _ y: Double, _ z: Double) -> CGPoint {
+        let k = scale(z)
+        return CGPoint(x: size.width / 2 + CGFloat(x * k), y: horizonY + CGFloat((height - y) * k))
     }
+
+    func point(_ g: Ground) -> CGPoint { point3(g.x, 0, g.z) }
 
     func path(_ pts: [Ground], closed: Bool = false) -> Path {
         var p = Path()

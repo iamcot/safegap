@@ -64,8 +64,8 @@ Mỗi lần mở app ghi một file `logs/safegap_YYYYMMDD_HHmmss.csv` (app Tệ
 
 - **Chạy mát** (mặc định bật): YOLO 15 fps trên Neural Engine. Máy nóng (`thermalState`) thì tự giảm tiếp 12 → 8 → 5 fps
   (tắt chạy mát: 30 → 20 → 12 → 6). HUD báo khi đang giảm.
-- **Ẩn hình camera** (mặc định bật): full màn hình là con đường vẽ lại theo mét: vạch làn và các xe chiếu từ ảnh xuống mặt
-  đường (cần f, chiều cao camera và chân trời), xe phía trước tô màu cảnh báo, thảm màu trên đường dài đúng khoảng cách
+- **Ẩn hình camera** (mặc định bật): full màn hình là con đường vẽ lại theo mét (sáng/tối theo giao diện máy): vạch làn và các xe (khối 3D) chiếu từ ảnh xuống mặt
+  đường (cần f, chiều cao camera và chân trời), dải xanh từ đầu xe mình tới xe phía trước (vàng/đỏ khi gần), vạch đứt là khoảng cách
   tối thiểu. Viền màn hình sáng vàng/đỏ khi cần chú ý. Tắt đi thì về giao diện cũ (camera + bảng HUD).
   Ngoài app: gắn máy ở khe gió điều hoà, tháo ốp, tránh sạc nhanh khi đang chạy.
 - **ROI bám vạch làn** (mặc định bật): tìm vạch kẻ đường hai bên làn mình, ROI uốn theo làn khi vào cua. Vạch xanh trên HUD
