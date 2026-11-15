@@ -105,6 +105,27 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         hfovDeg = Double(device.activeFormat.videoFieldOfView)
     }
 
+    /// Đổi fps của camera (giảm khi máy nóng). Kẹp trong khoảng định dạng hỗ trợ, tối đa 30.
+    func setFrameRate(_ fps: Double) {
+        sessionQueue.async {
+            guard let input = self.session.inputs.first as? AVCaptureDeviceInput else { return }
+            let device = input.device
+            let ranges = device.activeFormat.videoSupportedFrameRateRanges
+            let lo = ranges.map(\.minFrameRate).min() ?? 1
+            let hi = min(ranges.map(\.maxFrameRate).max() ?? 30, 30)
+            let f = min(max(fps, lo), hi)
+            let d = CMTime(value: 1000, timescale: CMTimeScale((f * 1000).rounded()))
+            do {
+                try device.lockForConfiguration()
+                device.activeVideoMinFrameDuration = d
+                device.activeVideoMaxFrameDuration = d
+                device.unlockForConfiguration()
+            } catch {
+                // không đổi được fps camera thì FrameProcessor vẫn bỏ bớt frame
+            }
+        }
+    }
+
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         onFrame?(sampleBuffer)
     }

@@ -17,6 +17,12 @@ struct SettingsView: View {
                         Stepper("d_min: \(Int(d)) m", value: Binding(
                             get: { d }, set: { model.settings.manualDMinM = $0 }), in: 20...200, step: 5)
                     }
+                    Stepper("Cảnh báo từ \(Int(model.settings.minSpeedKmh ?? model.config.alert.minSpeedKmh)) km/h",
+                            value: Binding(get: { model.settings.minSpeedKmh ?? model.config.alert.minSpeedKmh },
+                                           set: { model.settings.minSpeedKmh = $0 == model.config.alert.minSpeedKmh ? nil : $0 }),
+                            in: 0...80, step: 5)
+                    Text("Dưới tốc độ này coi là kẹt xe, không cảnh báo. Mặc định \(Int(model.config.alert.minSpeedKmh)) km/h; hạ xuống để thử trong phố.")
+                        .font(.caption).foregroundStyle(.secondary)
                     Text("Bảng luật: " + model.law.table.map { "≤\(Int($0.maxKmh)) km/h → \(Int($0.dMinM)) m" }.joined(separator: ", "))
                         .font(.caption).foregroundStyle(.secondary)
                     if let src = model.law.source { Text(src).font(.caption2).foregroundStyle(.secondary) }

@@ -5,7 +5,7 @@ import Foundation
 public enum FrameLog {
     public static let header = [
         "frame", "t", "speed_kmh", "cls", "w_px", "d_raw", "d", "d_min", "level", "sound", "track_id",
-        "time", "f_px", "f_source", "n_dets", "infer_ms", "speed_acc_kmh",
+        "time", "f_px", "f_source", "n_dets", "infer_ms", "speed_acc_kmh", "thermal",
     ].joined(separator: ",")
 
     public struct Extra: Sendable {
@@ -15,10 +15,13 @@ public enum FrameLog {
         public var nDets: Int
         public var inferMs: Double
         public var speedAccuracyKmh: Double?
+        public var thermal: ThermalLevel
 
-        public init(time: String, fPx: Double, fSource: FocalSource, nDets: Int, inferMs: Double, speedAccuracyKmh: Double?) {
+        public init(time: String, fPx: Double, fSource: FocalSource, nDets: Int, inferMs: Double, speedAccuracyKmh: Double?,
+                    thermal: ThermalLevel = .nominal) {
             self.time = time; self.fPx = fPx; self.fSource = fSource
             self.nDets = nDets; self.inferMs = inferMs; self.speedAccuracyKmh = speedAccuracyKmh
+            self.thermal = thermal
         }
     }
 
@@ -26,7 +29,7 @@ public enum FrameLog {
         [
             String(r.frame), num(r.t, 4), opt(r.speedKmh, 2), r.cls ?? "", opt(r.wPx, 2), opt(r.dRaw, 3), opt(r.d, 3),
             opt(r.dMin, 1), r.level.rawValue, r.sound ? "True" : "False", r.trackId.map(String.init) ?? "",
-            e.time, num(e.fPx, 2), e.fSource.rawValue, String(e.nDets), num(e.inferMs, 1), opt(e.speedAccuracyKmh, 2),
+            e.time, num(e.fPx, 2), e.fSource.rawValue, String(e.nDets), num(e.inferMs, 1), opt(e.speedAccuracyKmh, 2), e.thermal.rawValue,
         ].joined(separator: ",")
     }
 

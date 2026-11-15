@@ -12,6 +12,8 @@ struct UserSettings: Codable, Equatable {
     var manualDMinM: Double?
     /// Chỉ để thử khi đứng yên. nil = dùng GPS.
     var simulatedSpeedKmh: Double?
+    /// Ngưỡng tốc độ bắt đầu cảnh báo. nil = theo config (40 km/h). Hạ xuống để thử trong phố.
+    var minSpeedKmh: Double?
 
     static let key = "settings.v1"
 
@@ -44,6 +46,8 @@ struct FrameSnapshot {
     var speedSimulated = false
     var gpsOK = false
     var detectorError: String?
+    var thermal: ThermalLevel = .nominal
+    var targetFps: Double = 30
 }
 
 final class FrameProcessor {
@@ -76,6 +80,22 @@ final class FrameProcessor {
     let logger: CSVLogger
     let sound: AlertSound
     var hfovDeg: Double?
+    let thermalPolicy = ThermalPolicy()
+    private var throttle = FrameThrottle()
+    private var thermalLevel: ThermalLevel = .nominal
+
+    /// Gọi từ main khi iOS báo đổi mức nhiệt.
+    func setThermal(_ level: ThermalLevel) {
+        lock.lock()
+        thermalLevel = level
+        lock.unlock()
+    }
+
+    private func currentThermal() -> ThermalLevel {
+        lock.lock()
+        defer { lock.unlock() }
+        return thermalLevel
+    }
     /// Gọi trên hàng đợi camera; bên nhận tự chuyển về main.
     var onSnapshot: ((FrameSnapshot) -> Void)?
 
@@ -108,6 +128,10 @@ final class FrameProcessor {
         let w = Double(CVPixelBufferGetWidth(pb)), h = Double(CVPixelBufferGetHeight(pb))
         let t = CMSampleBufferGetPresentationTimeStamp(sb).seconds
         let p = currentParams()
+        let thermal = currentThermal()
+        let targetFps = thermalPolicy.targetFps(thermal)
+        // Máy nóng: bỏ bớt frame (YOLO là phần tốn pin / nhiệt nhất). Kalman dùng dt thật nên vẫn đúng.
+        guard throttle.shouldProcess(t: t, targetFps: targetFps) else { return }
 
         let fx = CameraController.intrinsicsFx(sb)
         let hfovF = hfovDeg.flatMap { FocalLength.fromHFOV(imageWidthPx: w, hfovDeg: $0) }
@@ -116,6 +140,7 @@ final class FrameProcessor {
         if pipeline == nil || pipelineVersion != p.version || pipelineW != w || pipelineH != h {
             var cfg = p.calibration.apply(to: p.config, fPx: f, frameWidth: w)
             cfg.alert.manualDMinM = p.settings.manualDMinM
+            if let m = p.settings.minSpeedKmh { cfg.alert.minSpeedKmh = m }
             pipeline = Pipeline(config: cfg, law: p.law, frameWidth: w, frameHeight: h)
             pipelineVersion = p.version
             pipelineW = w
@@ -149,7 +174,8 @@ final class FrameProcessor {
         if r.sound && p.settings.soundOn { sound.play() }
         if p.settings.logOn {
             let extra = FrameLog.Extra(time: isoFormatter.string(from: Date()), fPx: f, fSource: source, nDets: dets.count,
-                                       inferMs: (t1 - t0) * 1000, speedAccuracyKmh: gps?.accuracyKmh)
+                                       inferMs: (t1 - t0) * 1000, speedAccuracyKmh: gps?.accuracyKmh,
+                                       thermal: thermal)
             logger.append(FrameLog.row(r, extra))
         }
 
@@ -168,6 +194,8 @@ final class FrameProcessor {
         s.speedSimulated = p.settings.simulatedSpeedKmh != nil
         s.gpsOK = gps != nil
         s.detectorError = detectorError
+        s.thermal = thermal
+        s.targetFps = targetFps
         onSnapshot?(s)
     }
 }

@@ -61,6 +61,25 @@ final class AppModel: ObservableObject {
             DispatchQueue.main.async { self?.snapshot = s }
         }
         camera.onFrame = { [weak self] sb in self?.processor.process(sb) }
+        NotificationCenter.default.addObserver(forName: ProcessInfo.thermalStateDidChangeNotification, object: nil,
+                                               queue: .main) { [weak self] _ in self?.applyThermal() }
+    }
+
+    static func thermalLevel(_ s: ProcessInfo.ThermalState) -> ThermalLevel {
+        switch s {
+        case .nominal: return .nominal
+        case .fair: return .fair
+        case .serious: return .serious
+        case .critical: return .critical
+        @unknown default: return .serious
+        }
+    }
+
+    /// Máy nóng thì giảm fps camera + số frame chạy YOLO.
+    private func applyThermal() {
+        let level = Self.thermalLevel(ProcessInfo.processInfo.thermalState)
+        processor.setThermal(level)
+        camera.setFrameRate(processor.thermalPolicy.targetFps(level))
     }
 
     /// Giá trị dự phòng nếu file config hỏng; bình thường luôn đọc từ config/*.json trong app.
@@ -98,6 +117,7 @@ final class AppModel: ObservableObject {
                 guard let self else { return }
                 if let err { self.errorMessage = err.localizedDescription }
                 self.processor.hfovDeg = self.camera.hfovDeg
+                self.applyThermal()
             }
         }
     }

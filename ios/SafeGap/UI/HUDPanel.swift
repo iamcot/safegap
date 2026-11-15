@@ -45,6 +45,12 @@ struct HUDPanel: View {
                 if let err = s.detectorError {
                     Text(err).font(.caption2.bold()).lineLimit(3)
                 }
+                if s.thermal != .nominal {
+                    Label(s.thermal == .critical ? "Máy rất nóng: che nắng / bật điều hoà vào máy"
+                                                 : String(format: "Máy nóng: giảm còn %.0f fps", s.targetFps),
+                          systemImage: "thermometer.sun.fill")
+                        .font(.caption.bold())
+                }
                 if !model.isCalibrated {
                     Text("Chưa hiệu chỉnh máy này: bấm ◎ để chỉnh ROI").font(.caption2.bold())
                 }
