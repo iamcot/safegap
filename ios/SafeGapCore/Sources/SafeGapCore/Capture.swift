@@ -25,11 +25,11 @@ public enum YOLOLabel {
 /// Lưu ảnh mỗi `movingIntervalS` khi xe chạy; khi thấy đèn thì dày hơn (`lightIntervalS`), kể cả lúc đứng chờ đèn.
 /// Đứng yên không có đèn thì không lưu (ảnh trùng nhau, tốn chỗ).
 public struct CapturePolicy: Equatable, Sendable {
-    public var movingIntervalS = 2.0
-    public var lightIntervalS = 1.0
+    public var movingIntervalS = 4.0
+    public var lightIntervalS = 2.0
     public var minSpeedKmh = 5.0
-    /// Giới hạn số ảnh mỗi phiên (~250 KB/ảnh → ~1 GB).
-    public var maxImages = 4000
+    /// Giới hạn số ảnh mỗi phiên (~250 KB/ảnh → ~375 MB). Chủ app gán nhãn ~300–500 ảnh/tối nên không cần nhiều hơn.
+    public var maxImages = 1500
     public private(set) var lastT: Double?
     public private(set) var count = 0
 

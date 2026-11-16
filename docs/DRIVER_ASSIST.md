@@ -44,7 +44,8 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
 - [x] A5. Nối vào `FrameProcessor` + HUD: dòng trạng thái đèn / ngã tư kế tiếp / lần rẽ gần nhất; Cài đặt bật/tắt
       giọng nói và đèn giao thông.
 - [x] A6. Chế độ thu dữ liệu (`SafeGapCore/Capture.swift` + `SafeGap/Logging/DataCapture.swift`): Cài đặt >
-      "Thu dữ liệu". Khi chạy 1 ảnh/2 s, thấy đèn 1 ảnh/s (cả lúc chờ đèn), tối đa 4000 ảnh/phiên.
+      "Thu dữ liệu". Khi chạy 1 ảnh/4 s, thấy đèn 1 ảnh/2 s (cả lúc chờ đèn), tối đa 1500 ảnh/phiên
+      (~3.000 ảnh/ngày cho 2 chuyến × 1,5 giờ; chủ app gán nhãn ~300–500 ảnh/tối, chọn ảnh có biển/đèn/cảnh mới).
       Mỗi phiên `Documents/captures/capture_<giờ>/`: `images/*.jpg` (frame 1920×1080), `labels/*.txt` (YOLO, gán sẵn
       bằng model hiện tại), `classes.txt` (thứ tự `YOLOLabel.classes`, lớp mới thêm vào CUỐI), `meta.jsonl`
       (giờ, GPS, hướng, tốc độ, màu đèn, nhiệt). Nút ZIP + chia sẻ trong Cài đặt.

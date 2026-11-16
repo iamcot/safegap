@@ -41,7 +41,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Thu dữ liệu để train")
                 } footer: {
-                    Text("Khi xe chạy: 1 ảnh / 2 s; thấy đèn giao thông: 1 ảnh / s (cả lúc chờ đèn). Mỗi phiên có images/, labels/ (YOLO, gán sẵn bằng model hiện tại), classes.txt, meta.jsonl (giờ, GPS, tốc độ). Ảnh ~250 KB, 1 giờ chạy ~400 MB. Bấm ZIP để nén rồi chia sẻ (AirDrop sang Mac), mở trong CVAT / Label Studio để sửa nhãn.")
+                    Text("Khi xe chạy: 1 ảnh / 4 s; thấy đèn giao thông: 1 ảnh / 2 s (cả lúc chờ đèn); tối đa 1.500 ảnh mỗi chuyến. Mỗi phiên có images/, labels/ (YOLO, gán sẵn bằng model hiện tại), classes.txt, meta.jsonl (giờ, GPS, tốc độ). Ảnh ~250 KB, 1 chuyến 1,5 giờ ~375 MB. Bấm ZIP để nén rồi chia sẻ (AirDrop sang Mac), mở trong CVAT / Label Studio để sửa nhãn.")
                 }
                 Section {
                     Toggle("Tốc độ giả lập", isOn: Binding(

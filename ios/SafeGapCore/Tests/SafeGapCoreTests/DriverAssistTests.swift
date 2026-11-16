@@ -236,12 +236,12 @@ final class CaptureTests: XCTestCase {
         var p = CapturePolicy()
         var n = 0
         for i in 0..<300 where p.shouldCapture(t: Double(i) / 15, speedKmh: 40, hasLight: false) { n += 1 }
-        XCTAssertEqual(n, 10)   // 20 s, mỗi 2 s
+        XCTAssertEqual(n, 5)   // 20 s, mỗi 4 s
         var q = CapturePolicy()
         XCTAssertFalse(q.shouldCapture(t: 0, speedKmh: 0, hasLight: false))
         XCTAssertTrue(q.shouldCapture(t: 0, speedKmh: 0, hasLight: true))
-        XCTAssertFalse(q.shouldCapture(t: 0.5, speedKmh: 0, hasLight: true))
-        XCTAssertTrue(q.shouldCapture(t: 1.0, speedKmh: 0, hasLight: true))
+        XCTAssertFalse(q.shouldCapture(t: 1.5, speedKmh: 0, hasLight: true))
+        XCTAssertTrue(q.shouldCapture(t: 2.0, speedKmh: 0, hasLight: true))
         q.maxImages = 2
         XCTAssertFalse(q.shouldCapture(t: 5, speedKmh: 40, hasLight: false))
     }
