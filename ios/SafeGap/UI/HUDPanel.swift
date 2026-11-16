@@ -49,6 +49,9 @@ struct HUDPanel: View {
             Spacer(minLength: 0)
 
             VStack(alignment: .leading, spacing: 2) {
+                if let line = Self.assistLine(s) {
+                    Text(line).font(.caption.bold()).monospacedDigit()
+                }
                 if let err = s.detectorError {
                     Text(err).font(.caption2.bold()).lineLimit(3)
                 }
@@ -75,5 +78,25 @@ struct HUDPanel: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(r.level.color)
         .animation(.easeInOut(duration: 0.2), value: r.level)
+    }
+
+    /// Dòng hỗ trợ tài xế: đèn, ngã tư kế tiếp, đứng yên, lần rẽ gần nhất.
+    static func assistLine(_ s: FrameSnapshot) -> String? {
+        var parts: [String] = []
+        // màu đèn vẽ bằng cụm 3 đèn ở mép trên (TrafficLightView), không lặp lại bằng chữ
+        if let j = s.junctionM, j > 0 { parts.append(String(format: "Ngã tư %.0f m", j)) }
+        if let st = s.stoppedS, st >= 1 { parts.append(String(format: "Đứng %.0f s", st)) }
+        if let turn = s.turning {
+            parts.append(turn == .left ? "Đang rẽ trái" : "Đang rẽ phải")
+        } else if let e = s.lastTurn, s.t - e.t < 10 {
+            let name: String
+            switch e.direction {
+            case .left: name = "Vừa rẽ trái"
+            case .right: name = "Vừa rẽ phải"
+            case .uturn: name = "Vừa quay đầu"
+            }
+            parts.append(name)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }

@@ -31,6 +31,7 @@ final class AppModel: ObservableObject {
     let speed = SpeedProvider()
     let motion = MotionProvider()
     let sound = AlertSound()
+    let voice = VoiceAlerts()
     let roads = RoadStore()
     let logger = CSVLogger()
     private var processor: FrameProcessor!
@@ -61,7 +62,8 @@ final class AppModel: ObservableObject {
         calibration = CalibrationStore.load(key: defaults.storageKey) ?? defaults
         errorMessage = loadError
 
-        processor = FrameProcessor(params: currentParams(), speed: speed, motion: motion, logger: logger, sound: sound)
+        processor = FrameProcessor(params: currentParams(), speed: speed, motion: motion, logger: logger, sound: sound,
+                                   voice: voice)
         processor.roads = roads
         processor.onSnapshot = { [weak self] s in
             DispatchQueue.main.async { self?.snapshot = s }

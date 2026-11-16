@@ -28,6 +28,22 @@ struct SettingsView: View {
                     if let src = model.law.source { Text(src).font(.caption2).foregroundStyle(.secondary) }
                 }
                 Section {
+                    Toggle("Giọng nói tiếng Việt", isOn: $model.settings.voiceOn)
+                    Toggle("Nhận đèn giao thông (thử nghiệm)", isOn: $model.settings.trafficLights)
+                } header: {
+                    Text("Hỗ trợ tài xế")
+                } footer: {
+                    Text("Bản thử: nhận đèn bằng model hiện có, màu theo điểm sáng trong khung đèn. Nhắc \"Đèn đỏ phía trước\" khi còn chạy nhanh gần ngã tư, \"Đèn xanh rồi\" khi đèn đã xanh mà xe vẫn đứng. Giọng đọc dùng giọng tiếng Việt có sẵn trên máy (Cài đặt iPhone > Trợ năng > Nội dung được đọc > Giọng nói để tải giọng tốt hơn).")
+                }
+                Section {
+                    Toggle("Thu dữ liệu (ảnh + nhãn gán sẵn)", isOn: $model.settings.dataCapture)
+                    CaptureSessionsList()
+                } header: {
+                    Text("Thu dữ liệu để train")
+                } footer: {
+                    Text("Khi xe chạy: 1 ảnh / 4 s; thấy đèn giao thông: 1 ảnh / 2 s (cả lúc chờ đèn); tối đa 1.500 ảnh mỗi chuyến. Mỗi phiên có images/, labels/ (YOLO, gán sẵn bằng model hiện tại), classes.txt, meta.jsonl (giờ, GPS, tốc độ). Ảnh ~250 KB, 1 chuyến 1,5 giờ ~375 MB. Bấm ZIP để nén rồi chia sẻ (AirDrop sang Mac), mở trong CVAT / Label Studio để sửa nhãn.")
+                }
+                Section {
                     Toggle("Tốc độ giả lập", isOn: Binding(
                         get: { model.settings.simulatedSpeedKmh != nil },
                         set: { model.settings.simulatedSpeedKmh = $0 ? 90 : nil }))
@@ -162,5 +178,60 @@ private struct LogFilesList: View {
             .sorted { $0.lastPathComponent > $1.lastPathComponent }
             .prefix(10)
             .map { ($0, (try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
+    }
+}
+
+
+/// Danh sách phiên thu dữ liệu: nén ZIP rồi chia sẻ, hoặc xoá.
+private struct CaptureSessionsList: View {
+    @State private var sessions: [(url: URL, images: Int, bytes: Int)] = []
+    @State private var zips: [URL: URL] = [:]
+    @State private var zipping: URL?
+
+    var body: some View {
+        Group {
+            if sessions.isEmpty {
+                Text("Chưa có phiên thu dữ liệu").font(.caption).foregroundStyle(.secondary)
+            }
+            ForEach(sessions, id: \.url) { s in
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text(s.url.lastPathComponent).font(.caption).monospaced()
+                        Text("\(s.images) ảnh · " + ByteCountFormatter.string(fromByteCount: Int64(s.bytes), countStyle: .file))
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if let z = zips[s.url] {
+                        ShareLink(item: z) { Image(systemName: "square.and.arrow.up") }
+                    } else if zipping == s.url {
+                        ProgressView()
+                    } else {
+                        Button("ZIP") { zip(s.url) }.buttonStyle(.borderless)
+                    }
+                    Button(role: .destructive) { delete(s.url) } label: { Image(systemName: "trash") }
+                        .buttonStyle(.borderless)
+                }
+            }
+        }
+        .onAppear(perform: reload)
+    }
+
+    private func reload() { sessions = Array(DataCapture.sessions().prefix(15)) }
+
+    private func zip(_ dir: URL) {
+        zipping = dir
+        DispatchQueue.global(qos: .userInitiated).async {
+            let z = DataCapture.zip(dir)
+            DispatchQueue.main.async {
+                zipping = nil
+                if let z { zips[dir] = z }
+            }
+        }
+    }
+
+    private func delete(_ dir: URL) {
+        try? FileManager.default.removeItem(at: dir)
+        zips[dir] = nil
+        reload()
     }
 }
