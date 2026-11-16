@@ -244,32 +244,28 @@ private struct RoadCanvas: View {
             let (left, right) = laneEdges()
             let r = snapshot.result
             let cars = vehicles()
-            // mặt đường: làn mình + 2 làn mỗi bên
-            let leftmost = left.map { Ground(x: $0.x - 2 * snapshot.roadLane.width, z: $0.z) }
-            let rightmost = right.map { Ground(x: $0.x + 2 * snapshot.roadLane.width, z: $0.z) }
-            ctx.fill(cam.path(leftmost + rightmost.reversed(), closed: true), with: .color(pal.road))
-            for edge in [leftmost, rightmost] {
-                ctx.stroke(cam.path(edge), with: .color(pal.roadEdge), lineWidth: 2)
-            }
-            // vạch làn: tất cả nét đứt; vạch làn mình đậm hơn
-            let leftNext = left.map { Ground(x: $0.x - snapshot.roadLane.width, z: $0.z) }
-            let rightNext = right.map { Ground(x: $0.x + snapshot.roadLane.width, z: $0.z) }
-            for edge in [leftNext, rightNext] {
-                ctx.stroke(cam.path(edge), with: .color(pal.laneFaint), style: StrokeStyle(lineWidth: 1.5, dash: [14, 16]))
-            }
+            // mặt đường: 2 làn cùng chiều (làn mình + 1 làn bên) và 2 làn ngược chiều bên trái vạch giữa
+            let lw = snapshot.roadLane.width
+            let lay = layout
+            func edge(_ k: Int) -> [Ground] { left.map { Ground(x: $0.x + Double(k) * lw, z: $0.z) } }  // mép trái của làn k
+            ctx.fill(cam.path(edge(lay.lo) + edge(lay.hi + 1).reversed(), closed: true), with: .color(pal.road))
             // làn mình tô xanh dương nhạt trong suốt
             ctx.fill(cam.path(left + right.reversed(), closed: true),
                      with: .color(Color(red: 0.45, green: 0.68, blue: 1.0).opacity(pal.dark ? 0.35 : 0.5)))
             let real = snapshot.roadLane.tracked
-            for edge in [left, right] {
-                ctx.stroke(cam.path(edge), with: .color(real ? pal.lane : pal.laneFaint),
-                           style: StrokeStyle(lineWidth: real ? 2.5 : 1.5, lineCap: .round, dash: [14, 16]))
-            }
-            // có xe ngược chiều: vạch phân cách hai chiều là nét liền vàng
-            if let n = snapshot.oncomingLane {
-                let edge = left.map { Ground(x: $0.x - Double(n - 1) * snapshot.roadLane.width, z: $0.z) }
-                ctx.stroke(cam.path(edge), with: .color(Color(red: 1.0, green: 0.76, blue: 0.0)),
-                           style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
+            for k in lay.lo...(lay.hi + 1) {
+                let e = cam.path(edge(k))
+                if k == lay.lo || k == lay.hi + 1 {
+                    ctx.stroke(e, with: .color(pal.roadEdge), lineWidth: 2)   // mép đường
+                } else if k == lay.center && snapshot.oncomingLane != nil {
+                    // có xe ngược chiều: vạch phân cách hai chiều là nét liền vàng
+                    ctx.stroke(e, with: .color(Color(red: 1.0, green: 0.76, blue: 0.0)), style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
+                } else if k == 0 || k == 1 {
+                    ctx.stroke(e, with: .color(real ? pal.lane : pal.laneFaint),
+                               style: StrokeStyle(lineWidth: real ? 2.5 : 1.5, lineCap: .round, dash: [14, 16]))
+                } else {
+                    ctx.stroke(e, with: .color(pal.laneFaint), style: StrokeStyle(lineWidth: 1.5, dash: [14, 16]))
+                }
             }
 
             // dải đường đi giữa làn: từ đầu xe mình tới xe phía trước (không có xe thì dài bằng d_min, mờ dần)
@@ -384,6 +380,14 @@ private struct RoadCanvas: View {
         return lerp(pts[pts.count - 2], pts[pts.count - 1])
     }
 
+    /// Bố cục 4 làn theo chỉ số làn (0 = làn mình, âm = bên trái). Vạch giữa (chia hai chiều) nằm ở mép trái làn `center`.
+    /// Mặc định làn mình sát vạch giữa, làn cùng chiều còn lại ở bên phải; nếu thấy xe ngược chiều cách 1 làn
+    /// thì làn mình là làn phải, làn cùng chiều kia ở bên trái.
+    var layout: (lo: Int, hi: Int, center: Int) {
+        let n = min(max(snapshot.oncomingLane ?? 1, 1), 2)
+        return n == 1 ? (-2, 1, 0) : (-3, 0, -1)
+    }
+
     /// Xe để vẽ. Khoảng cách: bề rộng box kết hợp vị trí đáy xe trên mặt đường (xe bên cạnh nhìn chéo thì box rộng ra
     /// vì thấy cả hông xe → đo theo bề rộng bị gần quá). Vị trí ngang: tính độ lệch so với tâm làn mình rồi
     /// "bắt" vào giữa làn gần nhất của con đường đang vẽ, nên xe luôn nằm trong làn, không trôi ra ngoài đường.
@@ -403,7 +407,7 @@ private struct RoadCanvas: View {
             guard z > 1.0, z < Self.farZ + 20 else { continue }  // gần hơn 1 m là capo xe mình
             let x = ((d.x1 + d.x2) / 2 - s.frameWidth / 2) * z / s.fPx
             let laneIdx = isEgo ? 0 : Int(((x - lane.center(z)) / lane.width).rounded())
-            guard abs(laneIdx) <= 2 else { continue }  // ngoài 5 làn đang vẽ (lề, xe đỗ bên đường)
+            guard laneIdx >= layout.lo, laneIdx <= layout.hi else { continue }  // ngoài 4 làn đang vẽ (lề, xe đỗ bên đường)
             let xDraw = lane.center(z) + Double(laneIdx) * lane.width
             let isCar = d.cls == "car"
             out.append(Car(pos: Ground(x: xDraw, z: z), widthM: wReal, heightM: isCar ? 1.45 : 3.0, lengthM: isCar ? 4.5 : 9.0,
