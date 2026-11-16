@@ -20,6 +20,19 @@ public struct RoadLane: Equatable, Sendable {
     public func center(_ z: Double) -> Double { offset + heading * z + 0.5 * curvature * z * z }
     public func left(_ z: Double) -> Double { center(z) - width / 2 }
     public func right(_ z: Double) -> Double { center(z) + width / 2 }
+
+    /// Chiếu vạch trái (side = -1) / phải (+1) của làn lên ảnh, thành đường cong toạ độ chuẩn hoá,
+    /// lấy mẫu trong khoảng z gần..xa trước xe.
+    public func imageCurve(side: Double, fPx: Double, hCamM: Double, yHorizonPx: Double, imageWidth: Double,
+                           imageHeight: Double, zNear: Double = 4, zFar: Double = 40) -> LaneCurve? {
+        guard fPx > 0, hCamM > 0, imageWidth > 0, imageHeight > 0 else { return nil }
+        let pts = (0...20).map { i -> (y: Double, x: Double) in
+            let z = zNear + (zFar - zNear) * Double(i) / 20
+            let x = center(z) + side * width / 2
+            return ((yHorizonPx + fPx * hCamM / z) / imageHeight, (x * fPx / z + imageWidth / 2) / imageWidth)
+        }
+        return LaneDetector.fit(pts, yRef: 1.0)
+    }
 }
 
 public struct RoadLaneConfig: Equatable, Sendable {

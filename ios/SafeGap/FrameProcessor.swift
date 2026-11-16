@@ -134,6 +134,8 @@ final class FrameProcessor {
     private var throttle = FrameThrottle()
     private var thermalLevel: ThermalLevel = .nominal
     private var laneTracker = LaneTracker()
+    /// Số frame liền không thấy vạch trong cửa sổ dự đoán; quá 30 thì dò lại cả ảnh.
+    private var gateMisses = 0
     private let roadLane = RoadLaneFilter()
     private let oncoming = OncomingClassifier()
     /// Làn có xe ngược chiều gần nhất (1 = làn sát bên trái) và lúc thấy lần cuối, để giữ vạch vàng vài giây.
@@ -225,29 +227,40 @@ final class FrameProcessor {
         pipeline.useGround = p.settings.groundFusion && yHorizon != nil
         if let yHorizon { pipeline.yHorizon = yHorizon }
 
-        // ROI bám vạch làn (Phase 3). Không thấy vạch thì quay về hình thang hiệu chỉnh.
-        var roiNorm = p.calibration.roi
+        // Dò vạch làn (Phase 3). Chỉ tìm ở đoạn đường gần ngay trước xe (≤ 25 m); khi đã có làn ổn định thì
+        // mỗi hàng chỉ nhận vệt sáng sát vị trí vạch dự đoán (± 0,45 m), không nhảy sang xe / đèn / vạch làn khác.
+        let yH = yHorizon ?? p.config.distance.yHorizonNorm * h
+        let hCam = p.calibration.hCamM
         if p.settings.laneFollow, let gray = Self.gray(pb) {
             let cal = p.calibration
             let top = cal.roi.map(\.y).min() ?? 0.45
             var lc = LaneConfig()
             lc.yBottom = min(0.95, cal.maxBottomRatio - 0.02)
             lc.yTop = top + 0.25 * (lc.yBottom - top)
+            if f > 0 { lc.yTop = max(lc.yTop, min(lc.yBottom - 0.12, (yH + f * hCam / 25) / h)) }
             let (tl, tr) = (laneTracker.left, laneTracker.right)
-            let d = LaneDetector.detect(gray, config: lc) { y in
+            let prev = roadLane.lane
+            var gate: ((Double) -> (left: Double, right: Double, tol: Double))?
+            if prev.tracked, gateMisses < 30, f > 0 {
+                gate = { yn in
+                    let dy = yn * h - yH
+                    guard dy > 1 else { return (-1, -1, 0) }
+                    let z = f * hCam / dy
+                    return ((prev.left(z) * f / z + w / 2) / w, (prev.right(z) * f / z + w / 2) / w,
+                            max(0.012, 0.45 * f / z / w))
+                }
+            }
+            let d = LaneDetector.detect(gray, config: lc, center: { y in
                 LaneROI.center(at: y, left: tl, right: tr, calibrated: cal.roi)
-            }
+            }, gate: gate)
+            let found = d.left != nil || d.right != nil
+            if found { gateMisses = 0 } else if gate != nil { gateMisses += 1 }
             laneTracker.update(d)
-            if let poly = LaneROI.polygon(left: laneTracker.left, right: laneTracker.right, calibrated: cal.roi) {
-                roiNorm = poly
-            }
         } else {
             laneTracker.reset()
         }
-        pipeline.roi = Lane.roiToPixels(roiNorm, width: w, height: h)
 
-        // Mô hình làn ổn định (mét) cho màn lái: chiếu vạch xuống mặt đường, lọc chậm.
-        let yH = yHorizon ?? p.config.distance.yHorizonNorm * h
+        // Mô hình làn ổn định (mét): chiếu vạch xuống mặt đường, lọc chậm.
         func ground(_ c: LaneCurve?) -> [(x: Double, z: Double)]? {
             guard let c, f > 0 else { return nil }
             return stride(from: 0.5, through: 1.0, by: 0.02).compactMap { yn -> (x: Double, z: Double)? in
@@ -258,6 +271,17 @@ final class FrameProcessor {
             }
         }
         let road = roadLane.update(left: ground(laneTracker.left), right: ground(laneTracker.right))
+        // Vạch vẽ trên ảnh và ROI theo làn ổn định (không theo vạch thô từng frame).
+        var stableL: LaneCurve?, stableR: LaneCurve?
+        if p.settings.laneFollow, road.tracked {
+            stableL = road.imageCurve(side: -1, fPx: f, hCamM: hCam, yHorizonPx: yH, imageWidth: w, imageHeight: h)
+            stableR = road.imageCurve(side: 1, fPx: f, hCamM: hCam, yHorizonPx: yH, imageWidth: w, imageHeight: h)
+        }
+        var roiNorm = p.calibration.roi
+        if let poly = LaneROI.polygon(left: stableL, right: stableR, calibrated: p.calibration.roi) {
+            roiNorm = poly
+        }
+        pipeline.roi = Lane.roiToPixels(roiNorm, width: w, height: h)
 
         let t0 = CACurrentMediaTime()
         var dets: [Detection] = []
@@ -353,8 +377,8 @@ final class FrameProcessor {
         s.thermal = thermal
         s.targetFps = targetFps
         s.roiNorm = roiNorm
-        s.laneLeft = laneTracker.left
-        s.laneRight = laneTracker.right
+        s.laneLeft = stableL
+        s.laneRight = stableR
         s.roadLane = road
         s.oncoming = r.trackIds.map { $0.map(oncomingIds.contains) ?? false }
         s.oncomingLane = oncomingLane?.index

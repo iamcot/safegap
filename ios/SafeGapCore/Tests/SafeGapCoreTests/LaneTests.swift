@@ -51,6 +51,35 @@ final class LaneTests: XCTestCase {
         }
     }
 
+    func testGateIgnoresDiagonalClutter() throws {
+        let left = { (y: Double) in 0.30 + (0.47 - 0.30) * (1 - y) / 0.55 }
+        let right = { (y: Double) in 0.72 + (0.53 - 0.72) * (1 - y) / 0.55 }
+        // vệt sáng chéo cắt ngang làn (đèn xe, vạch kẻ khác) nằm gần vạch phải
+        let clutter = { (y: Double) in 0.47 + 0.22 * (y - 0.45) / 0.55 }
+        let img = road([(left, false), (right, true), (clutter, false)])
+        let d = LaneDetector.detect(img, center: center, gate: { y in (left(y) + 0.01, right(y) - 0.01, 0.035) })
+        let l = try XCTUnwrap(d.left), r = try XCTUnwrap(d.right)
+        for y in [0.6, 0.75, 0.9] {
+            XCTAssertEqual(l.x(at: y), left(y), accuracy: 0.012, "trái y=\(y)")
+            XCTAssertEqual(r.x(at: y), right(y), accuracy: 0.012, "phải y=\(y)")
+        }
+    }
+
+    func testGateFindsNothingOutsideWindow() {
+        let left = { (y: Double) in 0.30 + (0.47 - 0.30) * (1 - y) / 0.55 }
+        let d = LaneDetector.detect(road([(left, false)]), center: center, gate: { y in (left(y) + 0.15, 0.9, 0.02) })
+        XCTAssertNil(d.left)
+        XCTAssertNil(d.right)
+    }
+
+    func testRoadLaneImageCurve() throws {
+        // làn thẳng 3.5 m, camera giữa làn cao 1.2 m, f 1000 px, ảnh 1920×1080, chân trời 540
+        let lane = RoadLane(width: 3.5, tracked: true)
+        let c = try XCTUnwrap(lane.imageCurve(side: -1, fPx: 1000, hCamM: 1.2, yHorizonPx: 540, imageWidth: 1920, imageHeight: 1080))
+        // z = 10 m: y = 540 + 120 = 660 px; x = -1.75·100 + 960 = 785 px
+        XCTAssertEqual(c.x(at: 660.0 / 1080), 785.0 / 1920, accuracy: 0.002)
+    }
+
     func testNoMarkings() {
         let d = LaneDetector.detect(road([]), center: center)
         XCTAssertNil(d.left)

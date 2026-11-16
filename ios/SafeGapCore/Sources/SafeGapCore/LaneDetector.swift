@@ -75,7 +75,10 @@ public struct LaneDetection: Equatable, Sendable {
 public enum LaneDetector {
     /// center(y): tâm làn mình dự đoán (từ lần trước hoặc ROI hiệu chỉnh), để chia vạch trái / phải
     /// và chọn vạch gần tâm nhất mỗi bên (bỏ vạch của làn bên cạnh).
-    public static func detect(_ img: GrayImage, config c: LaneConfig = .init(), center: (Double) -> Double) -> LaneDetection {
+    /// gate(y): khi đã có làn ổn định, vị trí dự đoán của vạch trái / phải ở hàng y và sai lệch cho phép.
+    /// Có gate thì mỗi hàng chỉ nhận vệt gần vị trí dự đoán nhất, nằm trong sai lệch; vệt khác (xe, đèn, vạch làn khác) bỏ qua.
+    public static func detect(_ img: GrayImage, config c: LaneConfig = .init(), center: (Double) -> Double,
+                              gate: ((Double) -> (left: Double, right: Double, tol: Double))? = nil) -> LaneDetection {
         let W = img.width, H = img.height
         var leftPts: [(y: Double, x: Double)] = []
         var rightPts: [(y: Double, x: Double)] = []
@@ -104,6 +107,17 @@ public enum LaneDetector {
             }
             if start >= 0 { runs.append((start, W - w)) }
 
+            if let g = gate?(yn) {
+                let xs = runs.filter { $0.end - $0.start <= maxRun }
+                    .map { (Double($0.start + $0.end - 1) / 2.0 + 0.5) / Double(W) }
+                if let l = xs.filter({ abs($0 - g.left) < g.tol }).min(by: { abs($0 - g.left) < abs($1 - g.left) }) {
+                    leftPts.append((y: yn, x: l))
+                }
+                if let r = xs.filter({ abs($0 - g.right) < g.tol }).min(by: { abs($0 - g.right) < abs($1 - g.right) }) {
+                    rightPts.append((y: yn, x: r))
+                }
+                continue
+            }
             // giữ tối đa 3 vệt gần tâm nhất mỗi bên; chọn vạch của làn mình ở bước khớp đường
             let cx = center(yn)
             var ls: [Double] = [], rs: [Double] = []
