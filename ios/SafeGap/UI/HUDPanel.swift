@@ -83,9 +83,7 @@ struct HUDPanel: View {
     /// Dòng hỗ trợ tài xế: đèn, ngã tư kế tiếp, đứng yên, lần rẽ gần nhất.
     static func assistLine(_ s: FrameSnapshot) -> String? {
         var parts: [String] = []
-        if let l = s.light {
-            parts.append("Đèn " + l.color.label + (l.box == nil ? " (giữ)" : ""))
-        }
+        // màu đèn vẽ bằng cụm 3 đèn ở mép trên (TrafficLightView), không lặp lại bằng chữ
         if let j = s.junctionM, j > 0 { parts.append(String(format: "Ngã tư %.0f m", j)) }
         if let st = s.stoppedS, st >= 1 { parts.append(String(format: "Đứng %.0f s", st)) }
         if let turn = s.turning {

@@ -18,6 +18,14 @@ struct ContentView: View {
                 splitView
             }
         }
+        .overlay(alignment: .top) {
+            if model.screen != .calibration, let light = model.snapshot.light, light.color != .unknown {
+                TrafficLightView(state: light)
+                    .padding(.top, 8)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: model.snapshot.light == nil)
         .background(model.snapshot.result.level.color.ignoresSafeArea())
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)

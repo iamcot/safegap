@@ -38,6 +38,8 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
       `VoiceAlerts` (`SafeGap/Audio/VoiceAlerts.swift`) đọc bằng `AVSpeechSynthesizer` giọng vi-VN.
 - [x] A4. Đèn giao thông thô từ lớp `traffic light` của YOLO COCO: chọn đèn liên quan + màu theo HSV + bỏ phiếu
       (`SafeGapCore/TrafficLight.swift`) + test; app lấy mẫu màu trong khung đèn từ buffer YCbCr.
+      Hiển thị: cụm 3 đèn (đỏ/vàng/xanh) ở giữa mép trên màn hình (`UI/TrafficLightView.swift`), đèn đang sáng phát sáng,
+      nhấp nháy khi đang giữ trạng thái vì mất đèn (chủ app yêu cầu: hình đèn, không chỉ chữ).
       Cảnh báo thử: "Đèn đỏ phía trước" (đang chạy nhanh, gần ngã tư/đèn to), "Đèn xanh rồi" (đứng yên > 2 s sau khi xanh).
 - [x] A5. Nối vào `FrameProcessor` + HUD: dòng trạng thái đèn / ngã tư kế tiếp / lần rẽ gần nhất; Cài đặt bật/tắt
       giọng nói và đèn giao thông.
