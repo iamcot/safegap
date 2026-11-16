@@ -210,7 +210,7 @@ final class FrameProcessor {
             cfg.alert.manualDMinM = p.settings.manualDMinM
             if let m = p.settings.minSpeedKmh { cfg.alert.minSpeedKmh = m }
             pipeline = Pipeline(config: cfg, law: p.law, frameWidth: w, frameHeight: h)
-            pipeline.coastS = 0.5
+            pipeline?.coastS = 0.5
             pipelineVersion = p.version
             pipelineW = w
             pipelineH = h
