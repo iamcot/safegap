@@ -5,3 +5,10 @@ __pycache__/
 *.mlpackage/
 out/
 .venv/
+# iOS / Swift
+.build/
+.swiftpm/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+.DS_Store
