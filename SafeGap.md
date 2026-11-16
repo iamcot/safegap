@@ -166,6 +166,9 @@ Code đã có, có unit test (`pytest tests`). Còn lại là chạy trên dữ 
 - [x] Cho chỉnh d_min thủ công (biển cự ly, trời mưa).
 - [ ] Sau này: Android (Kotlin + TFLite), dùng lại config và logic.
 
+### Phase 4 – Hỗ trợ tài xế mới (biển báo, đèn giao thông, mẫu xe)
+Công việc chi tiết và tiến độ: [docs/DRIVER_ASSIST.md](docs/DRIVER_ASSIST.md). Làm tiếp từ mục `[ ]` đầu tiên ở đó.
+
 ## 8. Rủi ro và lưu ý
 
 - **Tầm xa:** ở 100 m xe con chỉ còn khoảng 25 px (1080p), lệch 1–2 px là sai 5–8 m. Có thể dùng 4K hoặc camera 2x.

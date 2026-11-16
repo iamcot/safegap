@@ -51,6 +51,11 @@ struct DriveView: View {
 
     private func statusLine(_ s: FrameSnapshot, _ pal: Palette) -> some View {
         VStack(alignment: .leading, spacing: 4) {
+            if let line = HUDPanel.assistLine(s) {
+                Label(line, systemImage: s.light?.color == .red ? "light.beacon.max.fill" : "signpost.right.fill")
+                    .foregroundStyle(s.light?.color == .red ? Color.red : pal.textDim)
+                    .monospacedDigit()
+            }
             if let err = s.detectorError {
                 Label(err, systemImage: "exclamationmark.triangle.fill").lineLimit(2)
             }

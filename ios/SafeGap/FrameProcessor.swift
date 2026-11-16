@@ -26,6 +26,10 @@ struct UserSettings: Codable, Equatable {
     var hidePreview = true
     /// Tự tải dữ liệu đường OpenStreetMap quanh xe (số làn, một chiều) khi có mạng.
     var autoRoads = true
+    /// Đọc cảnh báo bằng giọng tiếng Việt (đèn đỏ, đèn xanh...).
+    var voiceOn = true
+    /// Nhận đèn giao thông (bản thử: lớp "traffic light" của YOLO + màu HSV).
+    var trafficLights = true
 
     var zoom: Double { zoom2x ? 2 : 1 }
 
@@ -45,6 +49,8 @@ struct UserSettings: Codable, Equatable {
         coolMode = try c.decodeIfPresent(Bool.self, forKey: .coolMode) ?? d.coolMode
         hidePreview = try c.decodeIfPresent(Bool.self, forKey: .hidePreview) ?? d.hidePreview
         autoRoads = try c.decodeIfPresent(Bool.self, forKey: .autoRoads) ?? d.autoRoads
+        voiceOn = try c.decodeIfPresent(Bool.self, forKey: .voiceOn) ?? d.voiceOn
+        trafficLights = try c.decodeIfPresent(Bool.self, forKey: .trafficLights) ?? d.trafficLights
     }
 
     static let key = "settings.v1"
@@ -97,6 +103,16 @@ struct FrameSnapshot {
     /// Chân trời (pixel) và góc ngẩng (độ) từ CoreMotion; nil nếu không có.
     var yHorizon: Double?
     var pitchDeg: Double?
+    /// Đèn giao thông đang áp dụng (nil = không thấy / tắt).
+    var light: TrafficLightState?
+    /// Khoảng cách tới ngã tư kế tiếp (OSM + quãng đường đã đi), nil = không biết.
+    var junctionM: Double?
+    /// Lần rẽ gần nhất và đang rẽ hay không.
+    var lastTurn: TurnEvent?
+    var turning: TurnDirection?
+    /// Số giây đã đứng yên, nil = đang chạy.
+    var stoppedS: Double?
+    var t: Double = 0
 }
 
 final class FrameProcessor {
@@ -129,9 +145,18 @@ final class FrameProcessor {
     let motion: MotionProvider
     let logger: CSVLogger
     let sound: AlertSound
+    let voice: VoiceAlerts
     var hfovDeg: Double?
     static func policy(_ s: UserSettings) -> ThermalPolicy { s.coolMode ? .cool : ThermalPolicy() }
-    private var throttle = FrameThrottle()
+    /// Lịch chạy model theo nhiệt + đứng/chạy (thay FrameThrottle; đứng yên thì xe trước còn 5 fps).
+    private var scheduler = InferenceScheduler(vehicles: .cool)
+    private var odometer = Odometer()
+    private var stopDetector = StopDetector()
+    private var turnDetector = TurnDetector()
+    private var junctions = JunctionTracker()
+    private var lightTracker = TrafficLightTracker()
+    private let lightRules = LightAlertRules()
+    static let trafficLightClass = "traffic light"
     private var thermalLevel: ThermalLevel = .nominal
     private var laneTracker = LaneTracker()
     /// Số frame liền không thấy vạch trong cửa sổ dự đoán; quá 30 thì dò lại cả ảnh.
@@ -162,8 +187,10 @@ final class FrameProcessor {
     private var roadLookupT = -10.0
     private var roadAhead: (ahead: RoadAhead, t: Double, travelled: Double, lastT: Double)?
 
-    init(params: Params, speed: SpeedProvider, motion: MotionProvider, logger: CSVLogger, sound: AlertSound) {
+    init(params: Params, speed: SpeedProvider, motion: MotionProvider, logger: CSVLogger, sound: AlertSound,
+         voice: VoiceAlerts) {
         self.params = params
+        self.voice = voice
         self.speed = speed
         self.motion = motion
         self.logger = logger
@@ -193,9 +220,12 @@ final class FrameProcessor {
         let t = CMSampleBufferGetPresentationTimeStamp(sb).seconds
         let p = currentParams()
         let thermal = currentThermal()
-        let targetFps = Self.policy(p.settings).targetFps(thermal)
-        // Máy nóng: bỏ bớt frame (YOLO là phần tốn pin / nhiệt nhất). Kalman dùng dt thật nên vẫn đúng.
-        guard throttle.shouldProcess(t: t, targetFps: targetFps) else { return }
+        let policy = Self.policy(p.settings)
+        if scheduler.moving[.vehicles] != policy.fps { scheduler = InferenceScheduler(vehicles: policy) }
+        let isStopped = stopDetector.isStopped
+        let targetFps = scheduler.targetFps(.vehicles, thermal: thermal, isStopped: isStopped)
+        // Máy nóng / đứng yên: bỏ bớt frame (YOLO là phần tốn pin / nhiệt nhất). Kalman dùng dt thật nên vẫn đúng.
+        guard scheduler.shouldRun(.vehicles, t: t, thermal: thermal, isStopped: isStopped) else { return }
 
         let intr = CameraController.intrinsics(sb)
         // HFOV của định dạng là ở 1x; khi zoom thì f tăng theo zoom
@@ -287,16 +317,21 @@ final class FrameProcessor {
         updateNight(pb)
         let t0 = CACurrentMediaTime()
         var dets: [Detection] = []
+        var lightDets: [Detection] = []
+        var classes = Set(p.config.detection.classes)
+        if p.settings.trafficLights { classes.insert(Self.trafficLightClass) }
         if let detector {
             do {
                 dets = try detector.detect(pb, frameWidth: w, frameHeight: h,
-                                           classes: Set(p.config.detection.classes),
+                                           classes: classes,
                                            minConf: night ? min(p.config.detection.minConf, Self.nightMinConf) : p.config.detection.minConf)
             } catch {
                 detectorError = error.localizedDescription
             }
         }
         let t1 = CACurrentMediaTime()
+        lightDets = dets.filter { $0.cls == Self.trafficLightClass }
+        dets.removeAll { $0.cls == Self.trafficLightClass }
         if let last = lastFrameTime, t1 > last {
             let inst = 1.0 / (t1 - last)
             fpsEMA = fpsEMA == 0 ? inst : 0.9 * fpsEMA + 0.1 * inst
@@ -352,6 +387,29 @@ final class FrameProcessor {
             roadAhead = ra
         }
 
+        // Sự kiện đường (docs/DRIVER_ASSIST.md A1): quãng đường, đứng yên, rẽ, ngã tư kế tiếp.
+        let odo = odometer.update(t: t, speedKmh: v)
+        let stoppedS = stopDetector.update(t: t, speedKmh: v)
+        let turn = turnDetector.update(t: t, yawRateDegS: motion.currentYawRate(), courseDeg: gps?.courseDeg, speedKmh: v)
+        let ahead = roadAhead.map { $0.ahead.advanced(by: $0.travelled) }
+        let junction = junctions.update(odometer: odo, junctionsAhead: ahead?.junctions)
+        if turn != nil { junctions.markPassed(odometer: odo) }
+
+        // Đèn giao thông (A4): chọn đèn liên quan, màu theo HSV, bỏ phiếu; nhắc bằng giọng nói.
+        var lightState: TrafficLightState?
+        if p.settings.trafficLights {
+            let picked = lightTracker.pick(lightDets, frameWidth: w, frameHeight: h)
+            let color = picked.map { LightColorClassifier.classify(Self.samplePixels(pb, box: $0.box)) }
+            lightState = lightTracker.update(t: t, light: picked, color: color)
+            if p.settings.voiceOn, let m = lightRules.check(state: lightState, t: t, speedKmh: v,
+                                                            junctionM: junction.nextM, stoppedS: stoppedS) {
+                voice.offer(m)
+            }
+        } else {
+            lightTracker.reset()
+        }
+        if p.settings.voiceOn { voice.tick(t: t) }
+
         if r.sound && p.settings.soundOn { sound.play() }
         let laneTag = (laneTracker.left != nil ? "L" : "") + (laneTracker.right != nil ? "R" : "")
         if p.settings.logOn {
@@ -389,6 +447,12 @@ final class FrameProcessor {
         s.roadAhead = roadAhead.map { $0.ahead.advanced(by: $0.travelled) }
         s.yHorizon = yHorizon
         s.pitchDeg = pitchDeg
+        s.light = lightState
+        s.junctionM = junction.nextM
+        s.lastTurn = turnDetector.lastTurn
+        s.turning = turnDetector.turning
+        s.stoppedS = stoppedS
+        s.t = t
         onSnapshot?(s)
     }
 
@@ -419,6 +483,34 @@ final class FrameProcessor {
         let e = lumaEMA.map { 0.97 * $0 + 0.03 * l } ?? l
         lumaEMA = e
         if night { if e > 80 { night = false } } else if e < 60 { night = true }
+    }
+
+    /// Lấy mẫu RGB trên lưới nx × ny trong khung (pixel của frame) từ buffer 420 YCbCr full range.
+    static func samplePixels(_ pb: CVPixelBuffer, box: Box, nx: Int = 10, ny: Int = 24) -> [(r: Double, g: Double, b: Double)] {
+        CVPixelBufferLockBaseAddress(pb, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
+        guard CVPixelBufferGetPlaneCount(pb) >= 2,
+              let yBase = CVPixelBufferGetBaseAddressOfPlane(pb, 0),
+              let cBase = CVPixelBufferGetBaseAddressOfPlane(pb, 1) else { return [] }
+        let w = CVPixelBufferGetWidthOfPlane(pb, 0), h = CVPixelBufferGetHeightOfPlane(pb, 0)
+        let cw = CVPixelBufferGetWidthOfPlane(pb, 1), ch = CVPixelBufferGetHeightOfPlane(pb, 1)
+        let yBpr = CVPixelBufferGetBytesPerRowOfPlane(pb, 0), cBpr = CVPixelBufferGetBytesPerRowOfPlane(pb, 1)
+        guard w > 0, h > 0, cw > 0, ch > 0 else { return [] }
+        let ys = yBase.assumingMemoryBound(to: UInt8.self), cs = cBase.assumingMemoryBound(to: UInt8.self)
+        var out: [(r: Double, g: Double, b: Double)] = []
+        out.reserveCapacity(nx * ny)
+        for j in 0..<ny {
+            for i in 0..<nx {
+                let x = Int(box.x1 + (Double(i) + 0.5) / Double(nx) * (box.x2 - box.x1))
+                let y = Int(box.y1 + (Double(j) + 0.5) / Double(ny) * (box.y2 - box.y1))
+                guard x >= 0, x < w, y >= 0, y < h else { continue }
+                let cx = min(cw - 1, x * cw / w), cy = min(ch - 1, y * ch / h)
+                let luma = Double(ys[y * yBpr + x])
+                let cb = Double(cs[cy * cBpr + cx * 2]), cr = Double(cs[cy * cBpr + cx * 2 + 1])
+                out.append(LightColorClassifier.rgb(y: luma, cb: cb, cr: cr))
+            }
+        }
+        return out
     }
 
     static func gray(_ pb: CVPixelBuffer, outWidth: Int = 320) -> GrayImage? {

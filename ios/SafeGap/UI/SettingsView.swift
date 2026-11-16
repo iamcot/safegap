@@ -28,6 +28,14 @@ struct SettingsView: View {
                     if let src = model.law.source { Text(src).font(.caption2).foregroundStyle(.secondary) }
                 }
                 Section {
+                    Toggle("Giọng nói tiếng Việt", isOn: $model.settings.voiceOn)
+                    Toggle("Nhận đèn giao thông (thử nghiệm)", isOn: $model.settings.trafficLights)
+                } header: {
+                    Text("Hỗ trợ tài xế")
+                } footer: {
+                    Text("Bản thử: nhận đèn bằng model hiện có, màu theo điểm sáng trong khung đèn. Nhắc \"Đèn đỏ phía trước\" khi còn chạy nhanh gần ngã tư, \"Đèn xanh rồi\" khi đèn đã xanh mà xe vẫn đứng. Giọng đọc dùng giọng tiếng Việt có sẵn trên máy (Cài đặt iPhone > Trợ năng > Nội dung được đọc > Giọng nói để tải giọng tốt hơn).")
+                }
+                Section {
                     Toggle("Tốc độ giả lập", isOn: Binding(
                         get: { model.settings.simulatedSpeedKmh != nil },
                         set: { model.settings.simulatedSpeedKmh = $0 ? 90 : nil }))
