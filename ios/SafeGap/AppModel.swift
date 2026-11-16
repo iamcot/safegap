@@ -27,6 +27,7 @@ final class AppModel: ObservableObject {
 
     let config: AppConfig
     let law: LawConfig
+    let signConfig: SignConfig
     let camera = CameraController()
     let speed = SpeedProvider()
     let motion = MotionProvider()
@@ -54,6 +55,8 @@ final class AppModel: ObservableObject {
         let law = loadJSON("law_vn", LawConfig.decode) ?? AppModel.fallbackLaw
         config = cfg
         self.law = law
+        let signConfig = loadJSON("signs_vn", SignConfig.decode) ?? SignConfig(signs: [:])
+        self.signConfig = signConfig
         let loadedSettings = UserSettings.load()
         settings = loadedSettings
 
@@ -63,7 +66,7 @@ final class AppModel: ObservableObject {
         errorMessage = loadError
 
         processor = FrameProcessor(params: currentParams(), speed: speed, motion: motion, logger: logger, sound: sound,
-                                   voice: voice)
+                                   voice: voice, signConfig: signConfig)
         processor.roads = roads
         processor.onSnapshot = { [weak self] s in
             DispatchQueue.main.async { self?.snapshot = s }
@@ -166,6 +169,9 @@ final class AppModel: ObservableObject {
     }
 
     func toggleZoom() { settings.zoom2x.toggle() }
+
+    /// Giả lập "xe vừa đi qua biển" để thử luật biển báo khi chưa có model nhận biển.
+    func simulateSign(_ s: SignSighting) { processor.addSighting(s) }
 
     // MARK: hiệu chỉnh
 

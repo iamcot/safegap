@@ -116,6 +116,8 @@ struct FrameSnapshot {
     /// Số giây đã đứng yên, nil = đang chạy.
     var stoppedS: Double?
     var t: Double = 0
+    /// Biển cấm đang có hiệu lực (B5/B7).
+    var activeSigns: [ActiveSign] = []
 }
 
 final class FrameProcessor {
@@ -160,6 +162,24 @@ final class FrameProcessor {
     private var lightTracker = TrafficLightTracker()
     private let lightRules = LightAlertRules()
     let capture = DataCapture()
+    private var signs: SignEngine
+    /// Biển vừa thấy chờ xử lý ở frame sau (từ model nhận biển, hoặc nút giả lập trong Cài đặt).
+    private var pendingSightings: [SignSighting] = []
+
+    /// Gọi từ bất kỳ luồng nào: coi như xe vừa đi qua biển này.
+    func addSighting(_ s: SignSighting) {
+        lock.lock()
+        pendingSightings.append(s)
+        lock.unlock()
+    }
+
+    private func takeSightings() -> [SignSighting] {
+        lock.lock()
+        defer { lock.unlock() }
+        let out = pendingSightings
+        pendingSightings.removeAll()
+        return out
+    }
     static let trafficLightClass = "traffic light"
     private var thermalLevel: ThermalLevel = .nominal
     private var laneTracker = LaneTracker()
@@ -192,8 +212,9 @@ final class FrameProcessor {
     private var roadAhead: (ahead: RoadAhead, t: Double, travelled: Double, lastT: Double)?
 
     init(params: Params, speed: SpeedProvider, motion: MotionProvider, logger: CSVLogger, sound: AlertSound,
-         voice: VoiceAlerts) {
+         voice: VoiceAlerts, signConfig: SignConfig) {
         self.params = params
+        self.signs = SignEngine(config: signConfig)
         self.voice = voice
         self.speed = speed
         self.motion = motion
@@ -417,6 +438,20 @@ final class FrameProcessor {
         } else {
             lightTracker.reset()
         }
+        // Biển báo (B5/B6): luật hiệu lực theo QCVN 41 (config/signs_vn.json), cảnh báo sắp vi phạm.
+        let cal = Calendar.current.dateComponents([.hour, .minute, .day], from: Date())
+        let minuteOfDay = (cal.hour ?? 12) * 60 + (cal.minute ?? 0), day = cal.day ?? 1
+        var signMsgs: [VoiceMessage] = []
+        for sg in takeSightings() {
+            signMsgs += signs.sighted(sg, odometer: odo, t: t, minuteOfDay: minuteOfDay, dayOfMonth: day)
+        }
+        let jam = (r.d ?? .infinity) < 8
+        signMsgs += signs.update(DriveContext(t: t, odometer: odo, minuteOfDay: minuteOfDay, dayOfMonth: day, speedKmh: v,
+                                              stoppedS: stoppedS, stopExcused: jam || lightState?.color == .red,
+                                              junctionM: junction.nextM, junctionPassed: junction.passed,
+                                              turn: turn, turning: turnDetector.turning))
+        if p.settings.voiceOn { signMsgs.forEach(voice.offer) }
+
         if p.settings.voiceOn { voice.tick(t: t) }
 
         // Thu dữ liệu (A6): ảnh + nhãn gán sẵn từ model hiện tại (xe + đèn).
@@ -471,6 +506,7 @@ final class FrameProcessor {
         s.turning = turnDetector.turning
         s.stoppedS = stoppedS
         s.t = t
+        s.activeSigns = signs.active
         onSnapshot?(s)
     }
 

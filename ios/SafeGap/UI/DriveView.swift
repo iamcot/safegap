@@ -20,7 +20,10 @@ struct DriveView: View {
             AlertGlow(level: r.level).ignoresSafeArea()
             VStack(spacing: 0) {
                 HStack(alignment: .top) {
-                    SpeedBlock(snapshot: s, pal: pal)
+                    VStack(alignment: .leading, spacing: 8) {
+                        SpeedBlock(snapshot: s, pal: pal)
+                        if !s.activeSigns.isEmpty { SignIconsRow(signs: s.activeSigns) }
+                    }
                     Spacer()
                     controls(pal)
                 }

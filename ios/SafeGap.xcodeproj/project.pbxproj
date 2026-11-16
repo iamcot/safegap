@@ -10,12 +10,14 @@
 		5AFE0000000000000000B001 /* SafeGapCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5AFE0000000000000000D001 /* SafeGapCore */; };
 		5AFE0000000000000000B002 /* default.json in Resources */ = {isa = PBXBuildFile; fileRef = 5AFE0000000000000000F002 /* default.json */; };
 		5AFE0000000000000000B003 /* law_vn.json in Resources */ = {isa = PBXBuildFile; fileRef = 5AFE0000000000000000F003 /* law_vn.json */; };
+		5AFE0000000000000000B004 /* signs_vn.json in Resources */ = {isa = PBXBuildFile; fileRef = 5AFE0000000000000000F004 /* signs_vn.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		5AFE0000000000000000F001 /* SafeGap.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SafeGap.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5AFE0000000000000000F002 /* default.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = default.json; path = ../config/default.json; sourceTree = SOURCE_ROOT; };
 		5AFE0000000000000000F003 /* law_vn.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = law_vn.json; path = ../config/law_vn.json; sourceTree = SOURCE_ROOT; };
+		5AFE0000000000000000F004 /* signs_vn.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = signs_vn.json; path = ../config/signs_vn.json; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -52,6 +54,7 @@
 			children = (
 				5AFE0000000000000000F002 /* default.json */,
 				5AFE0000000000000000F003 /* law_vn.json */,
+				5AFE0000000000000000F004 /* signs_vn.json */,
 			);
 			name = Config;
 			sourceTree = "<group>";
@@ -135,6 +138,7 @@
 			files = (
 				5AFE0000000000000000B002 /* default.json in Resources */,
 				5AFE0000000000000000B003 /* law_vn.json in Resources */,
+				5AFE0000000000000000B004 /* signs_vn.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

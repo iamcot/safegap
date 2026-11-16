@@ -1,0 +1,32 @@
+{
+  "source": "QCVN 41:2024/BGTVT, Điều 26 (vị trí đặt biển báo cấm theo chiều đi và hướng hiệu lực)",
+  "note": "scope: entry = cấm đi vào đoạn đường phía sau biển (P.101–P.120, không có phạm vi / biển hết cấm, khoản 26.3); atJunction = chỉ có hiệu lực tại nơi giao nhau đặt biển (P.123, P.124, khoản 26.6–26.7); untilJunction = tới nơi đường giao nhau tiếp giáp hoặc biển hết cấm (P.125–P.127, P.130, P.131, khoản 26.8); distance = tới hết cự ly ghi trên biển phụ S.501 (P.121, P.128, khoản 26.5). Giao với ngõ, ngách, hẻm không làm hết hiệu lực (khoản 26.9). S.508 = khung giờ, S.501 = cự ly.",
+  "signs": {
+    "P.102":  {"name": "Cấm đi ngược chiều", "scope": "entry", "say": "Đường cấm đi ngược chiều"},
+    "P.103a": {"name": "Cấm xe ô tô", "scope": "entry", "vehicle": "car", "say": "Đường cấm ô tô"},
+    "P.106a": {"name": "Cấm xe tải", "scope": "entry", "vehicle": "truck", "say": "Đường cấm xe tải"},
+    "P.123a": {"name": "Cấm rẽ trái", "scope": "atJunction", "forbidTurns": ["left"]},
+    "P.123b": {"name": "Cấm rẽ phải", "scope": "atJunction", "forbidTurns": ["right"]},
+    "P.124a": {"name": "Cấm quay đầu xe", "scope": "atJunction", "forbidTurns": ["uturn"]},
+    "P.124c": {"name": "Cấm rẽ trái và quay đầu xe", "scope": "atJunction", "forbidTurns": ["left", "uturn"]},
+    "P.127":  {"name": "Tốc độ tối đa cho phép", "scope": "untilJunction", "speedLimit": true},
+    "P.130":  {"name": "Cấm dừng xe và đỗ xe", "scope": "untilJunction", "noStop": true},
+    "P.131a": {"name": "Cấm đỗ xe", "scope": "untilJunction", "noPark": true},
+    "P.131b": {"name": "Cấm đỗ xe ngày lẻ", "scope": "untilJunction", "noPark": true, "parity": "odd"},
+    "P.131c": {"name": "Cấm đỗ xe ngày chẵn", "scope": "untilJunction", "noPark": true, "parity": "even"},
+    "DP.134": {"name": "Hết tốc độ tối đa cho phép", "scope": "end", "ends": ["P.127"]},
+    "DP.135": {"name": "Hết tất cả các lệnh cấm", "scope": "end", "ends": ["*"]}
+  },
+  "alerts": {
+    "noStopAfterS": 3,
+    "noParkAfterS": 60,
+    "turnReminderM": 80,
+    "turnWarnM": 40,
+    "speedMarginKmh": 3,
+    "speedHoldS": 3,
+    "sameSignM": 30,
+    "minAfterSignM": 15,
+    "safetyExpireNoMapM": 1500,
+    "safetyExpireM": 5000
+  }
+}

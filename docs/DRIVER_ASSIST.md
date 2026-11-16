@@ -20,6 +20,9 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
 
 ## Quy ước code
 
+- **Push thẳng lên `main`** (chủ app chốt 16/11/2026: không tạo PR mỗi phiên, chủ app chỉ `git pull` main để test).
+  Sau khi push xem CI (`iOS`, `Python prototype`); đỏ thì sửa ngay bằng commit tiếp theo.
+
 - Logic thuần (luật, sự kiện đường, lịch chạy model, chính sách giọng nói) viết trong `ios/SafeGapCore`
   (chỉ Foundation, có test, CI chạy `swift test` trên Linux). Phần dính iOS (AVFoundation, Vision, CoreMotion) ở `ios/SafeGap`.
 - Ngưỡng / luật / câu nói để trong `config/*.json`, không hard-code (giống `law_vn.json`).
@@ -28,7 +31,7 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
   1-1 sang Kotlin; tham số / luật / câu nói để trong `config/*.json` dùng chung; model export từ cùng `.pt` (Core ML + TFLite).
 - Không có Swift trên máy Linux của Claude: kiểm tra bằng CI của PR (`core-linux` + `app-build` macOS).
 
-## Giai đoạn A – Nền tảng (đang làm)
+## Giai đoạn A – Nền tảng (xong phần code, còn đo trên xe)
 
 - [x] A0. File tiến độ này.
 - [x] A1. `Odometer`, `StopDetector`, `TurnDetector`, `JunctionTracker` (`SafeGapCore/RoadEvents.swift`) + test.
@@ -56,20 +59,30 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
       1 chuyến đi làm. Ghi số đo vào mục "Ghi chú đo đạc" dưới đây.
 - [ ] A8. Thêm cột vào log CSV: `light`, `junction_m`, `turn`, `stopped_s` (cập nhật `proto/` nếu cần đọc).
 
-## Giai đoạn B – Biển báo lõi
+## Giai đoạn B – Biển báo lõi (đang làm: luật xong, chờ dữ liệu để train model)
 
-- [ ] B1. Đối chiếu QCVN 41:2024/BGTVT: phạm vi hiệu lực biển cấm (tới nơi giao nhau / biển hết cấm), biển P.127,
-      bên đường áp dụng của P.130/P.131; "giao nhau" có tính hẻm không. Viết `config/signs_vn.json`.
+- [x] B1. Luật theo QCVN 41:2024/BGTVT Điều 26 (đã đọc: https://hethongphapluat.com/quy-chuan-ky-thuat-quoc-gia-qcvn-41-2024-bgtvt-ve-bao-hieu-duong-bo/dieu-26)
+      → `config/signs_vn.json` (đã thêm vào Resources của Xcode project). Tóm tắt: P.101–P.120 không có phạm vi / biển hết
+      cấm (`entry`); P.123 chỉ tại khu vực đặt biển, P.124 tại nơi giao nhau / chỗ mở dải phân cách (`atJunction`);
+      P.125–P.127, P.130, P.131 tới nơi đường giao nhau tiếp giáp hoặc biển hết cấm DP.133/134/135 (`untilJunction`);
+      P.121, P.128 tới hết cự ly S.501 (`distance`); giao với ngõ, ngách, hẻm **không** làm hết hiệu lực (26.9).
+- [ ] B1b. Ngã tư từ OSM đang tính cả đường `residential`/`unclassified` (có thể là hẻm). Thêm lọc: chỉ tính nút có
+      nhánh cấp ≥ tertiary, hoặc đường nhánh có tên/rộng; kiểm tra trên log tuyến đi làm.
 - [ ] B2. Dataset: Zalo AI 2020 + bộ VN trên Roboflow/Kaggle + Mapillary (pretrain) + ảnh tự thu (A6) + ảnh tổng hợp
       từ hình mẫu QCVN. Lớp dò theo hình dạng (tròn đỏ, tròn xanh, tam giác, chữ nhật) + lớp `traffic_light`.
 - [ ] B3. Train dò biển (YOLO11n, vùng cắt 640×360) trên Mac M5, export Core ML, chạy 4 lượt/giây xen kẽ 2 vùng cắt
       qua `InferenceScheduler` (task `signsLights`). Đo nhiệt.
 - [ ] B4. Classifier ~12–40 loại biển (64×64), bỏ phiếu ≥ 3 lần; tracker biển; lọc biển trên thân xe / mặt nghiêng.
-- [ ] B5. `SignRules` + `ActiveRestriction` trong SafeGapCore: hiệu lực từ lúc đi qua biển (odometer), hết khi
-      qua ngã tư (`JunctionTracker` / rẽ), biển hết cấm, biển cùng loại mới, S.501, hết hạn an toàn 1,5 km.
-- [ ] B6. Cảnh báo: cấm dừng đỗ (đứng ≥ 3 s, không phải kẹt xe / đèn đỏ), cấm đỗ (≥ 60 s), cấm rẽ/quay đầu
-      (nhắc ~80 m trước ngã tư, cảnh báo mạnh khi có dấu hiệu rẽ), tốc độ, cấm ô tô theo giờ (S.508 + OCR).
-- [ ] B7. Màn lái: hàng icon biển đang hiệu lực + "hết hiệu lực ở ngã tư cách X m". Chạy 1 tuần chỉ hiển thị rồi mới bật giọng.
+- [x] B5. `SignEngine` (`SafeGapCore/Signs.swift`) + test `SignTests.swift` (đọc thẳng `config/signs_vn.json`):
+      hiệu lực từ lúc đi qua biển (odometer), hết khi qua ngã tư (bỏ qua ngã tư ngay sau lưng biển < 15 m), khi rẽ,
+      biển hết cấm, biển cùng loại mới (tốc độ 50 → 40), S.501, hết hạn an toàn 1,5 km (không bản đồ) / 5 km.
+      Khung giờ S.508 (`TimeWindow`, qua nửa đêm được), ngày chẵn/lẻ (P.131b/c), loại xe (P.103a/P.106a).
+- [x] B6. Cảnh báo: cấm dừng đỗ (đứng ≥ 3 s, trừ kẹt xe: xe trước < 8 m, hoặc đèn đỏ), cấm đỗ (≥ 60 s), cấm rẽ /
+      quay đầu (nhắc ≤ 80 m trước ngã tư; "Cấm rẽ trái!" khi đang rẽ và ngã tư < 40 m), quá tốc độ (> giới hạn + 3 km/h
+      trong 3 s), biển cấm đi vào nói ngay khi thấy (kèm khung giờ). Còn thiếu: đọc S.508 / S.501 bằng OCR (cần model B3/B4).
+- [x] B7. Hàng icon biển trên màn lái dưới số tốc độ (`UI/SignIconsView.swift`, vẽ kiểu biển thật, mờ khi ngoài khung giờ).
+      Cài đặt > "Giả lập biển báo": nút "vừa đi qua biển" để thử luật khi chưa có model. Chưa có "hết hiệu lực ở ngã tư X m".
+      Model nhận biển chỉ cần gọi `FrameProcessor.addSighting(SignSighting(...))`.
 - [ ] B8. Bản đồ biển tự học trên tuyến quen: lưu biển đã xác nhận theo GPS + hướng, lần sau nhắc dù model bỏ sót.
 
 ## Giai đoạn C – Đèn giao thông đầy đủ
@@ -100,4 +113,5 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
 
 ## Lịch sử PR
 
-- A0–A6: nhánh `claude/project-thread-of9yun` (PR "Hỗ trợ tài xế: nền tảng giai đoạn A").
+- A0–A6: PR #5 (đã merge). Từ giai đoạn B: commit thẳng lên main.
+- B1, B5, B6, B7: commit trên main 16/11/2026.
