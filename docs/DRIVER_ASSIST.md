@@ -21,6 +21,7 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
 ## Quy ước code
 
 - **Push thẳng lên `main`** (chủ app chốt 16/11/2026: không tạo PR mỗi phiên, chủ app chỉ `git pull` main để test).
+  Lệnh mới cho chủ app (train, export, công cụ) thì ghi thêm vào `docs/COMMANDS.md`.
   Sau khi push xem CI `core-linux` (test lõi Swift) và `Python prototype`; đỏ thì sửa ngay. Job `app-build` (macOS) hay bị huỷ
   vì chờ máy: không cần chờ, chủ app tự build bằng Xcode trên máy mình (16/11/2026).
 

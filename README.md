@@ -2,6 +2,9 @@
 
 Cảnh báo khoảng cách an toàn trên cao tốc bằng camera iPhone. Kế hoạch chi tiết: [SafeGap.md](SafeGap.md).
 
+**Câu lệnh cần biết** (gán nhãn, train, export model, test): [docs/COMMANDS.md](docs/COMMANDS.md).
+Tiến độ tính năng hỗ trợ tài xế: [docs/DRIVER_ASSIST.md](docs/DRIVER_ASSIST.md).
+
 ## Prototype Python (Phase 1)
 
 Dùng [uv](https://docs.astral.sh/uv/): **không cần cài Python**, uv tự tải Python 3.11 và cài thư viện
