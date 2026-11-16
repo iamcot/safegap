@@ -4,7 +4,7 @@ import XCTest
 final class SignDetectionTests: XCTestCase {
     let W = 1920.0, H = 1080.0
 
-    func sign(_ g: SignGroup, _ x: Double, _ y: Double = 300, size: Double = 30, conf: Double = 0.7) -> Detection {
+    func sign(_ g: SignGroup, _ x: Double, y: Double = 300, size: Double = 30, conf: Double = 0.7) -> Detection {
         Detection(x, y, x + size, y + size, g.rawValue, conf)
     }
 
