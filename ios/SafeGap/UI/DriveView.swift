@@ -483,6 +483,12 @@ private struct RoadCanvas: View {
             out.append(Car(pos: Ground(x: xDraw, z: z), widthM: wReal, heightM: isCar ? 1.45 : 3.0, lengthM: isCar ? 4.5 : 9.0,
                            kind: isEgo ? .target : (i < s.oncoming.count && s.oncoming[i] ? .oncoming : .other)))
         }
+        // model lỡ mất xe trước vài frame nhưng app vẫn đang giữ (D dự đoán): vẫn vẽ xe ở giữa làn, khỏi nhấp nháy
+        if !out.contains(where: { $0.kind == .target }), let d = s.result.d, d > 1, let cls = s.result.cls {
+            let isCar = cls == "car"
+            out.append(Car(pos: Ground(x: centerX(d), z: d), widthM: config.vehicleWidthM[cls] ?? 1.8,
+                           heightM: isCar ? 1.45 : 3.0, lengthM: isCar ? 4.5 : 9.0, kind: .target))
+        }
         return out
     }
 }

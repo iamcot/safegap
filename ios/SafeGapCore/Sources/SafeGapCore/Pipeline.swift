@@ -42,6 +42,10 @@ public final class Pipeline {
     public let alert: AlertState
     /// Track bị loại khỏi việc chọn xe phía trước (xe ngược chiều). Rỗng thì giống hệt bản Python.
     public var excludedTracks: Set<Int> = []
+    /// Chỉ có ở bản Swift: model lỡ mất xe phía trước vài frame (ban đêm hay bị) thì vẫn giữ xe đó thêm tối đa
+    /// bao nhiêu giây, D dự đoán theo Kalman. 0 = tắt (giống hệt bản Python).
+    public var coastS = 0.0
+    private var lastEgo: (tid: Int, t: Double, box: Box, cls: String)?
     private var lastT: Double?
 
     public init(config cfg: AppConfig, law: LawConfig, frameWidth: Double, frameHeight: Double) {
@@ -91,7 +95,15 @@ public final class Pipeline {
                 r.trackId = tid
                 r.egoBox = ego.box
                 r.d = tracker.updateDistance(tid: tid, dMeas: dRaw, dt: dt)
+                lastEgo = (tid, t, ego.box, ego.cls)
             }
+        }
+        if r.d == nil, coastS > 0, let le = lastEgo, t - le.t <= coastS, !excludedTracks.contains(le.tid),
+           let tr = tracker.tracks[le.tid], tr.missed > 0, let d = tracker.coastDistance(tid: le.tid, dt: dt) {
+            r.d = d
+            r.cls = le.cls
+            r.trackId = le.tid
+            r.egoBox = le.box
         }
         let (level, sound) = alert.update(t: t, speedKmh: speedKmh, distanceM: r.d)
         r.level = level

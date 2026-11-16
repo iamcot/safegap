@@ -24,7 +24,14 @@ final class YOLODetector {
         let cfg = MLModelConfiguration()
         cfg.computeUnits = .cpuAndNeuralEngine  // Neural Engine: ít tốn điện / ít nóng hơn GPU
         let ml = try MLModel(contentsOf: url, configuration: cfg)
-        request = VNCoreMLRequest(model: try VNCoreMLModel(for: ml))
+        let vn = try VNCoreMLModel(for: ml)
+        // Model export nms=True có sẵn ngưỡng tin cậy 0,25 bên trong: hạ xuống 0,15 để ban đêm còn thấy xe tối màu,
+        // còn lọc thật sự theo minConf ở dưới (ngày 0,35, đêm 0,2).
+        let inputs = ml.modelDescription.inputDescriptionsByName
+        if inputs["confidenceThreshold"] != nil {
+            vn.featureProvider = NMSThresholds(confidence: 0.15, iou: inputs["iouThreshold"] != nil ? 0.45 : nil)
+        }
+        request = VNCoreMLRequest(model: vn)
         // Model export với imgsz 384x640 (gần 16:9) nên scaleFill gần như không méo ảnh
         request.imageCropAndScaleOption = .scaleFill
         modelName = url.deletingPathExtension().lastPathComponent
@@ -46,4 +53,16 @@ final class YOLODetector {
         }
         return out
     }
+}
+
+/// Giá trị cho các input ngưỡng của model YOLO có NMS (Vision tự lấy ảnh, các input còn lại lấy ở đây).
+private final class NMSThresholds: NSObject, MLFeatureProvider {
+    let values: [String: MLFeatureValue]
+    init(confidence: Double, iou: Double?) {
+        var v = ["confidenceThreshold": MLFeatureValue(double: confidence)]
+        if let iou { v["iouThreshold"] = MLFeatureValue(double: iou) }
+        values = v
+    }
+    var featureNames: Set<String> { Set(values.keys) }
+    func featureValue(for name: String) -> MLFeatureValue? { values[name] }
 }

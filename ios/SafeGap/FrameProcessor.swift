@@ -210,6 +210,7 @@ final class FrameProcessor {
             cfg.alert.manualDMinM = p.settings.manualDMinM
             if let m = p.settings.minSpeedKmh { cfg.alert.minSpeedKmh = m }
             pipeline = Pipeline(config: cfg, law: p.law, frameWidth: w, frameHeight: h)
+            pipeline.coastS = 0.5
             pipelineVersion = p.version
             pipelineW = w
             pipelineH = h
@@ -283,12 +284,14 @@ final class FrameProcessor {
         }
         pipeline.roi = Lane.roiToPixels(roiNorm, width: w, height: h)
 
+        updateNight(pb)
         let t0 = CACurrentMediaTime()
         var dets: [Detection] = []
         if let detector {
             do {
                 dets = try detector.detect(pb, frameWidth: w, frameHeight: h,
-                                           classes: Set(p.config.detection.classes), minConf: p.config.detection.minConf)
+                                           classes: Set(p.config.detection.classes),
+                                           minConf: night ? min(p.config.detection.minConf, Self.nightMinConf) : p.config.detection.minConf)
             } catch {
                 detectorError = error.localizedDescription
             }
@@ -390,6 +393,34 @@ final class FrameProcessor {
     }
 
     /// Kênh sáng (Y) của buffer 420 thu nhỏ về chiều rộng outWidth, để tìm vạch làn.
+    /// Ban đêm (ảnh tối): hạ ngưỡng tin cậy của YOLO vì xe tối màu chỉ còn được ~0,2–0,3; tracker lọc box chập chờn.
+    static let nightMinConf = 0.2
+    private var lumaEMA: Double?
+    private(set) var night = false
+
+    /// Độ sáng trung bình (0..255) của kênh Y, lấy mẫu thưa.
+    static func meanLuma(_ pb: CVPixelBuffer) -> Double? {
+        CVPixelBufferLockBaseAddress(pb, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
+        guard CVPixelBufferGetPlaneCount(pb) >= 1, let base = CVPixelBufferGetBaseAddressOfPlane(pb, 0) else { return nil }
+        let w = CVPixelBufferGetWidthOfPlane(pb, 0), h = CVPixelBufferGetHeightOfPlane(pb, 0)
+        let bpr = CVPixelBufferGetBytesPerRowOfPlane(pb, 0)
+        guard w > 0, h > 0 else { return nil }
+        let src = base.assumingMemoryBound(to: UInt8.self)
+        var sum = 0, n = 0
+        for y in stride(from: h / 20, to: h, by: max(1, h / 20)) {
+            for x in stride(from: w / 40, to: w, by: max(1, w / 40)) { sum += Int(src[y * bpr + x]); n += 1 }
+        }
+        return n > 0 ? Double(sum) / Double(n) : nil
+    }
+
+    private func updateNight(_ pb: CVPixelBuffer) {
+        guard let l = Self.meanLuma(pb) else { return }
+        let e = lumaEMA.map { 0.97 * $0 + 0.03 * l } ?? l
+        lumaEMA = e
+        if night { if e > 80 { night = false } } else if e < 60 { night = true }
+    }
+
     static func gray(_ pb: CVPixelBuffer, outWidth: Int = 320) -> GrayImage? {
         CVPixelBufferLockBaseAddress(pb, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }

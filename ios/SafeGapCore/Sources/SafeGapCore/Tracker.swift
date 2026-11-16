@@ -132,6 +132,15 @@ public final class IoUTracker {
         return assigned.map { $0! }
     }
 
+    /// Frame không thấy xe: chỉ dự đoán D của track tid theo Kalman (vận tốc tương đối giữ nguyên). nil nếu track chưa có D.
+    public func coastDistance(tid: Int, dt: Double) -> Double? {
+        guard var t = tracks[tid], var kf = t.kf else { return nil }
+        kf.predict(dt: dt)
+        t.kf = kf
+        tracks[tid] = t
+        return kf.distance
+    }
+
     /// Lọc D đo được của track tid, trả về D đã làm mượt.
     public func updateDistance(tid: Int, dMeas: Double, dt: Double) -> Double {
         guard var t = tracks[tid] else { return dMeas }
