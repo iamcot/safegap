@@ -48,7 +48,7 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
       Mỗi phiên `Documents/captures/capture_<giờ>/`: `images/*.jpg` (frame 1920×1080), `labels/*.txt` (YOLO, gán sẵn
       bằng model hiện tại), `classes.txt` (thứ tự `YOLOLabel.classes`, lớp mới thêm vào CUỐI), `meta.jsonl`
       (giờ, GPS, hướng, tốc độ, màu đèn, nhiệt). Nút ZIP + chia sẻ trong Cài đặt.
-      Chưa làm mờ biển số (chưa có model dò biển số; app dùng cá nhân, ảnh chỉ ở trên máy tới khi tự chia sẻ).
+      Không làm mờ biển số: chủ app chốt ảnh lưu cá nhân, giữ nguyên để sau này có dữ liệu train cả biển số.
 - [ ] A7. Đo trên xe: fps / nhiệt 30 phút ban ngày khi bật đèn giao thông; kiểm tra rẽ / ngã tư / đứng yên trên log
       1 chuyến đi làm. Ghi số đo vào mục "Ghi chú đo đạc" dưới đây.
 - [ ] A8. Thêm cột vào log CSV: `light`, `junction_m`, `turn`, `stopped_s` (cập nhật `proto/` nếu cần đọc).
