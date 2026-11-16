@@ -45,10 +45,11 @@ struct SettingsView: View {
                     if let url = model.logURL {
                         Text(url.lastPathComponent).font(.caption).monospaced()
                     }
+                    LogFilesList()
                 } header: {
                     Text("Log")
                 } footer: {
-                    Text("Mở app Tệp > Trên iPhone > SafeGap > logs. Cột giống CSV của proto/run_video.py nên chạy được proto.eval.")
+                    Text("Bấm nút chia sẻ cạnh từng file để gửi (Zalo, AirDrop, Lưu vào Tệp...). Hoặc mở app Tệp > Trên iPhone > SafeGap > logs.")
                 }
                 Section {
                     Toggle("Chạy mát (15 fps)", isOn: $model.settings.coolMode)
@@ -126,5 +127,40 @@ private struct RoadStatusRow: View {
             }
         }
         .font(.callout)
+    }
+}
+
+
+/// Danh sách file log CSV, mới nhất trước, mỗi file có nút chia sẻ.
+private struct LogFilesList: View {
+    @State private var files: [(url: URL, size: Int)] = []
+
+    var body: some View {
+        Group {
+            if files.isEmpty {
+                Text("Chưa có file log").font(.caption).foregroundStyle(.secondary)
+            }
+            ForEach(files, id: \.url) { f in
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text(f.url.lastPathComponent).font(.caption).monospaced()
+                        Text(ByteCountFormatter.string(fromByteCount: Int64(f.size), countStyle: .file))
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    ShareLink(item: f.url) { Image(systemName: "square.and.arrow.up") }
+                }
+            }
+        }
+        .onAppear(perform: reload)
+    }
+
+    private func reload() {
+        let urls = (try? FileManager.default.contentsOfDirectory(
+            at: CSVLogger.logsDirectory, includingPropertiesForKeys: [.fileSizeKey])) ?? []
+        files = urls.filter { $0.pathExtension == "csv" }
+            .sorted { $0.lastPathComponent > $1.lastPathComponent }
+            .prefix(10)
+            .map { ($0, (try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
     }
 }
