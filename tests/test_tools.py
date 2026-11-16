@@ -161,3 +161,42 @@ def test_dataset_import_roboflow_and_sign_groups(tmp_path):
     D.split(ds / "signs")
     val = (ds / "signs" / "val.txt").read_text()
     assert "rf__valid__a_valid.jpg" in val and "rf__train__a_train.jpg" not in val
+
+
+def test_labeler_summarize_training_log(tmp_path):
+    from proto.labeler import summarize_log
+
+    run = tmp_path / "runs" / "signs_x"
+    run.mkdir(parents=True)
+    (run / "results.csv").write_text("epoch,time,train/box_loss,metrics/precision(B),metrics/recall(B),metrics/mAP50(B)\n"
+                                     "1,300,1.9,0.3,0.2,0.21\n2,600,1.5,0.4,0.3,0.35\n")
+    log = (f"Logging results to \x1b[1m{run}\x1b[0m\nStarting training for 80 epochs...\n"
+           "\x1b[K       3/80      9.36G      1.445      1.429     0.9278         39       1280: 37% ━━━━╸─── 151/401 1.7it/s 1:34<2:31\r"
+           "\x1b[K       4/80      9.36G      1.436      1.253     0.9092         37       1280: 13% ━─── 54/401 1.7it/s 33.5s<3:29\n")
+    s = summarize_log(log, started=1000.0, now=1000.0 + 900)
+    assert (s["epoch"], s["epochs"], s["step"], s["steps"]) == (4, 80, 54, 401)
+    assert abs(s["progress"] - (3 + 54 / 401) / 80) < 1e-3
+    assert 20000 < s["eta_s"] < 23000
+    assert s["map50"] == [0.21, 0.35] and s["best_map50"] == 0.35
+    done = summarize_log(log + "Xong. Export: ./scripts/export_coreml.sh /x/best.pt signs 736,1280\n")
+    assert done["stage"] == "done" and done["export"].endswith("signs 736,1280")
+
+
+def test_labeler_train_job_survives_in_files(tmp_path):
+    import time as _t
+    from fastapi.testclient import TestClient
+    from proto.viewer import create_app
+
+    ds = tmp_path / "ds"
+    _session(ds / "inbox", "capture_y", ["car"], {"0000010_00": "0 0.5 0.5 0.2 0.2\n"}, reviewed=True)
+    c = TestClient(create_app(make_detector=lambda: None, out_dir=tmp_path / "out", label_dir=ds))
+    assert c.post("/api/label/train", json={"merge_only": True}).json() == {"started": True}
+    for _ in range(100):
+        r = c.get("/api/label/train").json()
+        if not r["running"]:
+            break
+        _t.sleep(0.1)
+    assert r["code"] == 0 and "1 phiên" in r["log"]
+    # viewer mới (khởi động lại) vẫn đọc được trạng thái từ file
+    c2 = TestClient(create_app(make_detector=lambda: None, out_dir=tmp_path / "out", label_dir=ds))
+    assert c2.get("/api/label/train").json()["code"] == 0

@@ -34,6 +34,12 @@
   .cls i { width:10px; height:10px; border-radius:2px; flex:none; } .cls kbd { margin-left:auto; color:var(--muted); font-size:11px; }
   .cls small { color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   pre { background:#0d1014; border:1px solid var(--line); border-radius:4px; padding:6px; font-size:11px; max-height:220px; overflow:auto; white-space:pre-wrap; }
+  .train { margin-top:8px; background:#0d1014; border:1px solid var(--line); border-radius:6px; padding:8px; }
+  .train .tl { font-weight:600; margin-bottom:6px; }
+  .pbar { height:8px; background:#252b33; border-radius:4px; overflow:hidden; margin-bottom:4px; }
+  .pbar i { display:block; height:100%; width:0; background:var(--accent); transition:width .5s; }
+  #mapChart { width:100%; height:60px; margin-top:8px; background:#111418; border-radius:4px; }
+  .train pre { max-height:160px; }
   .drop { border:1px dashed var(--line); border-radius:6px; padding:10px; text-align:center; color:var(--muted); font-size:12px; }
   .drop.over { border-color:var(--accent); color:var(--text); }
   kbd { font:11px ui-monospace,monospace; background:#252b33; border:1px solid var(--line); border-radius:3px; padding:0 4px; }
@@ -54,7 +60,14 @@
       <label class="hint" style="flex:2">Từ model <input type="text" id="model" value="yolo11n.pt"></label></div>
     <label class="hint" style="display:block;margin-top:6px">Model <select id="task"><option value="drive">Xe + đèn (lớp app)</option><option value="signs">Dò biển (nhóm biển, gồm bộ Roboflow đã nhập)</option></select></label>
     <div class="bar" style="margin-top:6px"><button id="mergeBtn">Chỉ gộp</button><button class="primary" id="trainBtn">Gộp + Train</button></div>
-    <pre id="log" hidden></pre>
+    <div id="trainBox" class="train" hidden>
+      <div id="trainHead" class="tl"></div>
+      <div class="pbar"><i id="trainBar"></i></div>
+      <div id="trainSub" class="hint"></div>
+      <svg id="mapChart" viewBox="0 0 200 60" preserveAspectRatio="none" hidden></svg>
+      <div id="mapNote" class="hint"></div>
+      <details><summary class="hint">Log chi tiết</summary><pre id="log"></pre></details>
+    </div>
   </aside>
   <main>
     <div class="bar">
@@ -312,16 +325,51 @@ drop.ondrop = async e => {
 async function startTrain(mergeOnly) {
   await saveIfDirty();
   try { await post('/api/label/train', { epochs: +$('epochs').value || 80, model: $('model').value || 'yolo11n.pt', merge_only: mergeOnly, task: $('task').value }); }
-  catch (err) { $('log').hidden = false; $('log').textContent = err.message; return; }
+  catch (err) { $('trainBox').hidden = false; $('trainHead').textContent = '✗ ' + err.message; return; }
   pollTrain();
 }
+function fmtDur(s) {
+  const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
+  return h ? `${h} giờ ${m} phút` : `${m} phút`;
+}
 async function pollTrain() {
-  const r = await api('/api/label/train');
-  const log = $('log');
-  if (r.log || r.running) { log.hidden = false; log.textContent = r.log || '…'; log.scrollTop = log.scrollHeight; }
+  let r; try { r = await api('/api/label/train'); } catch { return; }
+  const sm = r.summary || {};
+  const box = $('trainBox');
   $('trainBtn').disabled = $('mergeBtn').disabled = r.running;
-  if (r.running) setTimeout(pollTrain, 2000);
-  else if (r.code != null) log.textContent += r.code === 0 ? '\n✓ Xong' : `\n✗ Lỗi (mã ${r.code})`;
+  if (!r.running && r.code == null) { box.hidden = true; return; }
+  box.hidden = false;
+  let head, sub = '', pct = 0;
+  if (sm.stage === 'train') {
+    pct = sm.progress * 100;
+    head = `Đang train: epoch ${sm.epoch}/${sm.epochs} · ${pct.toFixed(1)}%`;
+    if (sm.eta_s != null) {
+      const done = new Date(Date.now() + sm.eta_s * 1000);
+      sub = `Còn khoảng ${fmtDur(sm.eta_s)}, xong lúc ${done.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+    }
+  } else head = r.running ? 'Đang gộp ảnh / chuẩn bị…' : '';
+  if (!r.running) {
+    pct = r.code === 0 ? 100 : pct;
+    head = r.code === 0 ? '✓ Train xong' : `✗ Dừng vì lỗi (mã ${r.code}), mở "Log chi tiết" để xem`;
+    sub = sm.export ? 'Đưa vào app: ' + sm.export : '';
+  }
+  $('trainHead').textContent = head; $('trainSub').textContent = sub;
+  $('trainBar').style.width = pct + '%';
+  // mAP50 theo epoch: điểm "bài kiểm tra" 0..1, càng cao càng bắt đúng
+  const mp = sm.map50 || [], ch = $('mapChart');
+  if (mp.length) {
+    const n = Math.max(mp.length, sm.epochs || mp.length), mx = Math.max(0.05, ...mp);
+    const pts = mp.map((v, i) => `${(i / Math.max(1, n - 1)) * 200},${58 - (v / mx) * 54}`).join(' ');
+    ch.innerHTML = `<polyline points="${pts}" fill="none" stroke="#2ecc40" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+    ch.hidden = false;
+    const last = mp[mp.length - 1], best = sm.best_map50;
+    const verdict = best >= 0.6 ? 'tốt' : best >= 0.4 ? 'khá, dùng thử được' : best >= 0.2 ? 'đang học' : 'mới bắt đầu';
+    $('mapNote').textContent = `Điểm kiểm tra mAP50: lần cuối ${last.toFixed(2)}, cao nhất ${best.toFixed(2)} (${verdict})`;
+  } else { ch.hidden = true; $('mapNote').textContent = sm.stage === 'train' ? 'Điểm kiểm tra (mAP50) hiện sau mỗi epoch.' : ''; }
+  const log = $('log'), atEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 20;
+  log.textContent = r.log || '';
+  if (atEnd) log.scrollTop = log.scrollHeight;
+  if (r.running) setTimeout(pollTrain, 3000);
 }
 $('trainBtn').onclick = () => startTrain(false);
 $('mergeBtn').onclick = () => startTrain(true);

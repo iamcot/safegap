@@ -43,7 +43,9 @@ caffeinate -i uv run python -m proto.dataset train --task signs --batch 8 --name
   --model ~/safegap-dataset/signs/runs/<lần trước>/weights/best.pt
 ```
 
-Hoặc trên trang `/label`, cột trái "Train trên Mac": chọn Model rồi bấm **Gộp + Train**, log hiện ngay trên trang.
+Hoặc trên trang `/label`, cột trái "Train trên Mac": chọn Model rồi bấm **Gộp + Train**. Trang hiện thanh tiến độ, giờ xong
+dự kiến và điểm mAP50 theo epoch (log gốc ở "Log chi tiết"). Train chạy tách riêng và tự giữ máy thức: refresh trang hay
+tắt / mở lại viewer đều không ảnh hưởng.
 
 Kết quả nằm ở `~/safegap-dataset/runs/<tên>/` (xe) hoặc `~/safegap-dataset/signs/runs/<tên>/` (biển).
 Xem `results.png` (mAP50 càng cao càng tốt) và `val_batch0_pred.jpg` (ảnh model đoán thử).

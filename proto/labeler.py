@@ -13,10 +13,12 @@ Lớp mới chỉ thêm vào cuối, không đổi chỉ số cũ; nhãn của p
 from __future__ import annotations
 
 import json
+import shutil
 import os
+import re
 import subprocess
 import sys
-import threading
+import time
 import zipfile
 from pathlib import Path
 from typing import Optional
@@ -91,7 +93,7 @@ class TrainReq(BaseModel):
 
 def make_router(ds_dir: Optional[Path] = None) -> APIRouter:
     r = APIRouter()
-    job: dict = {"proc": None, "log": None}
+    job: dict = {"proc": None}
 
     def ds() -> Path:
         return (ds_dir or D.dataset_dir()).expanduser()
@@ -218,12 +220,38 @@ def make_router(ds_dir: Optional[Path] = None) -> APIRouter:
         (d / D.REVIEW_FILE).write_text(json.dumps({"reviewed": sorted(done)}), encoding="utf-8")
         return {"reviewed": len(done)}
 
+    # Trạng thái train ghi ra file (<dataset>/train.log + train.json) và tiến trình train tách nhóm riêng:
+    # tắt / mở lại viewer (Ctrl+C) không giết train, mở lại trang vẫn thấy tiến độ.
+    def train_state() -> dict:
+        try:
+            return json.loads((ds() / "train.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def exit_code(text: str) -> Optional[int]:
+        m = re.search(r"__EXIT__ (\d+)", text)
+        return int(m.group(1)) if m else None
+
+    def alive(pid: Optional[int]) -> bool:
+        if not pid:
+            return False
+        try:
+            os.kill(pid, 0)
+            return True
+        except (OSError, ProcessLookupError):
+            return False
+
+    def read_log() -> str:
+        log = ds() / "train.log"
+        return log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
+
     @r.post("/api/label/train")
     def train(req: TrainReq):
-        p = job["proc"]
-        if p is not None and p.poll() is None:
+        st = train_state()
+        if alive(st.get("pid")) and exit_code(read_log()) is None:
             raise HTTPException(409, "Đang chạy rồi")
         root = ds()
+        root.mkdir(parents=True, exist_ok=True)
         log = root / "train.log"
         sessions_ = [str(x) for x in inbox().iterdir() if (x / "images").is_dir()]
         signs = req.task == "signs"
@@ -235,26 +263,80 @@ def make_router(ds_dir: Optional[Path] = None) -> APIRouter:
                if sessions_ else "true")
         if not req.merge_only:
             cmd += (f" && {_q(py)} -m proto.dataset --dataset {_q(str(root))} train"
-                    f" --task {'signs' if req.task == 'signs' else 'drive'} --epochs {int(req.epochs)}"
-                    f" --model {_q(req.model)}{' --batch 8' if signs else ''} --name {'signs' if req.task == 'signs' else 'drive'}_$(date +%Y%m%d_%H%M)")
-        fh = open(log, "w", encoding="utf-8")
-        job["proc"] = subprocess.Popen(["/bin/sh", "-c", cmd], cwd=ROOT, stdout=fh, stderr=subprocess.STDOUT,
-                                       env={**os.environ, "PYTHONUNBUFFERED": "1"})
-        job["log"] = log
-        threading.Thread(target=lambda: (job["proc"].wait(), fh.close()), daemon=True).start()
+                    f" --task {'signs' if signs else 'drive'} --epochs {int(req.epochs)}"
+                    f" --model {_q(req.model)}{' --batch 8' if signs else ''}"
+                    f" --name {'signs' if signs else 'drive'}_$(date +%Y%m%d_%H%M)")
+        # caffeinate (macOS): giữ máy không ngủ tới khi train xong
+        wrap = f"({cmd}); echo \"__EXIT__ $?\""
+        argv = ["caffeinate", "-i", "/bin/sh", "-c", wrap] if shutil.which("caffeinate") else ["/bin/sh", "-c", wrap]
+        with open(log, "w", encoding="utf-8") as fh:
+            p = subprocess.Popen(argv, cwd=ROOT, stdout=fh, stderr=subprocess.STDOUT, start_new_session=True,
+                                 env={**os.environ, "PYTHONUNBUFFERED": "1"})
+        (root / "train.json").write_text(json.dumps({"pid": p.pid, "t0": time.time(), "task": req.task}),
+                                         encoding="utf-8")
+        job["proc"] = p   # giữ để thu dọn tiến trình con khi xong
         return {"started": True}
 
     @r.get("/api/label/train")
     def train_status():
-        p, log = job["proc"], job["log"]
-        tail = ""
-        if log is not None and Path(log).exists():
-            tail = "\n".join(Path(log).read_text(encoding="utf-8", errors="replace")
-                             .replace("\r", "\n").splitlines()[-40:])
-        return {"running": p is not None and p.poll() is None,
-                "code": None if p is None else p.poll(), "log": tail}
+        if job["proc"] is not None:
+            job["proc"].poll()   # thu dọn tiến trình con đã xong (tránh zombie)
+        st = train_state()
+        text = read_log()
+        code = exit_code(text)
+        running = code is None and alive(st.get("pid"))
+        if not st and not text:
+            return {"running": False, "code": None, "log": "", "summary": {}}
+        if code is None and not running:
+            code = -1   # tiến trình mất mà không ghi mã thoát (máy khởi động lại...)
+        summary = summarize_log(text, started=st.get("t0"), now=time.time() if running else None)
+        lines = [ln for ln in _ANSI.sub("", text).replace("\r", "\n").splitlines() if not ln.startswith("__EXIT__")]
+        return {"running": running, "code": code, "log": "\n".join(lines[-30:]), "summary": summary}
 
     return r
+
+
+_ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+_EPOCH = re.compile(r"^\s*(\d+)/(\d+)\s+[\d.]+G\b.*?(\d+)/(\d+)\s", re.M)
+_RUN_DIR = re.compile(r"Logging results to (.+?)\s*$", re.M)
+
+
+def summarize_log(text: str, *, started: Optional[float] = None, now: Optional[float] = None) -> dict:
+    """Tóm tắt log Ultralytics cho người xem: epoch đang chạy, % tổng, còn bao lâu, mAP50 theo epoch (results.csv)."""
+    clean = _ANSI.sub("", text).replace("\r", "\n")
+    out: dict = {"stage": "merge" if "phiên" in clean and "Epoch" not in clean else None}
+    m = None
+    for m in _EPOCH.finditer(clean):
+        pass
+    if m:
+        ep, total, step, steps = (int(x) for x in m.groups())
+        frac = min(1.0, ((ep - 1) + step / max(1, steps)) / max(1, total))
+        out.update(stage="train", epoch=ep, epochs=total, step=step, steps=steps, progress=round(frac, 4))
+        if started and now and frac > 0.002:
+            out["eta_s"] = round((now - started) * (1 - frac) / frac)
+    rd = None
+    for rd in _RUN_DIR.finditer(clean):
+        pass
+    if rd:
+        run = Path(rd.group(1).strip())
+        out["run"] = str(run)
+        csv = run / "results.csv"
+        if csv.exists():
+            rows = [ln.split(",") for ln in csv.read_text(encoding="utf-8").splitlines()]
+            if len(rows) > 1:
+                head = [h.strip() for h in rows[0]]
+                try:
+                    i50 = head.index("metrics/mAP50(B)")
+                    ie = head.index("epoch")
+                    hist = [(int(float(r[ie])), float(r[i50])) for r in rows[1:] if len(r) > i50]
+                    out["map50"] = [round(v, 4) for _, v in hist]
+                    out["best_map50"] = max(v for _, v in hist)
+                except (ValueError, IndexError):
+                    pass
+    if "Xong. Export:" in clean:
+        out["stage"] = "done"
+        out["export"] = clean.split("Xong. Export:")[-1].strip().splitlines()[0]
+    return out
 
 
 def _q(s: str) -> str:
