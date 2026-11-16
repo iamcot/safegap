@@ -52,6 +52,7 @@
     <h2>Train trên Mac</h2>
     <div class="bar"><label class="hint" style="flex:1">Epoch <input type="number" id="epochs" value="80" min="1"></label>
       <label class="hint" style="flex:2">Từ model <input type="text" id="model" value="yolo11n.pt"></label></div>
+    <label class="hint" style="display:block;margin-top:6px">Model <select id="task"><option value="drive">Xe + đèn (lớp app)</option><option value="signs">Dò biển (nhóm biển, gồm bộ Roboflow đã nhập)</option></select></label>
     <div class="bar" style="margin-top:6px"><button id="mergeBtn">Chỉ gộp</button><button class="primary" id="trainBtn">Gộp + Train</button></div>
     <pre id="log" hidden></pre>
   </aside>
@@ -310,7 +311,7 @@ drop.ondrop = async e => {
 // ---- train ----
 async function startTrain(mergeOnly) {
   await saveIfDirty();
-  try { await post('/api/label/train', { epochs: +$('epochs').value || 80, model: $('model').value || 'yolo11n.pt', merge_only: mergeOnly }); }
+  try { await post('/api/label/train', { epochs: +$('epochs').value || 80, model: $('model').value || 'yolo11n.pt', merge_only: mergeOnly, task: $('task').value }); }
   catch (err) { $('log').hidden = false; $('log').textContent = err.message; return; }
   pollTrain();
 }

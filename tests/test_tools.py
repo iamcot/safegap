@@ -130,3 +130,34 @@ def test_labeler_api_roundtrip(tmp_path):
     lines = (ds / "labels" / "capture_x__0000010_00.txt").read_text().splitlines()
     assert [s["classes"][int(ln.split()[0])] for ln in lines] == ["truck", "P.130"]
     assert _json.loads((ds / "inbox" / "capture_x" / "review.json").read_text()) == {"reviewed": ["0000010_00"]}
+
+
+def test_dataset_import_roboflow_and_sign_groups(tmp_path):
+    from proto import dataset as D
+
+    src = tmp_path / "rf"
+    for part in ("train", "valid"):
+        (src / part / "images").mkdir(parents=True)
+        (src / part / "labels").mkdir(parents=True)
+        (src / part / "images" / f"a_{part}.jpg").write_bytes(b"x")
+        (src / part / "labels" / f"a_{part}.txt").write_text("1 0.5 0.5 0.02 0.03\n4 0.6 0.4 0.02 0.03\n")
+    (src / "data.yaml").write_text("nc: 7\nnames: ['Cam con lai', 'Cam dung va do', 'Cam nguoc chieu', 'Cam re', "
+                                   "'Gioi han toc do', 'Hieu lenh', 'Nguy hiem']\n")
+    ds = tmp_path / "ds"
+    assert D.import_roboflow(src, ds) == {"images": 2, "boxes": 4}
+    lb = (ds / "signs" / "labels" / "rf__train__a_train.txt").read_text().split("\n")
+    assert [D.SIGN_GROUPS[int(x.split()[0])] for x in lb if x] == ["no_stop_park", "speed_limit"]
+    # ảnh tự thu: xe bị bỏ, mã biển gom nhóm; ảnh không biển vẫn giữ (mẫu nền)
+    (ds / "images").mkdir()
+    (ds / "labels").mkdir()
+    (ds / "classes.txt").write_text("car\nP.130\nP.123a\nDP.135\n")
+    (ds / "images" / "capture_x__0000010_00.jpg").write_bytes(b"x")
+    (ds / "labels" / "capture_x__0000010_00.txt").write_text("0 .5 .5 .1 .1\n1 .2 .2 .02 .02\n2 .3 .2 .02 .02\n3 .4 .2 .02 .02\n")
+    (ds / "images" / "capture_x__0000014_00.jpg").write_bytes(b"x")
+    assert D.sync_own_signs(ds) == 2
+    own = (ds / "signs" / "labels" / "capture_x__0000010_00.txt").read_text().split("\n")
+    assert [D.SIGN_GROUPS[int(x.split()[0])] for x in own if x] == ["no_stop_park", "no_turn", "end_restriction"]
+    assert (ds / "signs" / "labels" / "capture_x__0000014_00.txt").read_text() == ""
+    D.split(ds / "signs")
+    val = (ds / "signs" / "val.txt").read_text()
+    assert "rf__valid__a_valid.jpg" in val and "rf__train__a_train.jpg" not in val

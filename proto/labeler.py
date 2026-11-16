@@ -86,6 +86,7 @@ class TrainReq(BaseModel):
     epochs: int = 80
     model: str = "yolo11n.pt"
     merge_only: bool = False
+    task: str = "drive"
 
 
 def make_router(ds_dir: Optional[Path] = None) -> APIRouter:
@@ -231,7 +232,8 @@ def make_router(ds_dir: Optional[Path] = None) -> APIRouter:
         cmd = f"{_q(py)} -m proto.dataset --dataset {_q(str(root))} merge " + " ".join(_q(s) for s in sessions_)
         if not req.merge_only:
             cmd += (f" && {_q(py)} -m proto.dataset --dataset {_q(str(root))} train"
-                    f" --epochs {int(req.epochs)} --model {_q(req.model)} --name safegap_$(date +%Y%m%d_%H%M)")
+                    f" --task {'signs' if req.task == 'signs' else 'drive'} --epochs {int(req.epochs)}"
+                    f" --model {_q(req.model)} --name {'signs' if req.task == 'signs' else 'drive'}_$(date +%Y%m%d_%H%M)")
         fh = open(log, "w", encoding="utf-8")
         job["proc"] = subprocess.Popen(["/bin/sh", "-c", cmd], cwd=ROOT, stdout=fh, stderr=subprocess.STDOUT,
                                        env={**os.environ, "PYTHONUNBUFFERED": "1"})

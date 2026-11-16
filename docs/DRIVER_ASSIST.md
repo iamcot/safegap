@@ -80,8 +80,12 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
       sửa khung máy khoanh, vẽ khung biển theo mã QCVN (lớp = lớp app + mã trong `signs_vn.json` + `sign_other`),
       phím 1–9 / `/` tìm lớp, Enter = duyệt + ảnh sau. Duyệt ghi `<phiên>/review.json`; merge chỉ lấy ảnh đã duyệt.
       Nút "Gộp + Train" chạy merge + train nền, log hiện trên trang.
-- [ ] B2c. Nhập Zalo AI 2020 (chủ app xác nhận dữ liệu chia sẻ miễn phí): 7 nhóm biển thô (cấm đi vào, cấm dừng đỗ,
-      cấm rẽ, tốc độ tối đa, cấm khác, nguy hiểm, hiệu lệnh) → dùng train bộ dò biển B3; mã cụ thể lấy từ ảnh tự gán.
+- [x] B2c. Nhập bộ "Biển báo giao thông Việt Nam (Zalo)" trên Roboflow (CC BY 4.0, chủ app đã fork + tải v1 YOLOv11,
+      4803 ảnh toàn cảnh, 7 lớp: Cam con lai, Cam dung va do, Cam nguoc chieu, Cam re, Gioi han toc do, Hieu lenh, Nguy hiem):
+      `uv run python -m proto.dataset import-roboflow <thư mục>` → `<dataset>/signs`. Bộ dò biển dùng **nhóm biển**
+      (`SIGN_GROUPS`: no_entry, no_stop_park, no_turn, speed_limit, prohibit_other, mandatory, warning, end_restriction,
+      sign_other); mã QCVN tự gán gom về nhóm (`sign_group`). Train riêng: `train --task signs` (imgsz 1280), không gộp
+      với model xe vì ảnh Roboflow không khoanh xe. Mã biển cụ thể (P.123a hay b, 40 hay 50) để classifier B4.
 - [ ] B3. Train dò biển (YOLO11n, vùng cắt 640×360) trên Mac M5, export Core ML, chạy 4 lượt/giây xen kẽ 2 vùng cắt
       qua `InferenceScheduler` (task `signsLights`). Đo nhiệt.
 - [ ] B4. Classifier ~12–40 loại biển (64×64), bỏ phiếu ≥ 3 lần; tracker biển; lọc biển trên thân xe / mặt nghiêng.

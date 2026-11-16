@@ -11,6 +11,11 @@ Luồng mỗi tối:
   4. Train: uv run python -m proto.dataset train --epochs 80          (mặc định --device mps, từ yolo11n.pt)
   5. Export Core ML: ./scripts/export_coreml.sh ~/safegap-dataset/runs/<tên>/weights/best.pt
 
+Bộ dò biển (B3), train riêng, lớp = nhóm biển (SIGN_GROUPS):
+  uv run python -m proto.dataset import-roboflow ~/datasets/vn-signs     # bộ Zalo trên Roboflow, YOLOv11
+  uv run python -m proto.dataset train --task signs --batch 8 --name signs
+  (ảnh tự thu đã duyệt tự được thêm vào, mã biển QCVN gom về nhóm; ảnh không biển làm mẫu nền)
+
 Cấu trúc bộ dữ liệu (mặc định ~/safegap-dataset, đổi bằng SAFEGAP_DATASET_DIR):
   images/<phiên>__<frame>.jpg, labels/<phiên>__<frame>.txt
   classes.txt        hợp các lớp của mọi phiên, theo tên (lớp mới thêm vào cuối, chỉ số cũ không đổi)
@@ -157,16 +162,146 @@ def reviewed_frames(sess: Path) -> set[str] | None:
         return set()
 
 
+# ---- Bộ dò biển (B3): nhóm biển thô, train riêng ở <dataset>/signs ----
+# Ảnh Roboflow/Zalo chỉ khoanh biển (không khoanh xe) nên không gộp chung với model xe: xe sẽ thành "nền".
+SIGN_GROUPS = ["no_entry", "no_stop_park", "no_turn", "speed_limit", "prohibit_other", "mandatory", "warning",
+               "end_restriction", "sign_other"]
+# Tên lớp bộ "Biển báo giao thông Việt Nam (Zalo)" trên Roboflow (CC BY 4.0)
+ROBOFLOW_ZALO = {"Cam nguoc chieu": "no_entry", "Cam dung va do": "no_stop_park", "Cam re": "no_turn",
+                 "Gioi han toc do": "speed_limit", "Cam con lai": "prohibit_other", "Hieu lenh": "mandatory",
+                 "Nguy hiem": "warning"}
+IMG_EXT = (".jpg", ".jpeg", ".png")
+
+
+def sign_group(name: str) -> str | None:
+    """Mã biển QCVN (lớp tự gán) hoặc tên lớp Roboflow → nhóm biển; None = không phải biển."""
+    if name in ROBOFLOW_ZALO:
+        return ROBOFLOW_ZALO[name]
+    if name in SIGN_GROUPS:
+        return name
+    if name == "P.102":
+        return "no_entry"
+    if name == "P.130" or name.startswith("P.131"):
+        return "no_stop_park"
+    if name.startswith("P.123") or name.startswith("P.124"):
+        return "no_turn"
+    if name.startswith("P.127"):
+        return "speed_limit"
+    if name.startswith("DP."):
+        return "end_restriction"
+    if name.startswith("P."):
+        return "prohibit_other"
+    if name.startswith("R."):
+        return "mandatory"
+    if name.startswith("W."):
+        return "warning"
+    return None
+
+
+def to_sign_labels(text: str, src: list[str]) -> str:
+    """Giữ các khung biển của một file nhãn, đổi lớp sang nhóm biển (SIGN_GROUPS)."""
+    out = []
+    for ln in text.splitlines():
+        parts = ln.split()
+        if len(parts) != 5:
+            continue
+        try:
+            i = int(parts[0])
+        except ValueError:
+            continue
+        g = sign_group(src[i]) if 0 <= i < len(src) else None
+        if g is not None:
+            out.append(" ".join([str(SIGN_GROUPS.index(g)), *parts[1:]]))
+    return "".join(ln + "\n" for ln in out)
+
+
+def _images(d: Path) -> list[Path]:
+    return sorted(p for p in d.iterdir() if p.suffix.lower() in IMG_EXT) if d.is_dir() else []
+
+
+def _prep_signs(sd: Path) -> None:
+    (sd / "images").mkdir(parents=True, exist_ok=True)
+    (sd / "labels").mkdir(parents=True, exist_ok=True)
+    (sd / "classes.txt").write_text("\n".join(SIGN_GROUPS) + "\n", encoding="utf-8")
+
+
+def import_roboflow(src: Path, ds: Path, tag: str = "rf") -> dict:
+    """Nhập bộ Roboflow định dạng YOLO (train/ valid/ test/ + data.yaml) vào <ds>/signs, giữ nguyên chia tập."""
+    src, sd = Path(src).expanduser(), ds / "signs"
+    names = _yaml_names(src / "data.yaml")
+    unknown = [n for n in names if sign_group(n) is None]
+    if unknown:
+        raise SystemExit(f"Chưa biết map lớp: {unknown}. Thêm vào ROBOFLOW_ZALO trong proto/dataset.py.")
+    _prep_signs(sd)
+    stats = {"images": 0, "boxes": 0}
+    for part in ("train", "valid", "test"):
+        for img in _images(src / part / "images"):
+            fid = f"{tag}__{part}__{img.stem}"
+            shutil.copy2(img, sd / "images" / f"{fid}{img.suffix.lower()}")
+            lbl = src / part / "labels" / f"{img.stem}.txt"
+            text = to_sign_labels(lbl.read_text(encoding="utf-8"), names) if lbl.exists() else ""
+            (sd / "labels" / f"{fid}.txt").write_text(text, encoding="utf-8")
+            stats["images"] += 1
+            stats["boxes"] += text.count("\n")
+    return stats
+
+
+def _yaml_names(path: Path) -> list[str]:
+    """Đọc `names` trong data.yaml của Roboflow (dạng list một dòng hoặc từng dòng `- x` / `0: x`)."""
+    import ast
+    lines = path.read_text(encoding="utf-8").splitlines()
+    for i, ln in enumerate(lines):
+        if ln.startswith("names:"):
+            rest = ln[len("names:"):].strip()
+            if rest:
+                return [str(x) for x in ast.literal_eval(rest)]
+            out = []
+            for sub in lines[i + 1:]:
+                if not sub.startswith((" ", "\t", "-")):
+                    break
+                item = sub.strip().lstrip("-").strip()
+                if ":" in item and item.split(":", 1)[0].strip().isdigit():
+                    item = item.split(":", 1)[1].strip()
+                out.append(item.strip("'\""))
+            return out
+    raise SystemExit(f"Không thấy names trong {path}")
+
+
+def sync_own_signs(ds: Path) -> int:
+    """Chép ảnh tự thu đã duyệt (trong <ds>/images) sang <ds>/signs, nhãn chỉ giữ biển (ảnh không biển = mẫu nền)."""
+    sd = ds / "signs"
+    _prep_signs(sd)
+    src = read_classes(ds / "classes.txt")
+    n = 0
+    for img in _images(ds / "images"):
+        lbl = ds / "labels" / f"{img.stem}.txt"
+        text = to_sign_labels(lbl.read_text(encoding="utf-8"), src) if lbl.exists() else ""
+        dst = sd / "images" / img.name
+        if not dst.exists():
+            try:
+                os.link(img, dst)   # cùng ổ: không tốn dung lượng
+            except OSError:
+                shutil.copy2(img, dst)
+        (sd / "labels" / f"{img.stem}.txt").write_text(text, encoding="utf-8")
+        n += 1
+    return n
+
+
 def is_val(fid: str, cluster_s: float = CLUSTER_S, fraction: float = VAL_FRACTION) -> bool:
-    """Cố định theo (phiên, cụm thời gian): ảnh gần nhau luôn cùng một phía, thêm dữ liệu không đổi chỗ ảnh cũ."""
+    """Cố định theo (phiên, cụm thời gian): ảnh gần nhau luôn cùng một phía, thêm dữ liệu không đổi chỗ ảnh cũ.
+    Ảnh nhập từ Roboflow (<tag>__<train|valid|test>__...) giữ chia tập gốc."""
     sess, _, stem = fid.partition("__")
+    part = stem.partition("__")[0]
+    if part in ("train", "valid", "test") and "__" in stem:
+        return part != "train"
     key = f"{sess}:{int(frame_time(stem) // cluster_s)}"
     h = int(hashlib.sha1(key.encode()).hexdigest()[:8], 16)
     return h / 0xFFFFFFFF < fraction
 
 
 def split(ds: Path) -> Path:
-    ids = sorted(p.stem for p in (ds / "images").glob("*.jpg"))
+    files = {p.stem: p.name for p in _images(ds / "images")}
+    ids = sorted(files)
     if not ids:
         raise SystemExit(f"Chưa có ảnh trong {ds}/images. Chạy merge trước.")
     val = [i for i in ids if is_val(i)]
@@ -174,7 +309,7 @@ def split(ds: Path) -> Path:
     if not val:   # ít dữ liệu: vẫn cần tập kiểm tra
         val, train = train[-max(1, len(train) // 7):], train[:-max(1, len(train) // 7)] or train
     for name, part in (("train", train), ("val", val)):
-        (ds / f"{name}.txt").write_text("".join(f"{ds / 'images' / i}.jpg\n" for i in part), encoding="utf-8")
+        (ds / f"{name}.txt").write_text("".join(f"{ds / 'images' / files[i]}\n" for i in part), encoding="utf-8")
     classes = read_classes(ds / "classes.txt")
     yaml = ds / "data.yaml"
     names = "\n".join(f"  {i}: {json.dumps(c, ensure_ascii=False)}" for i, c in enumerate(classes))
@@ -183,9 +318,13 @@ def split(ds: Path) -> Path:
     return yaml
 
 
-def train(ds: Path, *, model: str, epochs: int, imgsz: int, batch: int, device: str, name: str) -> None:
+def train(ds: Path, *, model: str, epochs: int, imgsz: int, batch: int, device: str, name: str,
+          task: str = "drive") -> None:
     from ultralytics import YOLO   # nặng, chỉ nạp khi train
 
+    if task == "signs":
+        print(f"Ảnh tự thu chép sang bộ biển: {sync_own_signs(ds)}")
+        ds = ds / "signs"
     yaml = split(ds)
     YOLO(model).train(data=str(yaml), epochs=epochs, imgsz=imgsz, batch=batch, device=device,
                       project=str(ds / "runs"), name=name, exist_ok=False,
@@ -202,10 +341,15 @@ def main(argv: list[str] | None = None) -> None:
     m.add_argument("sources", nargs="+", type=Path)
     m.add_argument("--all", action="store_true", help="lấy cả phiên chưa có file REVIEWED (nhãn máy)")
     sub.add_parser("split", help="chỉ sinh train.txt / val.txt / data.yaml")
+    im = sub.add_parser("import-roboflow", help="nhập bộ biển Roboflow (YOLO, có data.yaml) vào <dataset>/signs")
+    im.add_argument("source", type=Path)
+    im.add_argument("--tag", default="rf", help="tiền tố tên ảnh, đổi khi nhập thêm bộ khác")
     t = sub.add_parser("train", help="split rồi train Ultralytics")
     t.add_argument("--model", default="yolo11n.pt", help="điểm bắt đầu (.pt), vd model đã train lần trước")
     t.add_argument("--epochs", type=int, default=80)
-    t.add_argument("--imgsz", type=int, default=640)
+    t.add_argument("--task", choices=["drive", "signs"], default="drive",
+                   help="drive = xe + đèn (lớp app); signs = bộ dò biển (nhóm biển, gồm ảnh Roboflow đã nhập)")
+    t.add_argument("--imgsz", type=int, default=None, help="mặc định 640 (drive) / 1280 (signs: biển rất nhỏ)")
     t.add_argument("--batch", type=int, default=16)
     t.add_argument("--device", default="mps")
     t.add_argument("--name", default="safegap")
@@ -219,8 +363,13 @@ def main(argv: list[str] | None = None) -> None:
         print("Lớp:", ", ".join(s["classes"]))
     elif a.cmd == "split":
         split(ds)
+    elif a.cmd == "import-roboflow":
+        s = import_roboflow(a.source, ds, a.tag)
+        print(f"Nhập {s['images']} ảnh, {s['boxes']} khung biển → {ds / 'signs'}")
     else:
-        train(ds, model=a.model, epochs=a.epochs, imgsz=a.imgsz, batch=a.batch, device=a.device, name=a.name)
+        imgsz = a.imgsz or (1280 if a.task == "signs" else 640)
+        train(ds, model=a.model, epochs=a.epochs, imgsz=imgsz, batch=a.batch, device=a.device, name=a.name,
+              task=a.task)
 
 
 if __name__ == "__main__":
