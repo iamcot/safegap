@@ -74,6 +74,13 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
       `tests/test_tools.py`). Chỉ lấy phiên có file `REVIEWED` (đã sửa nhãn), gộp lớp theo tên (lớp mới thêm cuối
       `classes.txt`), chia train/val theo cụm 2 phút, train `--device mps`, tắt lật ngang (biển trái/phải đổi nghĩa).
       Export: `./scripts/export_coreml.sh <best.pt> [tên]`. Chưa có: tải/convert dataset công khai (Zalo AI 2020...).
+- [x] B2b. Trang gán nhãn `/label` trong web viewer (`uv run python -m proto.viewer` → http://127.0.0.1:8501/label,
+      `proto/labeler.py` + `labeler.html`). Kéo thả .zip phiên vào trang (hoặc chép vào `~/safegap-dataset/inbox/`),
+      sửa khung máy khoanh, vẽ khung biển theo mã QCVN (lớp = lớp app + mã trong `signs_vn.json` + `sign_other`),
+      phím 1–9 / `/` tìm lớp, Enter = duyệt + ảnh sau. Duyệt ghi `<phiên>/review.json`; merge chỉ lấy ảnh đã duyệt.
+      Nút "Gộp + Train" chạy merge + train nền, log hiện trên trang.
+- [ ] B2c. Nhập Zalo AI 2020 (chủ app xác nhận dữ liệu chia sẻ miễn phí): 7 nhóm biển thô (cấm đi vào, cấm dừng đỗ,
+      cấm rẽ, tốc độ tối đa, cấm khác, nguy hiểm, hiệu lệnh) → dùng train bộ dò biển B3; mã cụ thể lấy từ ảnh tự gán.
 - [ ] B3. Train dò biển (YOLO11n, vùng cắt 640×360) trên Mac M5, export Core ML, chạy 4 lượt/giây xen kẽ 2 vùng cắt
       qua `InferenceScheduler` (task `signsLights`). Đo nhiệt.
 - [ ] B4. Classifier ~12–40 loại biển (64×64), bỏ phiếu ≥ 3 lần; tracker biển; lọc biển trên thân xe / mặt nghiêng.
@@ -118,4 +125,4 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
 ## Lịch sử PR
 
 - A0–A6: PR #5 (đã merge). Từ giai đoạn B: commit thẳng lên main.
-- B1, B5, B6, B7, B2a: commit trên main 16/11/2026.
+- B1, B5, B6, B7, B2a, B2b: commit trên main 16/11/2026. App hiển thị tên 'Lái mới' (bundle/target vẫn SafeGap).
