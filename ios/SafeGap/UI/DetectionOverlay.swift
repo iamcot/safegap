@@ -57,6 +57,17 @@ struct DetectionOverlay: View {
                     ctx.stroke(Path(rect), with: .color(.gray), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
                 }
             }
+            // biển từ model dò biển (đủ phiếu)
+            for sg in snapshot.seenSigns {
+                let rect = m.toView(sg.box)
+                let color: Color = sg.group.isRegulatory ? .red : .orange
+                ctx.stroke(Path(rect), with: .color(color), lineWidth: 2.5)
+                let label = Text(sg.group.label).font(.system(size: 12, weight: .bold)).foregroundColor(.white)
+                let pos = CGPoint(x: rect.midX, y: rect.minY - 10)
+                ctx.fill(Path(roundedRect: CGRect(x: pos.x - 42, y: pos.y - 9, width: 84, height: 18), cornerRadius: 4),
+                         with: .color(color.opacity(0.85)))
+                ctx.draw(label, at: pos)
+            }
         }
         .allowsHitTesting(false)
     }

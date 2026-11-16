@@ -16,11 +16,19 @@ final class YOLODetector {
     let modelName: String
     private let request: VNCoreMLRequest
 
-    init() throws {
-        let urls = Bundle.main.urls(forResourcesWithExtension: "mlmodelc", subdirectory: nil) ?? []
-        guard let url = urls.first(where: { $0.lastPathComponent.lowercased().hasPrefix("yolo") }) ?? urls.first else {
-            throw DetectorError.modelMissing
+    /// prefix nil: model xe (tên bắt đầu "yolo", không thì model đầu tiên không phải model biển).
+    /// prefix "signs": model dò biển tự train (scripts/export_coreml.sh <best.pt> signs 736,1280).
+    init(prefix: String? = nil) throws {
+        let urls = (Bundle.main.urls(forResourcesWithExtension: "mlmodelc", subdirectory: nil) ?? [])
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        let name = { (u: URL) in u.lastPathComponent.lowercased() }
+        let found: URL?
+        if let prefix {
+            found = urls.first { name($0).hasPrefix(prefix) }
+        } else {
+            found = urls.first { name($0).hasPrefix("yolo") } ?? urls.first { !name($0).hasPrefix("signs") }
         }
+        guard let url = found else { throw DetectorError.modelMissing }
         let cfg = MLModelConfiguration()
         cfg.computeUnits = .cpuAndNeuralEngine  // Neural Engine: ít tốn điện / ít nóng hơn GPU
         let ml = try MLModel(contentsOf: url, configuration: cfg)
@@ -39,13 +47,13 @@ final class YOLODetector {
 
     /// Box theo pixel của frame, gốc trên-trái (giống bản Python).
     func detect(_ pixelBuffer: CVPixelBuffer, frameWidth w: Double, frameHeight h: Double,
-                classes: Set<String>, minConf: Double) throws -> [Detection] {
+                classes: Set<String>?, minConf: Double) throws -> [Detection] {
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up, options: [:])
         try handler.perform([request])
         let observations = request.results as? [VNRecognizedObjectObservation] ?? []
         var out: [Detection] = []
         for o in observations {
-            guard let top = o.labels.first, classes.contains(top.identifier), Double(top.confidence) >= minConf else { continue }
+            guard let top = o.labels.first, classes?.contains(top.identifier) ?? true, Double(top.confidence) >= minConf else { continue }
             let bb = o.boundingBox  // chuẩn hoá 0..1, gốc dưới-trái
             out.append(Detection(Double(bb.minX) * w, Double(1 - bb.maxY) * h,
                                  Double(bb.maxX) * w, Double(1 - bb.minY) * h,

@@ -86,3 +86,23 @@ struct SignIcon: View {
         Rectangle().fill(red).frame(width: d - ring * 1.6, height: ring * 0.9).rotationEffect(.degrees(angle))
     }
 }
+
+/// Biển model đang thấy (nhóm biển, chưa biết mã cụ thể): chip nhỏ, mất khi hết thấy.
+struct SeenSignsRow: View {
+    let signs: [ConfirmedSign]
+
+    var body: some View {
+        let groups = signs.map(\.group).reduce(into: [SignGroup]()) { if !$0.contains($1) { $0.append($1) } }
+        HStack(spacing: 6) {
+            Image(systemName: "eye.fill").font(.caption2)
+            ForEach(groups, id: \.self) { g in
+                Text(g.label)
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Capsule().fill(g.isRegulatory ? Color.red.opacity(0.8) : Color.orange.opacity(0.8)))
+                    .foregroundStyle(.white)
+            }
+        }
+        .transition(.opacity)
+    }
+}

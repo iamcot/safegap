@@ -330,7 +330,8 @@ def train(ds: Path, *, model: str, epochs: int, imgsz: int, batch: int, device: 
                       project=str(ds / "runs"), name=name, exist_ok=False,
                       # ảnh camera xe: không lật dọc; lật ngang tắt vì biển rẽ trái/phải sẽ đổi nghĩa
                       fliplr=0.0, flipud=0.0, mosaic=1.0, close_mosaic=10, patience=20)
-    print(f"Xong. Export: ./scripts/export_coreml.sh {ds}/runs/{name}/weights/best.pt")
+    extra = " signs 736,1280" if task == "signs" else ""
+    print(f"Xong. Export: ./scripts/export_coreml.sh {ds}/runs/{name}/weights/best.pt{extra}")
 
 
 def main(argv: list[str] | None = None) -> None:

@@ -30,6 +30,10 @@ struct SettingsView: View {
                 Section {
                     Toggle("Giọng nói tiếng Việt", isOn: $model.settings.voiceOn)
                     Toggle("Nhận đèn giao thông (thử nghiệm)", isOn: $model.settings.trafficLights)
+                    Toggle("Dò biển báo bằng model (thử nghiệm)", isOn: $model.settings.signDetection)
+                    Text(model.snapshot.signModel.map { "Model biển: \($0)" }
+                         ?? "Chưa có model biển: export signs.mlpackage vào ios/SafeGap/Models (xem Models/README.md).")
+                        .font(.caption).foregroundStyle(.secondary)
                 } header: {
                     Text("Hỗ trợ tài xế")
                 } footer: {

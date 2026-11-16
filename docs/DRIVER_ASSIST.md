@@ -90,6 +90,12 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
         batch 8, ~5 phút/epoch). Bước tiếp: xem results.png / mAP50, export Core ML, nối vào app: model biển riêng
         chạy theo `InferenceScheduler` (task signs), nhóm → `SignSighting` (no_stop_park → P.130 tạm, no_entry → P.102,
         speed_limit → P.127 chưa có số, no_turn → cần classifier B4 để biết trái/phải/quay đầu).
+- [x] B3a. App đọc model dò biển: `YOLODetector(prefix: "signs")` nạp `Models/signs*.mlpackage` (export
+      `./scripts/export_coreml.sh <best.pt> signs 736,1280`), chạy ở hàng đợi riêng theo lịch `signsLights` (4/3/2/0 fps),
+      `SignDetectionTracker` (SafeGapCore/SignDetection.swift, test SignDetectionTests): ≥ 3 lần trong 1,5 s, conf ≥ 0,35,
+      bỏ biển nằm trong khung xe / thấp dưới 80% ảnh, mỗi nhóm báo lại sau ≥ 8 s. Nhóm → SignEngine: no_entry → P.102,
+      no_stop_park → P.130, speed_limit → P.127 (chưa có số); nhóm khác chỉ hiện (khung trên camera + chip "đang thấy"
+      dưới số tốc độ). Cài đặt: "Dò biển báo bằng model".
 - [ ] B3. Train dò biển (YOLO11n, vùng cắt 640×360) trên Mac M5, export Core ML, chạy 4 lượt/giây xen kẽ 2 vùng cắt
       qua `InferenceScheduler` (task `signsLights`). Đo nhiệt.
 - [ ] B4. Classifier ~12–40 loại biển (64×64), bỏ phiếu ≥ 3 lần; tracker biển; lọc biển trên thân xe / mặt nghiêng.

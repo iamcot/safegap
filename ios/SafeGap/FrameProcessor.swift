@@ -30,6 +30,8 @@ struct UserSettings: Codable, Equatable {
     var voiceOn = true
     /// Nhận đèn giao thông (bản thử: lớp "traffic light" của YOLO + màu HSV).
     var trafficLights = true
+    /// Dò biển bằng model riêng (Models/signs*.mlpackage, docs/DRIVER_ASSIST.md B3). Không có model thì bỏ qua.
+    var signDetection = true
     /// Lưu ảnh + nhãn gán sẵn để gán nhãn và train thêm (docs/DRIVER_ASSIST.md A6).
     var dataCapture = false
 
@@ -53,6 +55,7 @@ struct UserSettings: Codable, Equatable {
         autoRoads = try c.decodeIfPresent(Bool.self, forKey: .autoRoads) ?? d.autoRoads
         voiceOn = try c.decodeIfPresent(Bool.self, forKey: .voiceOn) ?? d.voiceOn
         trafficLights = try c.decodeIfPresent(Bool.self, forKey: .trafficLights) ?? d.trafficLights
+        signDetection = try c.decodeIfPresent(Bool.self, forKey: .signDetection) ?? d.signDetection
         dataCapture = try c.decodeIfPresent(Bool.self, forKey: .dataCapture) ?? d.dataCapture
     }
 
@@ -118,6 +121,10 @@ struct FrameSnapshot {
     var t: Double = 0
     /// Biển cấm đang có hiệu lực (B5/B7).
     var activeSigns: [ActiveSign] = []
+    /// Biển model dò biển đang thấy (đã đủ phiếu), toạ độ pixel frame.
+    var seenSigns: [ConfirmedSign] = []
+    /// Đã nạp model dò biển chưa (để hiện trạng thái trong Cài đặt).
+    var signModel: String?
 }
 
 final class FrameProcessor {
@@ -132,6 +139,12 @@ final class FrameProcessor {
     private let lock = NSLock()
     private var params: Params
     private var detector: YOLODetector?
+    /// Model dò biển (tuỳ chọn). Chạy ở hàng đợi riêng, mỗi lần một frame, kết quả dùng ở frame sau.
+    private var signDetector: YOLODetector?
+    private let signQueue = DispatchQueue(label: "safegap.signs", qos: .userInitiated)
+    private var signBusy = false
+    private var signResult: (t: Double, dets: [Detection])?
+    private var signTracker = SignDetectionTracker()
     private var detectorError: String?
     private var pipeline: Pipeline?
     private var pipelineVersion = -1
@@ -225,6 +238,33 @@ final class FrameProcessor {
         } catch {
             detectorError = error.localizedDescription
         }
+        signDetector = try? YOLODetector(prefix: "signs")
+    }
+
+    /// Gửi frame cho model biển nếu tới lượt và đang rảnh (không chặn hàng đợi camera).
+    private func runSigns(_ pb: CVPixelBuffer, t: Double, w: Double, h: Double, night: Bool) {
+        guard let sd = signDetector else { return }
+        lock.lock()
+        let busy = signBusy
+        if !busy { signBusy = true }
+        lock.unlock()
+        guard !busy else { return }
+        signQueue.async { [weak self] in
+            let dets = (try? sd.detect(pb, frameWidth: w, frameHeight: h, classes: nil, minConf: night ? 0.25 : 0.3)) ?? []
+            guard let self else { return }
+            self.lock.lock()
+            self.signResult = (t, dets)
+            self.signBusy = false
+            self.lock.unlock()
+        }
+    }
+
+    private func takeSignResult() -> (t: Double, dets: [Detection])? {
+        lock.lock()
+        defer { lock.unlock() }
+        let r = signResult
+        signResult = nil
+        return r
     }
 
     func setParams(_ p: Params) {
@@ -355,6 +395,10 @@ final class FrameProcessor {
             }
         }
         let t1 = CACurrentMediaTime()
+        if p.settings.signDetection, signDetector != nil,
+           scheduler.shouldRun(.signsLights, t: t, thermal: thermal, isStopped: isStopped) {
+            runSigns(pb, t: t, w: w, h: h, night: night)
+        }
         lightDets = dets.filter { $0.cls == Self.trafficLightClass }
         dets.removeAll { $0.cls == Self.trafficLightClass }
         if let last = lastFrameTime, t1 > last {
@@ -442,6 +486,14 @@ final class FrameProcessor {
         let cal = Calendar.current.dateComponents([.hour, .minute, .day], from: Date())
         let minuteOfDay = (cal.hour ?? 12) * 60 + (cal.minute ?? 0), day = cal.day ?? 1
         var signMsgs: [VoiceMessage] = []
+        if let sr = takeSignResult() {
+            // biển từ model: đủ phiếu qua nhiều lượt mới tính là đã đi qua biển
+            for c in signTracker.update(t: sr.t, signs: sr.dets, vehicles: dets, frameWidth: w, frameHeight: h) {
+                if let sg = c.sighting { addSighting(sg) }
+            }
+        } else if !p.settings.signDetection {
+            signTracker.reset()
+        }
         for sg in takeSightings() {
             signMsgs += signs.sighted(sg, odometer: odo, t: t, minuteOfDay: minuteOfDay, dayOfMonth: day)
         }
@@ -507,6 +559,8 @@ final class FrameProcessor {
         s.stoppedS = stoppedS
         s.t = t
         s.activeSigns = signs.active
+        s.seenSigns = t - (signTracker.visible.map(\.t).max() ?? -10) < 1.5 ? signTracker.visible : []
+        s.signModel = signDetector?.modelName
         onSnapshot?(s)
     }
 

@@ -23,6 +23,7 @@ struct DriveView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         SpeedBlock(snapshot: s, pal: pal)
                         if !s.activeSigns.isEmpty { SignIconsRow(signs: s.activeSigns) }
+                        if !s.seenSigns.isEmpty { SeenSignsRow(signs: s.seenSigns) }
                     }
                     Spacer()
                     controls(pal)
