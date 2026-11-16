@@ -245,15 +245,15 @@ private struct RoadCanvas: View {
             let r = snapshot.result
             let cars = vehicles()
             // mặt đường: làn mình + 2 làn mỗi bên
-            let leftmost = left.map { Ground(x: $0.x - 2 * Self.laneWidth, z: $0.z) }
-            let rightmost = right.map { Ground(x: $0.x + 2 * Self.laneWidth, z: $0.z) }
+            let leftmost = left.map { Ground(x: $0.x - 2 * snapshot.roadLane.width, z: $0.z) }
+            let rightmost = right.map { Ground(x: $0.x + 2 * snapshot.roadLane.width, z: $0.z) }
             ctx.fill(cam.path(leftmost + rightmost.reversed(), closed: true), with: .color(pal.road))
             for edge in [leftmost, rightmost] {
                 ctx.stroke(cam.path(edge), with: .color(pal.roadEdge), lineWidth: 2)
             }
             // vạch làn: tất cả nét đứt; vạch làn mình đậm hơn
-            let leftNext = left.map { Ground(x: $0.x - Self.laneWidth, z: $0.z) }
-            let rightNext = right.map { Ground(x: $0.x + Self.laneWidth, z: $0.z) }
+            let leftNext = left.map { Ground(x: $0.x - snapshot.roadLane.width, z: $0.z) }
+            let rightNext = right.map { Ground(x: $0.x + snapshot.roadLane.width, z: $0.z) }
             for edge in [leftNext, rightNext] {
                 ctx.stroke(cam.path(edge), with: .color(pal.laneFaint), style: StrokeStyle(lineWidth: 1.5, dash: [14, 16]))
             }
@@ -267,7 +267,7 @@ private struct RoadCanvas: View {
             }
             // có xe ngược chiều: vạch phân cách hai chiều là nét liền vàng
             if let n = snapshot.oncomingLane {
-                let edge = left.map { Ground(x: $0.x - Double(n - 1) * Self.laneWidth, z: $0.z) }
+                let edge = left.map { Ground(x: $0.x - Double(n - 1) * snapshot.roadLane.width, z: $0.z) }
                 ctx.stroke(cam.path(edge), with: .color(Color(red: 1.0, green: 0.76, blue: 0.0)),
                            style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
             }
@@ -384,18 +384,29 @@ private struct RoadCanvas: View {
         return lerp(pts[pts.count - 2], pts[pts.count - 1])
     }
 
+    /// Xe để vẽ. Khoảng cách: bề rộng box kết hợp vị trí đáy xe trên mặt đường (xe bên cạnh nhìn chéo thì box rộng ra
+    /// vì thấy cả hông xe → đo theo bề rộng bị gần quá). Vị trí ngang: tính độ lệch so với tâm làn mình rồi
+    /// "bắt" vào giữa làn gần nhất của con đường đang vẽ, nên xe luôn nằm trong làn, không trôi ra ngoài đường.
     func vehicles() -> [Car] {
         let s = snapshot
+        let lane = s.roadLane
         var out: [Car] = []
         for (i, d) in s.detections.enumerated() {
             let kept = i < s.kept.count ? s.kept[i] : true
             guard kept, let wReal = config.vehicleWidthM[d.cls], d.width > 0, s.fPx > 0 else { continue }
             let isEgo = d.box == s.result.egoBox
-            let z = isEgo ? (s.result.d ?? s.fPx * wReal / d.width) : s.fPx * wReal / d.width
+            var z = s.fPx * wReal / d.width
+            if let g = Distance.fromGround(fPx: s.fPx, hCamM: calibration.hCamM, yBottomPx: d.y2, yHorizonPx: horizonPx) {
+                z = Distance.fuse(dWidth: z, dGround: g)
+            }
+            if isEgo, let dd = s.result.d { z = dd }
             guard z > 1.0, z < Self.farZ + 20 else { continue }  // gần hơn 1 m là capo xe mình
             let x = ((d.x1 + d.x2) / 2 - s.frameWidth / 2) * z / s.fPx
+            let laneIdx = isEgo ? 0 : Int(((x - lane.center(z)) / lane.width).rounded())
+            guard abs(laneIdx) <= 2 else { continue }  // ngoài 5 làn đang vẽ (lề, xe đỗ bên đường)
+            let xDraw = lane.center(z) + Double(laneIdx) * lane.width
             let isCar = d.cls == "car"
-            out.append(Car(pos: Ground(x: x, z: z), widthM: wReal, heightM: isCar ? 1.45 : 3.0, lengthM: isCar ? 4.5 : 9.0,
+            out.append(Car(pos: Ground(x: xDraw, z: z), widthM: wReal, heightM: isCar ? 1.45 : 3.0, lengthM: isCar ? 4.5 : 9.0,
                            kind: isEgo ? .target : (i < s.oncoming.count && s.oncoming[i] ? .oncoming : .other)))
         }
         return out
