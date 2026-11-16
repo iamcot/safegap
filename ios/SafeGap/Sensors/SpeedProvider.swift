@@ -7,6 +7,11 @@ final class SpeedProvider: NSObject, CLLocationManagerDelegate {
         let kmh: Double
         let accuracyKmh: Double?
         let at: Date
+        var lat: Double = 0
+        var lon: Double = 0
+        /// Hướng đi (độ, 0 = bắc); nil khi đứng yên / chưa rõ.
+        var courseDeg: Double?
+        var horizontalAccuracyM: Double = 0
     }
 
     private let manager = CLLocationManager()
@@ -42,7 +47,10 @@ final class SpeedProvider: NSObject, CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let l = locations.last, l.speed >= 0 else { return }
         let acc = l.speedAccuracy >= 0 ? l.speedAccuracy * 3.6 : nil
-        let r = Reading(kmh: l.speed * 3.6, accuracyKmh: acc, at: Date())
+        let r = Reading(kmh: l.speed * 3.6, accuracyKmh: acc, at: Date(),
+                        lat: l.coordinate.latitude, lon: l.coordinate.longitude,
+                        courseDeg: l.course >= 0 && l.speed > 1.5 ? l.course : nil,
+                        horizontalAccuracyM: l.horizontalAccuracy)
         lock.lock()
         last = r
         lock.unlock()

@@ -24,6 +24,8 @@ struct UserSettings: Codable, Equatable {
     var coolMode = true
     /// Ẩn hình camera trên HUD (chỉ số và màu), đỡ tốn GPU vẽ hình.
     var hidePreview = true
+    /// Tự tải dữ liệu đường OpenStreetMap quanh xe (số làn, một chiều) khi có mạng.
+    var autoRoads = true
 
     var zoom: Double { zoom2x ? 2 : 1 }
 
@@ -42,6 +44,7 @@ struct UserSettings: Codable, Equatable {
         zoom2x = try c.decodeIfPresent(Bool.self, forKey: .zoom2x) ?? d.zoom2x
         coolMode = try c.decodeIfPresent(Bool.self, forKey: .coolMode) ?? d.coolMode
         hidePreview = try c.decodeIfPresent(Bool.self, forKey: .hidePreview) ?? d.hidePreview
+        autoRoads = try c.decodeIfPresent(Bool.self, forKey: .autoRoads) ?? d.autoRoads
     }
 
     static let key = "settings.v1"
@@ -87,6 +90,8 @@ struct FrameSnapshot {
     var oncoming: [Bool] = []
     /// Vạch phân cách với chiều ngược lại: 1 = mép trái làn mình, 2 = mép trái làn bên trái, ... nil = chưa thấy.
     var oncomingLane: Int?
+    /// Con đường đang chạy theo OpenStreetMap (số làn mỗi chiều), nil = chưa có dữ liệu / chưa khớp.
+    var road: RoadMatch?
     /// Chân trời (pixel) và góc ngẩng (độ) từ CoreMotion; nil nếu không có.
     var yHorizon: Double?
     var pitchDeg: Double?
@@ -146,6 +151,11 @@ final class FrameProcessor {
     }
     /// Gọi trên hàng đợi camera; bên nhận tự chuyển về main.
     var onSnapshot: ((FrameSnapshot) -> Void)?
+
+    /// Dữ liệu đường OSM (gán từ AppModel).
+    var roads: RoadStore?
+    private var roadMatch: (match: RoadMatch?, t: Double)?
+    private var roadLookupT = -10.0
 
     init(params: Params, speed: SpeedProvider, motion: MotionProvider, logger: CSVLogger, sound: AlertSound) {
         self.params = params
@@ -287,6 +297,17 @@ final class FrameProcessor {
             oncomingLane = nil
         }
 
+        // Con đường đang chạy (OSM): tra mỗi giây; khớp được thì giữ 5 s phòng GPS chập chờn.
+        if t - roadLookupT >= 1, let roads, let g = gps {
+            roadLookupT = t
+            if p.settings.autoRoads { roads.ensureAround(lat: g.lat, lon: g.lon) }
+            if let m = roads.match(lat: g.lat, lon: g.lon, courseDeg: g.courseDeg) {
+                roadMatch = (m, t)
+            } else if let rm = roadMatch, t - rm.t > 5 {
+                roadMatch = nil
+            }
+        }
+
         if r.sound && p.settings.soundOn { sound.play() }
         let laneTag = (laneTracker.left != nil ? "L" : "") + (laneTracker.right != nil ? "R" : "")
         if p.settings.logOn {
@@ -320,6 +341,7 @@ final class FrameProcessor {
         s.roadLane = road
         s.oncoming = r.trackIds.map { $0.map(oncomingIds.contains) ?? false }
         s.oncomingLane = oncomingLane?.index
+        s.road = roadMatch?.match
         s.yHorizon = yHorizon
         s.pitchDeg = pitchDeg
         onSnapshot?(s)

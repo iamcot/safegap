@@ -68,6 +68,7 @@ struct DriveView: View {
                     Image(systemName: "record.circle").foregroundStyle(.red)
                 }
                 Text(String(format: "%.0f fps · YOLO %.0f ms · f %.0f px", s.fps, s.inferMs, s.fPx)).monospacedDigit()
+                if s.road != nil { Text("· đường © OpenStreetMap") }
             }
             .foregroundStyle(pal.textDim.opacity(0.8))
         }
@@ -123,6 +124,14 @@ private struct SpeedBlock: View {
                 .monospacedDigit()
                 .contentTransition(.numericText())
             HStack(spacing: 6) {
+                if let lim = snapshot.road?.maxspeed {
+                    Text("\(lim)")
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundStyle(.black)
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(.white))
+                        .overlay(Circle().stroke(Color.red, lineWidth: 4))
+                }
                 Text("km/h").font(.system(size: 15, weight: .semibold))
                 if snapshot.speedSimulated {
                     Chip(text: "giả lập", pal: pal)
@@ -380,12 +389,17 @@ private struct RoadCanvas: View {
         return lerp(pts[pts.count - 2], pts[pts.count - 1])
     }
 
-    /// Bố cục 4 làn theo chỉ số làn (0 = làn mình, âm = bên trái). Vạch giữa (chia hai chiều) nằm ở mép trái làn `center`.
-    /// Mặc định làn mình sát vạch giữa, làn cùng chiều còn lại ở bên phải; nếu thấy xe ngược chiều cách 1 làn
-    /// thì làn mình là làn phải, làn cùng chiều kia ở bên trái.
+    /// Bố cục làn theo chỉ số (0 = làn mình, âm = bên trái). Vạch giữa (chia hai chiều) nằm ở mép trái làn `center`.
+    /// Số làn mỗi chiều lấy từ OpenStreetMap nếu có; không có thì 2 + 2 (đường nhỏ 1 + 1).
+    /// Mặc định làn mình sát vạch giữa; thấy xe ngược chiều cách n làn thì làn mình là làn thứ n tính từ vạch giữa.
     var layout: (lo: Int, hi: Int, center: Int) {
-        let n = min(max(snapshot.oncomingLane ?? 1, 1), 2)
-        return n == 1 ? (-2, 1, 0) : (-3, 0, -1)
+        let road = snapshot.road
+        let small = (road?.cls ?? 0) == 5
+        let same = min(max(road?.lanesSame ?? (small ? 1 : 2), 1), 4)
+        let opp = road?.oneway == true ? 0 : min(max(road?.lanesOpposite ?? (small ? 1 : 2), 1), 3)
+        let n = min(max(snapshot.oncomingLane ?? 1, 1), same)
+        let center = -(n - 1)
+        return (center - opp, same - n, center)
     }
 
     /// Xe để vẽ. Khoảng cách: bề rộng box kết hợp vị trí đáy xe trên mặt đường (xe bên cạnh nhìn chéo thì box rộng ra

@@ -31,6 +31,7 @@ final class AppModel: ObservableObject {
     let speed = SpeedProvider()
     let motion = MotionProvider()
     let sound = AlertSound()
+    let roads = RoadStore()
     let logger = CSVLogger()
     private var processor: FrameProcessor!
     private var version = 0
@@ -61,6 +62,7 @@ final class AppModel: ObservableObject {
         errorMessage = loadError
 
         processor = FrameProcessor(params: currentParams(), speed: speed, motion: motion, logger: logger, sound: sound)
+        processor.roads = roads
         processor.onSnapshot = { [weak self] s in
             DispatchQueue.main.async { self?.snapshot = s }
         }

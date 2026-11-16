@@ -59,6 +59,16 @@ struct SettingsView: View {
                     Text("Chạy mát: YOLO 15 fps thay vì 30, máy nóng thì giảm tiếp. Ẩn hình camera: màn hình chính vẽ lại con đường, vạch làn và các xe theo mét (không cần ảnh camera), bớt việc cho GPU. Màn hiệu chỉnh vẫn hiện camera. Gắn máy ở khe gió điều hoà, tháo ốp, tránh sạc nhanh khi đang chạy.")
                 }
                 Section {
+                    Toggle("Tự tải đường quanh xe", isOn: $model.settings.autoRoads)
+                    RoadStatusRow(store: model.roads)
+                    Button("Tải sẵn TP.HCM (36 ô)") { model.roads.downloadHCM() }
+                    Button("Xoá dữ liệu đường", role: .destructive) { model.roads.deleteAll() }
+                } header: {
+                    Text("Dữ liệu đường (OpenStreetMap)")
+                } footer: {
+                    Text("Không hiện bản đồ, chỉ lấy số làn mỗi chiều, đường một chiều và tốc độ giới hạn để màn lái vẽ đúng số làn. Tải theo ô ~5 km khi có mạng, lưu trong máy, các ô tự ghép với nhau. Đường chưa ghi số làn thì vẽ mặc định. Dữ liệu © OpenStreetMap contributors (ODbL).")
+                }
+                Section {
                     Toggle("ROI bám theo vạch làn", isOn: $model.settings.laneFollow)
                 } header: {
                     Text("Chọn xe cùng làn")
@@ -96,5 +106,25 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { Button("Xong") { dismiss() } }
         }
+    }
+}
+
+private struct RoadStatusRow: View {
+    @ObservedObject var store: RoadStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(String(format: "Đã có %d ô · %d đoạn đường · %.1f MB", store.tileCount, store.wayCount,
+                        Double(store.bytesOnDisk) / 1_048_576))
+            if let d = store.downloading {
+                Text("Đang tải ô \(d)… còn \(store.queued) ô").foregroundStyle(.secondary)
+            } else if store.queued > 0 {
+                Text("Chờ tải \(store.queued) ô").foregroundStyle(.secondary)
+            }
+            if let e = store.lastError {
+                Text(e).foregroundStyle(.orange)
+            }
+        }
+        .font(.callout)
     }
 }

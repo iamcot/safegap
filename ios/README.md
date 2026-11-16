@@ -79,3 +79,12 @@ Mỗi lần mở app ghi một file `logs/safegap_YYYYMMDD_HHmmss.csv` (app Tệ
 - **Cảnh báo từ … km/h**: mặc định 40 km/h (dưới mức này coi là kẹt xe). Hạ xuống để thử trong phố.
 
 CSV có thêm cột `thermal`, `lane` (LR / L / R / rỗng), `pitch_deg`, `y_horizon`.
+
+## Dữ liệu đường (OpenStreetMap)
+
+Cài đặt ⚙ > Dữ liệu đường. App tự tải đường quanh xe theo ô 0.05° (~5.5 km) từ Overpass API khi có mạng
+(hoặc bấm "Tải sẵn TP.HCM" khi có Wi-Fi), lưu ở `Documents/roads/<ô>.json`; các ô tự ghép thành một bản đồ.
+Không hiện bản đồ: mỗi giây khớp GPS + hướng đi với con đường gần nhất (≤ 20 m, cùng hướng) để lấy số làn mỗi chiều,
+đường một chiều, tốc độ giới hạn. Màn lái vẽ đúng số làn đó (tối đa 4 cùng chiều, 3 ngược chiều) và hiện biển tốc độ.
+Đường chưa ghi số làn: 2 + 2 (đường nhỏ 1 + 1). Dữ liệu © OpenStreetMap contributors (ODbL).
+
