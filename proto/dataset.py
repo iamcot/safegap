@@ -5,6 +5,8 @@ Luồng mỗi tối:
   2. Gán nhãn trong CVAT / Label Studio (mở thẳng thư mục phiên: images/ + labels/ + classes.txt, định dạng YOLO).
      Thêm lớp mới (biển báo...) vào cuối classes.txt; xuất lại YOLO đè lên labels/.
      Xong phiên nào thì tạo file rỗng `REVIEWED` trong thư mục phiên đó (nhãn máy chưa sửa chỉ dạy lại lỗi cũ).
+     Hoặc dùng trang gán nhãn có sẵn: `uv run python -m proto.viewer` → http://127.0.0.1:8501/label (proto/labeler.py),
+     duyệt từng ảnh (ghi review.json), có nút Gộp + Train luôn.
   3. Gộp:   uv run python -m proto.dataset merge ~/Downloads/capture_*.zip ~/Downloads/capture_2026*/
   4. Train: uv run python -m proto.dataset train --epochs 80          (mặc định --device mps, từ yolo11n.pt)
   5. Export Core ML: ./scripts/export_coreml.sh ~/safegap-dataset/runs/<tên>/weights/best.pt
@@ -31,6 +33,7 @@ DEFAULT_DIR = Path.home() / "safegap-dataset"
 VAL_FRACTION = 0.15
 CLUSTER_S = 120.0
 REVIEWED_MARK = "REVIEWED"
+REVIEW_FILE = "review.json"   # trang gán nhãn (proto.labeler) ghi: {"reviewed": [frame, ...]}
 
 
 def dataset_dir() -> Path:
@@ -106,7 +109,8 @@ def merge(sources: list[Path], ds: Path, *, only_reviewed: bool = True) -> dict:
         for src in sources:
             for sess in _session_dirs(Path(src).expanduser(), Path(t)):
                 name = sess.name
-                if only_reviewed and not (sess / REVIEWED_MARK).exists():
+                keep = reviewed_frames(sess) if only_reviewed else None
+                if keep is not None and not keep:
                     stats["skipped"].append(name)
                     continue
                 src_classes = read_classes(sess / "classes.txt")
@@ -119,8 +123,13 @@ def merge(sources: list[Path], ds: Path, *, only_reviewed: bool = True) -> dict:
                             metas[Path(m["file"]).stem] = m
                         except (ValueError, KeyError, TypeError):
                             continue
+                old = meta_out.read_text(encoding="utf-8").splitlines() if meta_out.exists() else []
+                old = [ln for ln in old if f'"session": "{name}"' not in ln]   # chạy lại: thay meta cũ của phiên
+                meta_out.write_text("".join(ln + "\n" for ln in old), encoding="utf-8")
                 with meta_out.open("a", encoding="utf-8") as mf:
                     for img in sorted((sess / "images").glob("*.jpg")):
+                        if keep is not None and img.stem not in keep:
+                            continue
                         fid = f"{name}__{img.stem}"
                         shutil.copy2(img, ds / "images" / f"{fid}.jpg")
                         lbl = sess / "labels" / f"{img.stem}.txt"
@@ -135,6 +144,17 @@ def merge(sources: list[Path], ds: Path, *, only_reviewed: bool = True) -> dict:
     (ds / "classes.txt").write_text("\n".join(classes) + "\n", encoding="utf-8")
     stats["classes"] = classes
     return stats
+
+
+def reviewed_frames(sess: Path) -> set[str] | None:
+    """Ảnh đã duyệt của một phiên: cả phiên nếu có file REVIEWED (None = lấy hết), theo review.json nếu có."""
+    if (sess / REVIEWED_MARK).exists():
+        return None
+    try:
+        data = json.loads((sess / REVIEW_FILE).read_text(encoding="utf-8"))
+        return set(data.get("reviewed", []))
+    except (OSError, ValueError, AttributeError):
+        return set()
 
 
 def is_val(fid: str, cluster_s: float = CLUSTER_S, fraction: float = VAL_FRACTION) -> bool:

@@ -72,7 +72,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Log")
                 } footer: {
-                    Text("Bấm nút chia sẻ cạnh từng file để gửi (Zalo, AirDrop, Lưu vào Tệp...). Hoặc mở app Tệp > Trên iPhone > SafeGap > logs.")
+                    Text("Bấm nút chia sẻ cạnh từng file để gửi (Zalo, AirDrop, Lưu vào Tệp...). Hoặc mở app Tệp > Trên iPhone > Lái mới > logs.")
                 }
                 Section {
                     Toggle("Chạy mát (15 fps)", isOn: $model.settings.coolMode)

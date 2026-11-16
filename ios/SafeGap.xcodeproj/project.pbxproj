@@ -211,10 +211,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = N5986X5976;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = SafeGap;
+				INFOPLIST_KEY_CFBundleDisplayName = "Lái mới";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "SafeGap dùng camera sau để nhận diện xe phía trước và ước lượng khoảng cách.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "SafeGap dùng GPS để lấy tốc độ xe và tra khoảng cách tối thiểu theo luật.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Lái mới dùng camera sau để nhận diện xe, đèn và biển báo phía trước.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Lái mới dùng GPS để lấy tốc độ xe và tra khoảng cách tối thiểu theo luật.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIFileSharingEnabled = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -246,10 +246,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = N5986X5976;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = SafeGap;
+				INFOPLIST_KEY_CFBundleDisplayName = "Lái mới";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "SafeGap dùng camera sau để nhận diện xe phía trước và ước lượng khoảng cách.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "SafeGap dùng GPS để lấy tốc độ xe và tra khoảng cách tối thiểu theo luật.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Lái mới dùng camera sau để nhận diện xe, đèn và biển báo phía trước.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Lái mới dùng GPS để lấy tốc độ xe và tra khoảng cách tối thiểu theo luật.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIFileSharingEnabled = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

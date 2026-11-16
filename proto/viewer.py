@@ -22,7 +22,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
-from . import config, detcache
+from . import config, detcache, labeler
 from .lane import roi_to_pixels
 from .replay import IncrementalReplay
 from .speed import SpeedTrack
@@ -195,7 +195,8 @@ class SaveReq(BaseModel):
     cfg: dict
 
 
-def create_app(make_detector: Callable[[], Callable] = default_detector, out_dir: Path = OUT_DIR) -> FastAPI:
+def create_app(make_detector: Callable[[], Callable] = default_detector, out_dir: Path = OUT_DIR,
+               label_dir: Optional[Path] = None) -> FastAPI:
     state: dict = {"session": None}
 
     @asynccontextmanager
@@ -205,6 +206,7 @@ def create_app(make_detector: Callable[[], Callable] = default_detector, out_dir
             state["session"].close()
 
     app = FastAPI(title="SafeGap viewer", lifespan=lifespan)
+    app.include_router(labeler.make_router(label_dir))
     law = config.load_law()
 
     def sess() -> Session:

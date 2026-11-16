@@ -101,3 +101,32 @@ def test_dataset_split_groups_by_time_cluster(tmp_path):
     train = (ds / "train.txt").read_text().splitlines()
     assert len(val) + len(train) == 900 and val and not set(val) & set(train)
     assert '1: "P.130"' in yaml.read_text()
+
+
+def test_labeler_api_roundtrip(tmp_path):
+    import json as _json
+    from fastapi.testclient import TestClient
+    from proto import dataset as D
+    from proto.viewer import create_app
+
+    ds = tmp_path / "ds"
+    _session(ds / "inbox", "capture_x", ["car", "truck"],
+             {"0000010_00": "1 0.5 0.5 0.2 0.2\n", "0000014_00": "0 0.3 0.3 0.1 0.1\n"}, reviewed=False)
+    c = TestClient(create_app(make_detector=lambda: None, out_dir=tmp_path / "out", label_dir=ds))
+    assert "Gán nhãn" in c.get("/label").text
+    r = c.get("/api/label/sessions").json()
+    assert r["sessions"] == [{"name": "capture_x", "images": 2, "reviewed": 0}]
+    assert "P.130" in r["classes"] and r["classes"][:2] == ["car", "truck"]
+    fr = c.get("/api/label/frames", params={"session": "capture_x"}).json()
+    assert [f["id"] for f in fr["frames"]] == ["0000010_00", "0000014_00"] and fr["frames"][0]["speedKmh"] == 30
+    b = c.get("/api/label/boxes", params={"session": "capture_x", "frame": "0000010_00"}).json()["boxes"]
+    assert b[0]["cls"] == "truck"
+    b.append({"cls": "P.130", "cx": 0.8, "cy": 0.2, "w": 0.03, "h": 0.05})
+    assert c.post("/api/label/save", json={"session": "capture_x", "frame": "0000010_00", "boxes": b}).json() == {"reviewed": 1}
+    assert c.get("/api/label/image", params={"session": "capture_x", "frame": "../x"}).status_code == 400
+    # chỉ ảnh đã duyệt vào bộ dữ liệu, lớp biển giữ đúng tên
+    s = D.merge([ds / "inbox"], ds)
+    assert s["images"] == 1
+    lines = (ds / "labels" / "capture_x__0000010_00.txt").read_text().splitlines()
+    assert [s["classes"][int(ln.split()[0])] for ln in lines] == ["truck", "P.130"]
+    assert _json.loads((ds / "inbox" / "capture_x" / "review.json").read_text()) == {"reviewed": ["0000010_00"]}

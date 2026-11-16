@@ -10,7 +10,7 @@ enum CameraError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notAuthorized: return "Chưa cho phép dùng camera. Vào Cài đặt > SafeGap > Camera."
+        case .notAuthorized: return "Chưa cho phép dùng camera. Vào Cài đặt > Lái mới > Camera."
         case .noCamera: return "Không tìm thấy camera sau 1x."
         case .cannotAddInput, .cannotAddOutput: return "Không cấu hình được camera."
         }
