@@ -200,6 +200,51 @@ final class TrafficLightTests: XCTestCase {
         XCTAssertNil(tr.state)
     }
 
+    /// Khung đèn dọc 10×24 điểm, bóng sáng ở hàng `rows` với màu `lit`.
+    func vertical(lit: RGB, rows: Range<Int>) -> [(r: Double, g: Double, b: Double, u: Double, v: Double)] {
+        var out: [(r: Double, g: Double, b: Double, u: Double, v: Double)] = []
+        for j in 0..<24 {
+            for i in 0..<10 {
+                let c: RGB = rows.contains(j) && (3...6).contains(i) ? lit : (r: 20, g: 20, b: 22)
+                out.append((r: c.r, g: c.g, b: c.b, u: (Double(i) + 0.5) / 10, v: (Double(j) + 0.5) / 24))
+            }
+        }
+        return out
+    }
+
+    func testPositionDecidesAmbiguousHue() {
+        let orange: RGB = (r: 255, g: 120, b: 20)    // hue ~25: đỏ LED qua camera hay ra màu này
+        XCTAssertEqual(LightColorClassifier.classify(vertical(lit: orange, rows: 2..<6), aspect: 2.5), .red)
+        let amber: RGB = (r: 255, g: 190, b: 20)
+        XCTAssertEqual(LightColorClassifier.classify(vertical(lit: amber, rows: 10..<14), aspect: 2.5), .yellow)
+        XCTAssertEqual(LightColorClassifier.classify(vertical(lit: amber, rows: 2..<6), aspect: 2.5), .red)
+        let green: RGB = (r: 20, g: 230, b: 170)
+        XCTAssertEqual(LightColorClassifier.classify(vertical(lit: green, rows: 18..<22), aspect: 2.5), .green)
+        // khung vuông (không rõ hướng): theo hue
+        XCTAssertEqual(LightColorClassifier.classify(vertical(lit: amber, rows: 2..<6), aspect: 1), .yellow)
+    }
+
+    func testUnknownMajorityClearsColor() {
+        var tr = TrafficLightTracker()
+        let d = Detection(1100, 80, 1130, 160, "traffic light")
+        for i in 0..<5 { tr.update(t: Double(i) * 0.25, light: d, color: .yellow) }
+        XCTAssertEqual(tr.state?.color, .yellow)
+        // vẫn thấy khung nhưng không rõ màu (vd vật khác giống đèn): không giữ vàng mãi
+        for i in 5..<8 { tr.update(t: Double(i) * 0.25, light: d, color: .unknown) }
+        XCTAssertEqual(tr.state?.color, .unknown)
+    }
+
+    func testHoldShortWhenMoving() {
+        var tr = TrafficLightTracker()
+        let d = Detection(1100, 80, 1130, 160, "traffic light")
+        for i in 0..<5 { tr.update(t: Double(i) * 0.25, light: d, color: .red, speedKmh: 40) }
+        // chui hầm: mất đèn khi đang chạy → bỏ sau 2 s
+        tr.update(t: 2.5, light: nil, color: nil, speedKmh: 40)
+        XCTAssertEqual(tr.state?.color, .red)
+        tr.update(t: 3.5, light: nil, color: nil, speedKmh: 40)
+        XCTAssertNil(tr.state)
+    }
+
     func testLightAlerts() {
         let rules = LightAlertRules()
         let box = Box(1100, 80, 1130, 160)

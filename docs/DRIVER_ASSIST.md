@@ -91,6 +91,10 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
 ## Ghi chú đo đạc / học được
 
 - (chưa có số đo trên xe cho giai đoạn A)
+- Thử bằng clip (16/11): đèn đỏ bị giữ mãi khi chui hầm, đèn vàng bị kẹt. Nguyên nhân: frame "không rõ màu" không được
+  bỏ phiếu nên màu cũ sống mãi; đỏ LED qua camera ngả cam (hue 15–25) bị đọc thành vàng. Sửa: bỏ phiếu cả "không rõ",
+  đỏ tới hue 26, vị trí bóng sáng trong khung (đỏ trên/trái, xanh dưới/phải) quyết định khi hue lưỡng lự, mất đèn lúc
+  đang chạy ≥ 10 km/h chỉ giữ 2 s (đứng yên vẫn 8 s), qua ngã tư / vừa rẽ thì xoá trạng thái đèn.
 
 ## Lịch sử PR
 

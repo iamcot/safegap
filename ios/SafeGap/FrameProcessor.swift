@@ -403,8 +403,13 @@ final class FrameProcessor {
         var lightState: TrafficLightState?
         if p.settings.trafficLights {
             let picked = lightTracker.pick(lightDets, frameWidth: w, frameHeight: h)
-            let color = picked.map { LightColorClassifier.classify(Self.samplePixels(pb, box: $0.box)) }
-            lightState = lightTracker.update(t: t, light: picked, color: color)
+            // qua ngã tư / vừa rẽ: đèn cũ không còn áp dụng
+            if junction.passed || turn != nil { lightTracker.reset() }
+            let color = picked.map { d in
+                LightColorClassifier.classify(Self.samplePixels(pb, box: d.box),
+                                              aspect: (d.y2 - d.y1) / max(1, d.x2 - d.x1))
+            }
+            lightState = lightTracker.update(t: t, light: picked, color: color, speedKmh: v)
             if p.settings.voiceOn, let m = lightRules.check(state: lightState, t: t, speedKmh: v,
                                                             junctionM: junction.nextM, stoppedS: stoppedS) {
                 voice.offer(m)
@@ -499,7 +504,8 @@ final class FrameProcessor {
     }
 
     /// Lấy mẫu RGB trên lưới nx × ny trong khung (pixel của frame) từ buffer 420 YCbCr full range.
-    static func samplePixels(_ pb: CVPixelBuffer, box: Box, nx: Int = 10, ny: Int = 24) -> [(r: Double, g: Double, b: Double)] {
+    static func samplePixels(_ pb: CVPixelBuffer, box: Box, nx: Int = 10, ny: Int = 24)
+        -> [(r: Double, g: Double, b: Double, u: Double, v: Double)] {
         CVPixelBufferLockBaseAddress(pb, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
         guard CVPixelBufferGetPlaneCount(pb) >= 2,
@@ -510,17 +516,22 @@ final class FrameProcessor {
         let yBpr = CVPixelBufferGetBytesPerRowOfPlane(pb, 0), cBpr = CVPixelBufferGetBytesPerRowOfPlane(pb, 1)
         guard w > 0, h > 0, cw > 0, ch > 0 else { return [] }
         let ys = yBase.assumingMemoryBound(to: UInt8.self), cs = cBase.assumingMemoryBound(to: UInt8.self)
-        var out: [(r: Double, g: Double, b: Double)] = []
-        out.reserveCapacity(nx * ny)
-        for j in 0..<ny {
-            for i in 0..<nx {
-                let x = Int(box.x1 + (Double(i) + 0.5) / Double(nx) * (box.x2 - box.x1))
-                let y = Int(box.y1 + (Double(j) + 0.5) / Double(ny) * (box.y2 - box.y1))
+        // khung ngang (đèn treo ngang): lưới đổi chiều cho đều
+        let horizontal = box.x2 - box.x1 > box.y2 - box.y1
+        let (gx, gy) = horizontal ? (ny, nx) : (nx, ny)
+        var out: [(r: Double, g: Double, b: Double, u: Double, v: Double)] = []
+        out.reserveCapacity(gx * gy)
+        for j in 0..<gy {
+            for i in 0..<gx {
+                let u = (Double(i) + 0.5) / Double(gx), v = (Double(j) + 0.5) / Double(gy)
+                let x = Int(box.x1 + u * (box.x2 - box.x1))
+                let y = Int(box.y1 + v * (box.y2 - box.y1))
                 guard x >= 0, x < w, y >= 0, y < h else { continue }
                 let cx = min(cw - 1, x * cw / w), cy = min(ch - 1, y * ch / h)
                 let luma = Double(ys[y * yBpr + x])
                 let cb = Double(cs[cy * cBpr + cx * 2]), cr = Double(cs[cy * cBpr + cx * 2 + 1])
-                out.append(LightColorClassifier.rgb(y: luma, cb: cb, cr: cr))
+                let c = LightColorClassifier.rgb(y: luma, cb: cb, cr: cr)
+                out.append((r: c.r, g: c.g, b: c.b, u: u, v: v))
             }
         }
         return out

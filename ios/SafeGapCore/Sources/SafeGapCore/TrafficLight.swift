@@ -28,9 +28,10 @@ public enum LightColorClassifier {
             guard v >= minValue, s >= minSaturation else { continue }
             let c: LightColor
             switch h {
-            case ..<18, 335...: c = .red
-            case 18..<70: c = .yellow
-            case 75..<200: c = .green   // đèn xanh LED ở VN ngả xanh lơ
+            // đèn đỏ LED qua camera hay ngả cam (hue 15–25): vẫn tính đỏ
+            case ..<26, 330...: c = .red
+            case 26..<72: c = .yellow
+            case 75..<210: c = .green   // đèn xanh LED ở VN ngả xanh lơ
             default: continue
             }
             counts[c, default: 0] += 1
@@ -38,6 +39,31 @@ public enum LightColorClassifier {
         guard let best = counts.max(by: { $0.value < $1.value }) else { return .unknown }
         let need = max(minCount, Int((Double(pixels.count) * minFraction).rounded(.up)))
         return best.value >= need ? best.key : .unknown
+    }
+
+    /// Như `classify` nhưng có vị trí điểm trong khung (u ngang, v dọc, 0..1) và tỉ lệ khung (cao / rộng).
+    /// Đèn dọc: đỏ trên, vàng giữa, xanh dưới; đèn ngang: đỏ trái, vàng giữa, xanh phải.
+    /// Màu theo hue lưỡng lự giữa đỏ/vàng/xanh thì vị trí bóng đang sáng quyết định.
+    public static func classify(_ pixels: [(r: Double, g: Double, b: Double, u: Double, v: Double)], aspect: Double,
+                                minValue: Double = 0.55, minSaturation: Double = 0.45) -> LightColor {
+        let hueColor = classify(pixels.map { (r: $0.r, g: $0.g, b: $0.b) }, minValue: minValue, minSaturation: minSaturation)
+        guard hueColor != .unknown else { return .unknown }
+        let vertical = aspect >= 1.5, horizontal = aspect <= 1 / 1.5
+        guard vertical || horizontal else { return hueColor }
+        var sum = 0.0, n = 0.0
+        for p in pixels {
+            let (_, sat, val) = hsv(p.r, p.g, p.b)
+            guard val >= minValue, sat >= minSaturation else { continue }
+            sum += vertical ? p.v : p.u
+            n += 1
+        }
+        guard n > 0 else { return hueColor }
+        let pos = sum / n
+        let byPos: LightColor = pos < 0.36 ? .red : (pos > 0.64 ? .green : .yellow)
+        // hue rõ ràng xanh/đỏ mà vị trí là giữa: tin hue (đèn 2 bóng, khung lệch); vàng thì phải khớp vị trí
+        if hueColor == .yellow { return byPos }
+        if byPos == .yellow { return hueColor }
+        return byPos == hueColor ? hueColor : byPos
     }
 
     /// h độ (0..360), s, v (0..1).
@@ -91,8 +117,11 @@ public struct TrafficLightState: Equatable, Sendable {
 public struct TrafficLightTracker: Equatable, Sendable {
     /// Số lần quan sát gần nhất dùng để bỏ phiếu.
     public var votes = 5
-    /// Mất đèn bao lâu (s) thì bỏ trạng thái.
+    /// Mất đèn bao lâu (s) thì bỏ trạng thái khi xe đứng / nhích (đèn ra khỏi khung lúc dừng sát vạch).
     public var holdS = 8.0
+    /// Khi xe đang chạy (≥ `movingKmh`) mất đèn thì bỏ sớm: đã đi qua đèn, chui hầm, rẽ.
+    public var holdMovingS = 2.0
+    public var movingKmh = 10.0
     /// Đèn nhỏ hơn (pixel chiều cao) thì bỏ qua (quá xa, dễ nhầm đèn xe).
     public var minHeightPx = 14.0
 
@@ -118,9 +147,10 @@ public struct TrafficLightTracker: Equatable, Sendable {
 
     /// Cập nhật với màu của đèn được chọn ở frame này (nil = không thấy đèn).
     @discardableResult
-    public mutating func update(t: Double, light: Detection?, color: LightColor?) -> TrafficLightState? {
+    public mutating func update(t: Double, light: Detection?, color: LightColor?, speedKmh: Double? = nil) -> TrafficLightState? {
         guard let light, let color else {
-            if let s = state, t - s.lastSeen > holdS {
+            let hold = (speedKmh ?? 0) >= movingKmh ? holdMovingS : holdS
+            if let s = state, t - s.lastSeen > hold {
                 state = nil
                 history.removeAll()
             } else if state != nil {
@@ -130,8 +160,9 @@ public struct TrafficLightTracker: Equatable, Sendable {
         }
         history.append(color)
         if history.count > votes { history.removeFirst(history.count - votes) }
+        // bỏ phiếu cả "không rõ": phần lớn frame không rõ màu thì về không rõ (không giữ mãi màu cũ)
         var counts: [LightColor: Int] = [:]
-        for c in history where c != .unknown { counts[c, default: 0] += 1 }
+        for c in history { counts[c, default: 0] += 1 }
         let voted = counts.max { $0.value < $1.value }.flatMap { $0.value * 2 > history.count ? $0.key : nil }
         let prev = state?.color ?? .unknown
         let newColor = voted ?? prev
