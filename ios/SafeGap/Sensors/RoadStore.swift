@@ -21,6 +21,8 @@ final class RoadStore: ObservableObject {
     private var have = Set<OSMTile.Key>()
     private var pending: [OSMTile.Key] = []
     private var failedAt: [OSMTile.Key: Date] = [:]
+    /// Số lần đã thử lại mỗi ô khi máy chủ bận (429/502/503/504, hết giờ).
+    private var retries: [OSMTile.Key: Int] = [:]
     private var busy = false
     private let dir: URL
 
@@ -108,10 +110,13 @@ final class RoadStore: ObservableObject {
 
     private func finish(_ k: OSMTile.Key, data: Data?, resp: URLResponse?, err: Error?) {
         var failure: String?
+        var busyServer = false
         if let err {
             failure = err.localizedDescription
+            busyServer = (err as? URLError)?.code == .timedOut || (err as? URLError)?.code == .networkConnectionLost
         } else if let h = resp as? HTTPURLResponse, h.statusCode != 200 {
-            failure = "Overpass trả mã \(h.statusCode)" + (h.statusCode == 429 ? " (quá nhiều yêu cầu, thử lại sau)" : "")
+            busyServer = [429, 502, 503, 504].contains(h.statusCode)
+            failure = "Overpass trả mã \(h.statusCode)" + (busyServer ? " (máy chủ bận, tự thử lại sau)" : "")
         } else if let data {
             do {
                 let ways = try OSMTile.parseOverpass(data)
@@ -125,12 +130,30 @@ final class RoadStore: ObservableObject {
                 failure = "Đọc dữ liệu ô \(k.name) lỗi: \(error.localizedDescription)"
             }
         }
+        // máy chủ bận: đưa ô về cuối hàng, thử lại tối đa 5 lần, nghỉ 30 s; thành công thì nghỉ 2 s cho đỡ dồn
+        var pause = 2.0
         lock.lock()
-        if failure != nil { failedAt[k] = Date() }
-        busy = false
+        if failure != nil {
+            let n = retries[k, default: 0]
+            if busyServer && n < 5 {
+                retries[k] = n + 1
+                pending.append(k)
+                pause = 30
+            } else {
+                failedAt[k] = Date()
+                retries[k] = nil
+            }
+        } else {
+            retries[k] = nil
+        }
         lock.unlock()
         publishStats(error: failure)
-        next()
+        queue.asyncAfter(deadline: .now() + pause) {
+            self.lock.lock()
+            self.busy = false
+            self.lock.unlock()
+            self.next()
+        }
     }
 
     private func file(_ k: OSMTile.Key) -> URL { dir.appendingPathComponent("\(k.name).json") }
