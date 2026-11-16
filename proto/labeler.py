@@ -226,14 +226,17 @@ def make_router(ds_dir: Optional[Path] = None) -> APIRouter:
         root = ds()
         log = root / "train.log"
         sessions_ = [str(x) for x in inbox().iterdir() if (x / "images").is_dir()]
-        if not sessions_:
+        signs = req.task == "signs"
+        if not sessions_ and (req.merge_only or not signs):
             raise HTTPException(400, "Inbox chưa có phiên nào")
         py = sys.executable
-        cmd = f"{_q(py)} -m proto.dataset --dataset {_q(str(root))} merge " + " ".join(_q(s) for s in sessions_)
+        # bộ biển train được chỉ với ảnh Roboflow đã nhập, chưa cần phiên tự thu
+        cmd = (f"{_q(py)} -m proto.dataset --dataset {_q(str(root))} merge " + " ".join(_q(s) for s in sessions_)
+               if sessions_ else "true")
         if not req.merge_only:
             cmd += (f" && {_q(py)} -m proto.dataset --dataset {_q(str(root))} train"
                     f" --task {'signs' if req.task == 'signs' else 'drive'} --epochs {int(req.epochs)}"
-                    f" --model {_q(req.model)} --name {'signs' if req.task == 'signs' else 'drive'}_$(date +%Y%m%d_%H%M)")
+                    f" --model {_q(req.model)}{' --batch 8' if signs else ''} --name {'signs' if req.task == 'signs' else 'drive'}_$(date +%Y%m%d_%H%M)")
         fh = open(log, "w", encoding="utf-8")
         job["proc"] = subprocess.Popen(["/bin/sh", "-c", cmd], cwd=ROOT, stdout=fh, stderr=subprocess.STDOUT,
                                        env={**os.environ, "PYTHONUNBUFFERED": "1"})
