@@ -39,6 +39,12 @@ final class RoadStore: ObservableObject {
         return map.match(lat: lat, lon: lon, courseDeg: courseDeg)
     }
 
+    func ahead(lat: Double, lon: Double, courseDeg: Double?) -> RoadAhead? {
+        lock.lock()
+        defer { lock.unlock() }
+        return map.ahead(lat: lat, lon: lon, courseDeg: courseDeg)
+    }
+
     /// Xếp hàng tải các ô quanh vị trí còn thiếu.
     func ensureAround(lat: Double, lon: Double) {
         enqueue(OSMTile.around(lat: lat, lon: lon))

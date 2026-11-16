@@ -92,6 +92,8 @@ struct FrameSnapshot {
     var oncomingLane: Int?
     /// Con đường đang chạy theo OpenStreetMap (số làn mỗi chiều), nil = chưa có dữ liệu / chưa khớp.
     var road: RoadMatch?
+    /// Hình dạng đường phía trước và ngã tư (OSM), đã dịch theo quãng đường đi từ lúc tra.
+    var roadAhead: RoadAhead?
     /// Chân trời (pixel) và góc ngẩng (độ) từ CoreMotion; nil nếu không có.
     var yHorizon: Double?
     var pitchDeg: Double?
@@ -156,6 +158,7 @@ final class FrameProcessor {
     var roads: RoadStore?
     private var roadMatch: (match: RoadMatch?, t: Double)?
     private var roadLookupT = -10.0
+    private var roadAhead: (ahead: RoadAhead, t: Double, travelled: Double, lastT: Double)?
 
     init(params: Params, speed: SpeedProvider, motion: MotionProvider, logger: CSVLogger, sound: AlertSound) {
         self.params = params
@@ -306,6 +309,20 @@ final class FrameProcessor {
             } else if let rm = roadMatch, t - rm.t > 5 {
                 roadMatch = nil
             }
+            // đứng yên thì GPS không có hướng: giữ đường phía trước cũ
+            if let course = g.courseDeg {
+                if let a = roads.ahead(lat: g.lat, lon: g.lon, courseDeg: course) {
+                    roadAhead = (a, t, 0, t)
+                } else if let ra = roadAhead, t - ra.t > 5 {
+                    roadAhead = nil
+                }
+            }
+        }
+        // giữa hai lần tra: dịch đường phía trước theo quãng xe đã đi
+        if var ra = roadAhead {
+            ra.travelled += max(0, (v ?? 0) / 3.6) * max(0, t - ra.lastT)
+            ra.lastT = t
+            roadAhead = ra
         }
 
         if r.sound && p.settings.soundOn { sound.play() }
@@ -342,6 +359,7 @@ final class FrameProcessor {
         s.oncoming = r.trackIds.map { $0.map(oncomingIds.contains) ?? false }
         s.oncomingLane = oncomingLane?.index
         s.road = roadMatch?.match
+        s.roadAhead = roadAhead.map { $0.ahead.advanced(by: $0.travelled) }
         s.yHorizon = yHorizon
         s.pitchDeg = pitchDeg
         onSnapshot?(s)

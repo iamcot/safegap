@@ -132,6 +132,12 @@ public final class RoadMap {
 
     public private(set) var ways: [Int64: RoadWay] = [:]
     private var index: [CellKey: [(id: Int64, seg: Int)]] = [:]
+    /// Nút chung giữa các way (OSM dùng chung nút ở chỗ nối nên toạ độ trùng hệt): toạ độ ×1e7 → (way, chỉ số nút).
+    struct NodeKey: Hashable { var a: Int32; var b: Int32 }
+    private var nodes: [NodeKey: [(id: Int64, idx: Int)]] = [:]
+    static func nodeKey(_ lat: Double, _ lon: Double) -> NodeKey {
+        NodeKey(a: Int32((lat * 1e7).rounded()), b: Int32((lon * 1e7).rounded()))
+    }
 
     public init() {}
 
@@ -140,6 +146,7 @@ public final class RoadMap {
     public func removeAll() {
         ways.removeAll()
         index.removeAll()
+        nodes.removeAll()
     }
 
     /// Thêm đường (từ một ô). Way đã có (ô khác cũng chứa) thì bỏ qua.
@@ -151,14 +158,32 @@ public final class RoadMap {
                 let b0 = Int(floor(min(w.lon[i], w.lon[i + 1]) / Self.cell)), b1 = Int(floor(max(w.lon[i], w.lon[i + 1]) / Self.cell))
                 for a in a0...a1 { for b in b0...b1 { index[CellKey(a: a, b: b), default: []].append((w.id, i)) } }
             }
+            for i in 0..<w.lat.count { nodes[Self.nodeKey(w.lat[i], w.lon[i]), default: []].append((w.id, i)) }
         }
     }
 
     /// Khớp vị trí GPS (và hướng đi, độ, 0 = bắc, theo chiều kim đồng hồ) với con đường gần nhất hợp hướng.
     public func match(lat: Double, lon: Double, courseDeg: Double?, maxDistanceM: Double = 20) -> RoadMatch? {
+        guard let b = locate(lat: lat, lon: lon, courseDeg: courseDeg, maxDistanceM: maxDistanceM) else { return nil }
+        let w = b.way
+        if w.oneway != 0 {
+            return RoadMatch(wayId: w.id, cls: w.cls, oneway: true, lanesSame: w.lanes, lanesOpposite: 0,
+                             maxspeed: w.maxspeed, distanceM: b.dist)
+        }
+        let fwd = w.lanesForward ?? w.lanes.map { $0 / 2 }
+        let bwd = w.lanesBackward ?? w.lanes.map { $0 - $0 / 2 }
+        return RoadMatch(wayId: w.id, cls: w.cls, oneway: false,
+                         lanesSame: (b.along ? fwd : bwd).flatMap { $0 > 0 ? $0 : nil },
+                         lanesOpposite: (b.along ? bwd : fwd).flatMap { $0 > 0 ? $0 : nil },
+                         maxspeed: w.maxspeed, distanceM: b.dist)
+    }
+
+    struct Located { var dist: Double; var way: RoadWay; var seg: Int; var t: Double; var along: Bool }
+
+    func locate(lat: Double, lon: Double, courseDeg: Double?, maxDistanceM: Double) -> Located? {
         let mPerLat = 111_320.0, mPerLon = 111_320.0 * cos(lat * .pi / 180)
         let ca = Int(floor(lat / Self.cell)), cb = Int(floor(lon / Self.cell))
-        var best: (score: Double, dist: Double, way: RoadWay, along: Bool)?
+        var best: (score: Double, loc: Located)?
         var seen = Set<String>()
         for a in (ca - 1)...(ca + 1) {
             for b in (cb - 1)...(cb + 1) {
@@ -185,21 +210,141 @@ public final class RoadMap {
                         if w.oneway == -1 && along { continue }
                     }
                     let score = dist + penalty
-                    if best == nil || score < best!.score { best = (score, dist, w, along) }
+                    if best == nil || score < best!.score { best = (score, Located(dist: dist, way: w, seg: i, t: t, along: along)) }
                 }
             }
         }
-        guard let b = best else { return nil }
-        let w = b.way
-        if w.oneway != 0 {
-            return RoadMatch(wayId: w.id, cls: w.cls, oneway: true, lanesSame: w.lanes, lanesOpposite: 0,
-                             maxspeed: w.maxspeed, distanceM: b.dist)
+        return best?.loc
+    }
+
+    /// Hình dạng con đường phía trước xe (đi theo way đang khớp, tới cuối way thì nối sang way chung nút
+    /// rẽ ít nhất, ≤ 60°) và các ngã tư/ngã ba trên đường đi (nút có ≥ 3 nhánh).
+    public func ahead(lat: Double, lon: Double, courseDeg: Double?, maxDistanceM: Double = 20,
+                      length: Double = 300) -> RoadAhead? {
+        guard let loc = locate(lat: lat, lon: lon, courseDeg: courseDeg, maxDistanceM: maxDistanceM) else { return nil }
+        let mPerLat = 111_320.0, mPerLon = 111_320.0 * cos(lat * .pi / 180)
+        func xy(_ w: RoadWay, _ i: Int) -> (Double, Double) { ((w.lon[i] - lon) * mPerLon, (w.lat[i] - lat) * mPerLat) }
+        let w0 = loc.way
+        let a = xy(w0, loc.seg), b = xy(w0, loc.seg + 1)
+        let p0 = (a.0 + loc.t * (b.0 - a.0), a.1 + loc.t * (b.1 - a.1))
+        // hướng đi dọc đoạn đường (đông, bắc) và hướng sang phải
+        var fx = b.0 - a.0, fy = b.1 - a.1
+        if !loc.along { fx = -fx; fy = -fy }
+        let fl = (fx * fx + fy * fy).squareRoot()
+        fx /= fl; fy /= fl
+        let rx = fy, ry = -fx
+        func local(_ p: (Double, Double)) -> RoadPoint {
+            let dx = p.0 - p0.0, dy = p.1 - p0.1
+            return RoadPoint(x: dx * rx + dy * ry, z: dx * fx + dy * fy)
         }
-        let fwd = w.lanesForward ?? w.lanes.map { $0 / 2 }
-        let bwd = w.lanesBackward ?? w.lanes.map { $0 - $0 / 2 }
-        return RoadMatch(wayId: w.id, cls: w.cls, oneway: false,
-                         lanesSame: (b.along ? fwd : bwd).flatMap { $0 > 0 ? $0 : nil },
-                         lanesOpposite: (b.along ? bwd : fwd).flatMap { $0 > 0 ? $0 : nil },
-                         maxspeed: w.maxspeed, distanceM: b.dist)
+        func branches(_ w: RoadWay, _ i: Int) -> Int {
+            var seen = Set<Int64>(), n = 0
+            for (id, idx) in nodes[Self.nodeKey(w.lat[i], w.lon[i])] ?? [] {
+                guard let ww = ways[id] else { continue }
+                if seen.contains(id) { continue }   // way khép kín lặp lại nút đầu
+                seen.insert(id)
+                n += (idx == 0 || idx == ww.lat.count - 1) && ww.lat.first != ww.lat.last ? 1 : 2
+            }
+            return n
+        }
+
+        var path = [RoadPoint(x: 0, z: 0)]
+        var junctions: [Double] = []
+        var way = w0
+        var idx = loc.along ? loc.seg + 1 : loc.seg
+        var step = loc.along ? 1 : -1
+        var visited: Set<Int64> = [w0.id]
+        var travelled = 0.0
+        var lastBearing = atan2(fx, fy)
+        var prev = p0
+        for _ in 0..<2000 {
+            let p = xy(way, idx)
+            let seg = ((p.0 - prev.0) * (p.0 - prev.0) + (p.1 - prev.1) * (p.1 - prev.1)).squareRoot()
+            if seg > 0.01 {
+                travelled += seg
+                let lp = local(p)
+                guard lp.z > path.last!.z else { break }   // đường quay ngược (vòng gắt): dừng
+                path.append(lp)
+                lastBearing = atan2(p.0 - prev.0, p.1 - prev.1)
+                prev = p
+            }
+            if branches(way, idx) >= 3, let z = path.last?.z, z > 0 { junctions.append(z) }
+            if travelled >= length { break }
+            let nextIdx = idx + step
+            if nextIdx >= 0 && nextIdx < way.lat.count { idx = nextIdx; continue }
+            // hết way: nối sang way khác chung nút, rẽ ít nhất
+            var bestNext: (turn: Double, way: RoadWay, idx: Int, step: Int)?
+            for (id, j) in nodes[Self.nodeKey(way.lat[idx], way.lon[idx])] ?? [] where !visited.contains(id) {
+                guard let ww = ways[id] else { continue }
+                for st in [1, -1] {
+                    let k = j + st
+                    guard k >= 0, k < ww.lat.count else { continue }
+                    if ww.oneway == 1 && st == -1 { continue }
+                    if ww.oneway == -1 && st == 1 { continue }
+                    let q = xy(ww, k), c = xy(ww, j)
+                    var turn = abs(atan2(q.0 - c.0, q.1 - c.1) - lastBearing)
+                    if turn > .pi { turn = 2 * .pi - turn }
+                    if turn <= .pi / 3, bestNext == nil || turn < bestNext!.turn { bestNext = (turn, ww, k, st) }
+                }
+            }
+            guard let n = bestNext else { break }
+            visited.insert(n.way.id)
+            way = n.way; idx = n.idx; step = n.step
+        }
+        // ngã tư đường đôi (hai nhánh cách nhau vài mét) chỉ tính một
+        var merged: [Double] = []
+        for z in junctions.sorted() where merged.last.map({ z - $0 > 15 }) ?? true { merged.append(z) }
+        return RoadAhead(path: path, junctions: merged)
+    }
+}
+
+public struct RoadPoint: Equatable, Sendable {
+    public var x: Double
+    public var z: Double
+    public init(x: Double, z: Double) { self.x = x; self.z = z }
+}
+
+/// Đường phía trước theo hệ toạ độ gắn với tim đường tại chỗ xe: z dọc đường (m, phía trước), x sang phải (m).
+public struct RoadAhead: Equatable, Sendable {
+    public var path: [RoadPoint]
+    /// Khoảng cách (m) tới các ngã tư / ngã ba phía trước, tăng dần.
+    public var junctions: [Double]
+    public init(path: [RoadPoint], junctions: [Double]) { self.path = path; self.junctions = junctions }
+
+    public var length: Double { path.last?.z ?? 0 }
+
+    /// x của tim đường tại z (nội suy), nil nếu ngoài đoạn đã biết.
+    public func x(at z: Double) -> Double? {
+        guard path.count > 1, z >= path[0].z, z <= path[path.count - 1].z else { return nil }
+        for i in 1..<path.count where path[i].z >= z {
+            let a = path[i - 1], b = path[i]
+            return b.z == a.z ? a.x : a.x + (z - a.z) * (b.x - a.x) / (b.z - a.z)
+        }
+        return path.last?.x
+    }
+
+    /// Phần cong thêm của đường so với đường thẳng tiếp tuyến tại `join`: 0 khi z ≤ join, liền mạch (cả độ dốc) tại join.
+    /// Màn lái cộng phần này vào làn camera ở đoạn xa.
+    public func bend(at z: Double, join: Double) -> Double {
+        guard z > join, let x0 = x(at: join) else { return 0 }
+        let h = 5.0
+        let xa = x(at: max(join - h, path.first?.z ?? 0)) ?? x0, xb = x(at: join + h) ?? x0
+        let slope = (xb - xa) / (min(join + h, length) - max(join - h, path.first?.z ?? 0))
+        let zc = min(z, length)
+        let xz = x(at: zc) ?? x0
+        // ngoài đoạn đã biết: kéo thẳng theo hướng cuối
+        var extra = 0.0
+        if z > length, path.count > 1 {
+            let a = path[path.count - 2], b = path[path.count - 1]
+            extra = b.z > a.z ? (z - length) * (b.x - a.x) / (b.z - a.z) : 0
+        }
+        return xz + extra - x0 - slope * (z - join)
+    }
+
+    /// Dịch theo quãng đường xe đã đi từ lúc tra (giữa hai lần tra mỗi giây).
+    public func advanced(by d: Double) -> RoadAhead {
+        guard d != 0 else { return self }
+        return RoadAhead(path: path.map { RoadPoint(x: $0.x, z: $0.z - d) },
+                         junctions: junctions.map { $0 - d }.filter { $0 > -10 })
     }
 }
