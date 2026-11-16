@@ -2,6 +2,8 @@
 # Export YOLO sang CoreML cho app iOS và chép vào ios/SafeGap/Models/.
 #   ./scripts/export_coreml.sh            # yolo11n
 #   ./scripts/export_coreml.sh yolov8n    # model khác
+#   ./scripts/export_coreml.sh ~/safegap-dataset/runs/safegap/weights/best.pt [tên]   # model tự train
+#                                          (tên mặc định safegap_drive → safegap_drive.mlpackage)
 # Chạy trong môi trường uv riêng, ghim phiên bản (coremltools chưa hỗ trợ torch quá mới và numpy 2.x),
 # không đụng .venv của prototype.
 set -euo pipefail
@@ -12,6 +14,11 @@ DEST="$ROOT/ios/SafeGap/Models"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+if [[ "$MODEL" == *.pt ]]; then
+  SRC="$MODEL"
+  MODEL="${2:-safegap_drive}"
+  cp "$SRC" "$WORK/$MODEL.pt"
+fi
 cd "$WORK"
 uv run --isolated --no-project --python 3.11 \
   --with "ultralytics" \

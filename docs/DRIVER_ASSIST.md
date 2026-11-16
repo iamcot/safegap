@@ -70,6 +70,10 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
       nhánh cấp ≥ tertiary, hoặc đường nhánh có tên/rộng; kiểm tra trên log tuyến đi làm.
 - [ ] B2. Dataset: Zalo AI 2020 + bộ VN trên Roboflow/Kaggle + Mapillary (pretrain) + ảnh tự thu (A6) + ảnh tổng hợp
       từ hình mẫu QCVN. Lớp dò theo hình dạng (tròn đỏ, tròn xanh, tam giác, chữ nhật) + lớp `traffic_light`.
+- [x] B2a. Công cụ gộp ảnh tự thu: `uv run python -m proto.dataset merge|split|train` (`proto/dataset.py`, test trong
+      `tests/test_tools.py`). Chỉ lấy phiên có file `REVIEWED` (đã sửa nhãn), gộp lớp theo tên (lớp mới thêm cuối
+      `classes.txt`), chia train/val theo cụm 2 phút, train `--device mps`, tắt lật ngang (biển trái/phải đổi nghĩa).
+      Export: `./scripts/export_coreml.sh <best.pt> [tên]`. Chưa có: tải/convert dataset công khai (Zalo AI 2020...).
 - [ ] B3. Train dò biển (YOLO11n, vùng cắt 640×360) trên Mac M5, export Core ML, chạy 4 lượt/giây xen kẽ 2 vùng cắt
       qua `InferenceScheduler` (task `signsLights`). Đo nhiệt.
 - [ ] B4. Classifier ~12–40 loại biển (64×64), bỏ phiếu ≥ 3 lần; tracker biển; lọc biển trên thân xe / mặt nghiêng.
@@ -114,4 +118,4 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
 ## Lịch sử PR
 
 - A0–A6: PR #5 (đã merge). Từ giai đoạn B: commit thẳng lên main.
-- B1, B5, B6, B7: commit trên main 16/11/2026.
+- B1, B5, B6, B7, B2a: commit trên main 16/11/2026.

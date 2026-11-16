@@ -45,3 +45,59 @@ def test_triplog_summary(tmp_path):
     assert s["lane_pct"]["LR"] == pytest.approx(50)
     assert "Số lần kêu (vào RED): 1" in triplog.report("log.csv", s)
     assert triplog.plot(triplog.load(p), tmp_path / "log.png").exists()
+
+
+# --- proto.dataset (gộp ảnh tự thu) ---
+def _session(root, name, classes, files, reviewed=True):
+    import json as _json
+    d = root / name
+    (d / "images").mkdir(parents=True)
+    (d / "labels").mkdir()
+    (d / "classes.txt").write_text("\n".join(classes) + "\n")
+    with open(d / "meta.jsonl", "w") as mf:
+        for stem, label in files.items():
+            (d / "images" / f"{stem}.jpg").write_bytes(b"jpg")
+            (d / "labels" / f"{stem}.txt").write_text(label)
+            mf.write(_json.dumps({"file": f"{stem}.jpg", "speedKmh": 30}) + "\n")
+    if reviewed:
+        (d / "REVIEWED").write_text("")
+    return d
+
+
+def test_dataset_merge_remaps_classes_and_skips_unreviewed(tmp_path):
+    import zipfile
+    from proto import dataset as D
+
+    a = _session(tmp_path, "capture_a", ["car", "truck"], {"0000010_00": "1 0.5 0.5 0.1 0.1\n"})
+    b = _session(tmp_path, "capture_b", ["car", "P.130", "truck"],
+                 {"0000020_00": "1 0.2 0.2 0.05 0.05\n2 0.5 0.5 0.1 0.1\nbad line\n"})
+    _session(tmp_path, "capture_c", ["car"], {"0000030_00": "0 0.5 0.5 0.1 0.1\n"}, reviewed=False)
+    zp = tmp_path / "capture_b.zip"
+    with zipfile.ZipFile(zp, "w") as z:
+        for f in b.rglob("*"):
+            z.write(f, f.relative_to(tmp_path))
+    ds = tmp_path / "ds"
+    s = D.merge([a, zp, tmp_path / "capture_c"], ds)
+    assert s["classes"] == ["car", "truck", "P.130"]
+    assert s["skipped"] == ["capture_c"]
+    assert (ds / "labels" / "capture_a__0000010_00.txt").read_text().split()[0] == "1"
+    lb = (ds / "labels" / "capture_b__0000020_00.txt").read_text().splitlines()
+    assert [ln.split()[0] for ln in lb] == ["2", "1"]
+    assert len((ds / "meta.jsonl").read_text().splitlines()) == 2
+
+
+def test_dataset_split_groups_by_time_cluster(tmp_path):
+    from proto import dataset as D
+
+    # ảnh trong cùng cụm 2 phút luôn cùng một phía
+    assert D.is_val("capture_x__0000100_00") == D.is_val("capture_x__0000110_00")
+    ds = tmp_path / "ds"
+    (ds / "images").mkdir(parents=True)
+    for i in range(0, 3600, 4):
+        (ds / "images" / f"capture_x__{i:07d}_00.jpg").write_bytes(b"")
+    (ds / "classes.txt").write_text("car\nP.130\n")
+    yaml = D.split(ds)
+    val = (ds / "val.txt").read_text().splitlines()
+    train = (ds / "train.txt").read_text().splitlines()
+    assert len(val) + len(train) == 900 and val and not set(val) & set(train)
+    assert '1: "P.130"' in yaml.read_text()
