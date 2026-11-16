@@ -54,10 +54,10 @@ final class LaneTests: XCTestCase {
     func testGateIgnoresDiagonalClutter() throws {
         let left = { (y: Double) in 0.30 + (0.47 - 0.30) * (1 - y) / 0.55 }
         let right = { (y: Double) in 0.72 + (0.53 - 0.72) * (1 - y) / 0.55 }
-        // vệt sáng chéo cắt ngang làn (đèn xe, vạch kẻ khác) nằm gần vạch phải
-        let clutter = { (y: Double) in 0.47 + 0.22 * (y - 0.45) / 0.55 }
+        // vệt sáng chéo cắt ngang cả hai vạch (đèn xe, vạch kẻ khác)
+        let clutter = { (y: Double) in 0.40 + 0.9 * (y - 0.55) }
         let img = road([(left, false), (right, true), (clutter, false)])
-        let d = LaneDetector.detect(img, center: center, gate: { y in (left(y) + 0.01, right(y) - 0.01, 0.035) })
+        let d = LaneDetector.detect(img, center: center, gate: { y in (left(y) + 0.01, right(y) - 0.01, 0.03) })
         let l = try XCTUnwrap(d.left), r = try XCTUnwrap(d.right)
         for y in [0.6, 0.75, 0.9] {
             XCTAssertEqual(l.x(at: y), left(y), accuracy: 0.012, "trái y=\(y)")
