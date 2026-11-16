@@ -41,9 +41,12 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
       Cảnh báo thử: "Đèn đỏ phía trước" (đang chạy nhanh, gần ngã tư/đèn to), "Đèn xanh rồi" (đứng yên > 2 s sau khi xanh).
 - [x] A5. Nối vào `FrameProcessor` + HUD: dòng trạng thái đèn / ngã tư kế tiếp / lần rẽ gần nhất; Cài đặt bật/tắt
       giọng nói và đèn giao thông.
-- [ ] A6. Chế độ thu dữ liệu: lưu ảnh cắt (vùng biển/đèn phía trên, đuôi xe phía trước) + JSON (GPS, giờ, tốc độ,
-      box của model hiện tại theo định dạng YOLO) mỗi 1–2 s, làm mờ vùng biển số; nút xuất ZIP trong Cài đặt.
-      Dùng để gán nhãn sẵn → CVAT / Label Studio.
+- [x] A6. Chế độ thu dữ liệu (`SafeGapCore/Capture.swift` + `SafeGap/Logging/DataCapture.swift`): Cài đặt >
+      "Thu dữ liệu". Khi chạy 1 ảnh/2 s, thấy đèn 1 ảnh/s (cả lúc chờ đèn), tối đa 4000 ảnh/phiên.
+      Mỗi phiên `Documents/captures/capture_<giờ>/`: `images/*.jpg` (frame 1920×1080), `labels/*.txt` (YOLO, gán sẵn
+      bằng model hiện tại), `classes.txt` (thứ tự `YOLOLabel.classes`, lớp mới thêm vào CUỐI), `meta.jsonl`
+      (giờ, GPS, hướng, tốc độ, màu đèn, nhiệt). Nút ZIP + chia sẻ trong Cài đặt.
+      Chưa làm mờ biển số (chưa có model dò biển số; app dùng cá nhân, ảnh chỉ ở trên máy tới khi tự chia sẻ).
 - [ ] A7. Đo trên xe: fps / nhiệt 30 phút ban ngày khi bật đèn giao thông; kiểm tra rẽ / ngã tư / đứng yên trên log
       1 chuyến đi làm. Ghi số đo vào mục "Ghi chú đo đạc" dưới đây.
 - [ ] A8. Thêm cột vào log CSV: `light`, `junction_m`, `turn`, `stopped_s` (cập nhật `proto/` nếu cần đọc).
@@ -88,4 +91,4 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
 
 ## Lịch sử PR
 
-- A0–A5: nhánh `claude/project-thread-of9yun` (PR "Hỗ trợ tài xế: nền tảng giai đoạn A").
+- A0–A6: nhánh `claude/project-thread-of9yun` (PR "Hỗ trợ tài xế: nền tảng giai đoạn A").

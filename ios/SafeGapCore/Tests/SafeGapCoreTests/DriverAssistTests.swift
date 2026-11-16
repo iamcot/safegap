@@ -221,3 +221,28 @@ final class TrafficLightTests: XCTestCase {
         XCTAssertNil(rules.check(state: green, t: 13, speedKmh: 20, junctionM: nil, stoppedS: nil))
     }
 }
+
+final class CaptureTests: XCTestCase {
+    func testYOLOLine() {
+        let d = Detection(960, 540, 1152, 756, "car")
+        XCTAssertEqual(YOLOLabel.line(d, frameWidth: 1920, frameHeight: 1080), "0 0.550000 0.600000 0.100000 0.200000")
+        let l = Detection(-10, 0, 10, 54, "traffic light")   // tràn mép: cắt lại
+        XCTAssertEqual(YOLOLabel.line(l, frameWidth: 1920, frameHeight: 1080), "4 0.002604 0.025000 0.005208 0.050000")
+        XCTAssertNil(YOLOLabel.line(Detection(0, 0, 10, 10, "person"), frameWidth: 1920, frameHeight: 1080))
+        XCTAssertEqual(YOLOLabel.file([d, Detection(0, 0, 10, 10, "person")], frameWidth: 1920, frameHeight: 1080).split(separator: "\n").count, 1)
+    }
+
+    func testCapturePolicy() {
+        var p = CapturePolicy()
+        var n = 0
+        for i in 0..<300 where p.shouldCapture(t: Double(i) / 15, speedKmh: 40, hasLight: false) { n += 1 }
+        XCTAssertEqual(n, 10)   // 20 s, mỗi 2 s
+        var q = CapturePolicy()
+        XCTAssertFalse(q.shouldCapture(t: 0, speedKmh: 0, hasLight: false))
+        XCTAssertTrue(q.shouldCapture(t: 0, speedKmh: 0, hasLight: true))
+        XCTAssertFalse(q.shouldCapture(t: 0.5, speedKmh: 0, hasLight: true))
+        XCTAssertTrue(q.shouldCapture(t: 1.0, speedKmh: 0, hasLight: true))
+        q.maxImages = 2
+        XCTAssertFalse(q.shouldCapture(t: 5, speedKmh: 40, hasLight: false))
+    }
+}

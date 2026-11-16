@@ -30,6 +30,8 @@ struct UserSettings: Codable, Equatable {
     var voiceOn = true
     /// Nhận đèn giao thông (bản thử: lớp "traffic light" của YOLO + màu HSV).
     var trafficLights = true
+    /// Lưu ảnh + nhãn gán sẵn để gán nhãn và train thêm (docs/DRIVER_ASSIST.md A6).
+    var dataCapture = false
 
     var zoom: Double { zoom2x ? 2 : 1 }
 
@@ -51,6 +53,7 @@ struct UserSettings: Codable, Equatable {
         autoRoads = try c.decodeIfPresent(Bool.self, forKey: .autoRoads) ?? d.autoRoads
         voiceOn = try c.decodeIfPresent(Bool.self, forKey: .voiceOn) ?? d.voiceOn
         trafficLights = try c.decodeIfPresent(Bool.self, forKey: .trafficLights) ?? d.trafficLights
+        dataCapture = try c.decodeIfPresent(Bool.self, forKey: .dataCapture) ?? d.dataCapture
     }
 
     static let key = "settings.v1"
@@ -156,6 +159,7 @@ final class FrameProcessor {
     private var junctions = JunctionTracker()
     private var lightTracker = TrafficLightTracker()
     private let lightRules = LightAlertRules()
+    let capture = DataCapture()
     static let trafficLightClass = "traffic light"
     private var thermalLevel: ThermalLevel = .nominal
     private var laneTracker = LaneTracker()
@@ -409,6 +413,15 @@ final class FrameProcessor {
             lightTracker.reset()
         }
         if p.settings.voiceOn { voice.tick(t: t) }
+
+        // Thu dữ liệu (A6): ảnh + nhãn gán sẵn từ model hiện tại (xe + đèn).
+        if p.settings.dataCapture {
+            capture.start()
+            capture.offer(pb, t: t, frameWidth: w, frameHeight: h, detections: dets + lightDets, speed: gps, speedKmh: v,
+                          light: lightState?.box != nil ? lightState?.color : nil, thermal: thermal)
+        } else if capture.isRunning {
+            capture.stop()
+        }
 
         if r.sound && p.settings.soundOn { sound.play() }
         let laneTag = (laneTracker.left != nil ? "L" : "") + (laneTracker.right != nil ? "R" : "")
