@@ -24,6 +24,8 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
   (chỉ Foundation, có test, CI chạy `swift test` trên Linux). Phần dính iOS (AVFoundation, Vision, CoreMotion) ở `ios/SafeGap`.
 - Ngưỡng / luật / câu nói để trong `config/*.json`, không hard-code (giống `law_vn.json`).
 - Thư mục `ios/SafeGap/` được Xcode đồng bộ với target: thêm file `.swift` là tự vào app, không sửa `project.pbxproj`.
+- Sau này port Android (Kotlin): logic mới luôn nằm trong SafeGapCore (chỉ Foundation), test với số cụ thể để port
+  1-1 sang Kotlin; tham số / luật / câu nói để trong `config/*.json` dùng chung; model export từ cùng `.pt` (Core ML + TFLite).
 - Không có Swift trên máy Linux của Claude: kiểm tra bằng CI của PR (`core-linux` + `app-build` macOS).
 
 ## Giai đoạn A – Nền tảng (đang làm)
