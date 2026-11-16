@@ -86,6 +86,10 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
       (`SIGN_GROUPS`: no_entry, no_stop_park, no_turn, speed_limit, prohibit_other, mandatory, warning, end_restriction,
       sign_other); mã QCVN tự gán gom về nhóm (`sign_group`). Train riêng: `train --task signs` (imgsz 1280), không gộp
       với model xe vì ảnh Roboflow không khoanh xe. Mã biển cụ thể (P.123a hay b, 40 hay 50) để classifier B4.
+      → 16/11/2026 23:27: chủ app đang train lần đầu trên M5 (`signs_20261116_2327`, 3205 train / 1598 val, imgsz 1280,
+        batch 8, ~5 phút/epoch). Bước tiếp: xem results.png / mAP50, export Core ML, nối vào app: model biển riêng
+        chạy theo `InferenceScheduler` (task signs), nhóm → `SignSighting` (no_stop_park → P.130 tạm, no_entry → P.102,
+        speed_limit → P.127 chưa có số, no_turn → cần classifier B4 để biết trái/phải/quay đầu).
 - [ ] B3. Train dò biển (YOLO11n, vùng cắt 640×360) trên Mac M5, export Core ML, chạy 4 lượt/giây xen kẽ 2 vùng cắt
       qua `InferenceScheduler` (task `signsLights`). Đo nhiệt.
 - [ ] B4. Classifier ~12–40 loại biển (64×64), bỏ phiếu ≥ 3 lần; tracker biển; lọc biển trên thân xe / mặt nghiêng.
