@@ -34,10 +34,16 @@ struct SettingsView: View {
                     Text(model.snapshot.signModel.map { "Model biển: \($0)" }
                          ?? "Chưa có model biển: export signs.mlpackage vào ios/SafeGap/Models (xem Models/README.md).")
                         .font(.caption).foregroundStyle(.secondary)
+                    HStack {
+                        Text("Bản đồ biển đã nhớ: \(model.snapshot.rememberedSigns) biển")
+                        Spacer()
+                        Button("Xoá", role: .destructive) { model.clearSignMap() }
+                            .disabled(model.snapshot.rememberedSigns == 0)
+                    }
                 } header: {
                     Text("Hỗ trợ tài xế")
                 } footer: {
-                    Text("Bản thử: nhận đèn bằng model hiện có, màu theo điểm sáng trong khung đèn. Nhắc \"Đèn đỏ phía trước\" khi còn chạy nhanh gần ngã tư, \"Đèn xanh rồi\" khi đèn đã xanh mà xe vẫn đứng. Giọng đọc dùng giọng tiếng Việt có sẵn trên máy (Cài đặt iPhone > Trợ năng > Nội dung được đọc > Giọng nói để tải giọng tốt hơn).")
+                    Text("Bản thử: nhận đèn bằng model hiện có, màu theo điểm sáng trong khung đèn. Nhắc \"Đèn đỏ phía trước\" khi còn chạy nhanh gần ngã tư, \"Đèn xanh rồi\" khi đèn đã xanh mà xe vẫn đứng. Biển camera thấy (dành cho làn mình) được nhớ theo GPS: lần sau đi qua app nhắc trước, kể cả khi camera không thấy; biển nhiều lần không thấy nữa thì tự xoá. Giọng đọc dùng giọng tiếng Việt có sẵn trên máy (Cài đặt iPhone > Trợ năng > Nội dung được đọc > Giọng nói để tải giọng tốt hơn).")
                 }
                 Section {
                     SignSimulator()

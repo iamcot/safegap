@@ -108,6 +108,14 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
       (`sightedAhead`, rẽ trước khi tới thì bỏ, biển sau ngã tư không bị ngã tư đó xoá); cấm đi ngược chiều ở giữa đường
       chỉ nói khi rẽ trái / quay đầu gần đó, ở miệng đường nhánh bên phải chỉ nói khi rẽ phải (`sightedIfTurn`, ±30 m).
       Biển không áp dụng vẽ xám trên hình camera, không lên chip. Biển tốc độ nhận kém (mAP50 0,58): cần thêm dữ liệu + B4.
+- [x] B3c. Biển + GPS + OSM (chủ app đề xuất 17/11): `SafeGapCore/SignMap.swift`. Biển camera xác nhận dành cho làn
+      mình (`SignEngine.isOwnRoadSign`) → toạ độ (GPS + hướng + khoảng cách / lệch ngang, `Geo.offset`) → `SignMemory`
+      (gộp cùng mã trong 25 m cùng hướng ±45°, trung bình vị trí). `SignRecall`: biển nhớ phía trước ≤ 80 m cùng chiều →
+      `sightedAhead` (nhắc trước khi camera thấy, vẫn nhắc nếu camera sót); đi qua mà camera không thấy (model đang chạy)
+      → `missed`; sót ≥ 3 và nhiều hơn số lần thấy → xoá. Lưu `Documents/sign_map.json` (30 s / lần), Cài đặt có số biển
+      đã nhớ + nút Xoá. Lệch ngang trừ độ cong đường từ OSM (`roadBend`). Tốc độ: `DriveContext.mapSpeedLimitKmh` =
+      maxspeed OSM, dùng khi biển P.127 chưa có số hoặc không có biển tốc độ nào.
+      Chưa làm: so toạ độ biển với các way OSM để biết biển thuộc đường ngang (GPS lệch 5–10 m, cần thử trên log thật).
 - [ ] B3. Train dò biển (YOLO11n, vùng cắt 640×360) trên Mac M5, export Core ML, chạy 4 lượt/giây xen kẽ 2 vùng cắt
       qua `InferenceScheduler` (task `signsLights`). Đo nhiệt.
 - [ ] B4. Classifier ~12–40 loại biển (64×64), bỏ phiếu ≥ 3 lần; tracker biển; lọc biển trên thân xe / mặt nghiêng.

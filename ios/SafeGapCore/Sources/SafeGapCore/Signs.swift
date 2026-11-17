@@ -150,13 +150,17 @@ public struct DriveContext: Equatable, Sendable {
     public var turning: TurnDirection?
     /// "car" / "truck": loại xe mình.
     public var vehicle: String
+    /// Tốc độ tối đa của đường theo OpenStreetMap (thẻ maxspeed), dùng khi biển tốc độ chưa đọc được số / không thấy biển.
+    public var mapSpeedLimitKmh: Int?
 
     public init(t: Double, odometer: Double, minuteOfDay: Int = 12 * 60, dayOfMonth: Int = 1, speedKmh: Double? = nil,
                 stoppedS: Double? = nil, stopExcused: Bool = false, junctionM: Double? = nil, junctionPassed: Bool = false,
-                turn: TurnEvent? = nil, turning: TurnDirection? = nil, vehicle: String = "car") {
+                turn: TurnEvent? = nil, turning: TurnDirection? = nil, vehicle: String = "car",
+                mapSpeedLimitKmh: Int? = nil) {
         self.t = t; self.odometer = odometer; self.minuteOfDay = minuteOfDay; self.dayOfMonth = dayOfMonth
         self.speedKmh = speedKmh; self.stoppedS = stoppedS; self.stopExcused = stopExcused; self.junctionM = junctionM
         self.junctionPassed = junctionPassed; self.turn = turn; self.turning = turning; self.vehicle = vehicle
+        self.mapSpeedLimitKmh = mapSpeedLimitKmh
     }
 }
 
@@ -316,11 +320,22 @@ public struct SignEngine: Equatable, Sendable {
                     out.append(VoiceMessage(kind: .signReminder, text: "Ngã tư phía trước cấm \(names)", key: key + ".remind", t: c.t))
                 }
             }
-            if r.speedLimit == true, let lim = a.value, let v = c.speedKmh, v > Double(lim) + al.speedMarginKmh {
+            // biển tốc độ chưa đọc được số (model chỉ biết nhóm): lấy số của đường trên OSM nếu có
+            if r.speedLimit == true, let lim = a.value ?? c.mapSpeedLimitKmh, let v = c.speedKmh,
+               v > Double(lim) + al.speedMarginKmh {
                 overSpeed = true
                 if let since = overSpeedSince, c.t - since >= al.speedHoldS {
                     out.append(VoiceMessage(kind: .signViolation, text: "Quá tốc độ, giới hạn \(lim)", key: key + ".speed", t: c.t))
                 }
+            }
+        }
+        // không có biển tốc độ nào: theo tốc độ tối đa của đường trên OSM
+        if !active.contains(where: { $0.rule.speedLimit == true }), let lim = c.mapSpeedLimitKmh, let v = c.speedKmh,
+           v > Double(lim) + al.speedMarginKmh {
+            overSpeed = true
+            if let since = overSpeedSince, c.t - since >= al.speedHoldS {
+                out.append(VoiceMessage(kind: .signViolation, text: "Quá tốc độ, đường này giới hạn \(lim)",
+                                        key: "map.speed.\(lim)", t: c.t))
             }
         }
         if overSpeed { overSpeedSince = overSpeedSince ?? c.t } else { overSpeedSince = nil }

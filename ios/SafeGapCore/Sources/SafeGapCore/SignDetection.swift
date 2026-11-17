@@ -123,13 +123,16 @@ public struct SignDetectionTracker: Equatable, Sendable {
     }
 
     /// Vị trí biển so với xe (từ khung + tiêu cự) và biển có dành cho làn mình không.
-    public func place(_ b: Box, frameWidth w: Double, fPx: Double?) -> (SignPlacement, Double?, Double?) {
+    /// `roadBend(z)`: đường cong sang phải bao nhiêu mét ở khoảng cách z (từ OSM). Đường cong thì biển bên lề trông như
+    /// lệch trái / phải so với hướng thẳng; trừ đi độ cong để so với mép đường thật.
+    public func place(_ b: Box, frameWidth w: Double, fPx: Double?,
+                      roadBend: ((Double) -> Double?)? = nil) -> (SignPlacement, Double?, Double?) {
         let bw = b.x2 - b.x1, bh = b.y2 - b.y1
         guard bh > 0 else { return (.applies, nil, nil) }
         if bw / bh < minAspect { return (.turnedAway, nil, nil) }
         guard let f = fPx, f > 0 else { return (.applies, nil, nil) }
         let z = f * signSizeM / bh
-        let x = ((b.x1 + b.x2) / 2 - w / 2) * z / f
+        let x = ((b.x1 + b.x2) / 2 - w / 2) * z / f - (roadBend?(z) ?? 0)
         if x < minLateralM { return (.leftOfUs, z, x) }
         if x > maxLateralM { return (.farRight, z, x) }
         return (.applies, z, x)
@@ -138,7 +141,8 @@ public struct SignDetectionTracker: Equatable, Sendable {
     /// Cập nhật với khung biển của model ở frame này; `vehicles` để bỏ biển nằm trên thân xe.
     /// Trả về các biển vừa được xác nhận lần đầu (mỗi biển một lần).
     public mutating func update(t: Double, signs: [Detection], vehicles: [Detection],
-                                frameWidth w: Double, frameHeight h: Double, fPx: Double? = nil) -> [ConfirmedSign] {
+                                frameWidth w: Double, frameHeight h: Double, fPx: Double? = nil,
+                                roadBend: ((Double) -> Double?)? = nil) -> [ConfirmedSign] {
         let windowS = self.windowS
         tracks.removeAll { t - $0.lastT > windowS }
         for i in tracks.indices { tracks[i].hits.removeAll { t - $0 > windowS } }
@@ -151,7 +155,7 @@ public struct SignDetectionTracker: Equatable, Sendable {
             if vehicles.contains(where: { cx > $0.x1 && cx < $0.x2 && cy > $0.y1 && cy < $0.y2 && $0.width > d.width * 2 }) {
                 continue
             }
-            let (pl, z, x) = place(d.box, frameWidth: w, fPx: fPx)
+            let (pl, z, x) = place(d.box, frameWidth: w, fPx: fPx, roadBend: roadBend)
             if let j = bestTrack(for: d, group: g) {
                 tracks[j].box = d.box
                 // khung mới nhất (gần nhất, to nhất) quyết định vị trí

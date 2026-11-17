@@ -125,6 +125,8 @@ struct FrameSnapshot {
     var seenSigns: [ConfirmedSign] = []
     /// Đã nạp model dò biển chưa (để hiện trạng thái trong Cài đặt).
     var signModel: String?
+    /// Số biển trong bản đồ biển tự học.
+    var rememberedSigns = 0
 }
 
 final class FrameProcessor {
@@ -145,6 +147,38 @@ final class FrameProcessor {
     private var signBusy = false
     private var signResult: (t: Double, dets: [Detection])?
     private var signTracker = SignDetectionTracker()
+    /// Bản đồ biển tự học trên tuyến hay đi (Documents/sign_map.json): nhắc biển đã nhớ trước cả khi camera thấy.
+    private var signRecall = SignRecall(memory: FrameProcessor.loadSignMap())
+    private var signMapDirty = false
+    private var signMapSavedT = -1e9
+    private var clearSignMapRequested = false
+    private let saveQueue = DispatchQueue(label: "safegap.signmap", qos: .utility)
+
+    static var signMapURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("sign_map.json")
+    }
+
+    static func loadSignMap() -> SignMemory {
+        guard let d = try? Data(contentsOf: signMapURL), let m = try? JSONDecoder().decode(SignMemory.self, from: d) else {
+            return SignMemory()
+        }
+        return m
+    }
+
+    /// Gọi từ Cài đặt (luồng nào cũng được): xoá bản đồ biển ở frame sau.
+    func clearSignMap() {
+        lock.lock()
+        clearSignMapRequested = true
+        lock.unlock()
+    }
+
+    private func saveSignMapIfNeeded(t: Double, force: Bool = false) {
+        guard signMapDirty, force || t - signMapSavedT > 30 else { return }
+        signMapDirty = false
+        signMapSavedT = t
+        guard let data = try? JSONEncoder().encode(signRecall.memory) else { return }
+        saveQueue.async { try? data.write(to: FrameProcessor.signMapURL, options: .atomic) }
+    }
     private var detectorError: String?
     private var pipeline: Pipeline?
     private var pipelineVersion = -1
@@ -486,12 +520,35 @@ final class FrameProcessor {
         let cal = Calendar.current.dateComponents([.hour, .minute, .day], from: Date())
         let minuteOfDay = (cal.hour ?? 12) * 60 + (cal.minute ?? 0), day = cal.day ?? 1
         var signMsgs: [VoiceMessage] = []
+        // vị trí đủ tin để định vị biển: có hướng đi, sai số GPS ≤ 25 m
+        let fix: (lat: Double, lon: Double, course: Double)? = gps.flatMap { g in
+            guard let c = g.courseDeg, g.horizontalAccuracyM > 0, g.horizontalAccuracyM <= 25 else { return nil }
+            return (g.lat, g.lon, c)
+        }
+        lock.lock()
+        let clearMap = clearSignMapRequested
+        clearSignMapRequested = false
+        lock.unlock()
+        if clearMap {
+            signRecall.clear()
+            signMapDirty = true
+            saveSignMapIfNeeded(t: t, force: true)
+        }
         if let sr = takeSignResult() {
             // biển từ model: đủ phiếu qua nhiều lượt mới tính là đã đi qua biển
             // biển chỉ có hiệu lực cho phần đường bên trái nó: biển xa bên phải là của đường ngang / nhánh
             let lanes = Double(roadMatch?.match?.lanesSame ?? 2)
             signTracker.maxLateralM = max(8, lanes * 3.5 + 3.5)
-            for c in signTracker.update(t: sr.t, signs: sr.dets, vehicles: dets, frameWidth: w, frameHeight: h, fPx: f) {
+            // đường cong (OSM): trừ độ cong để biết biển nằm lề phải hay giữa đường thật
+            let bend: ((Double) -> Double?)? = ahead.map { a in { z in a.x(at: z).map { $0 - (a.x(at: 0) ?? 0) } } }
+            for c in signTracker.update(t: sr.t, signs: sr.dets, vehicles: dets, frameWidth: w, frameHeight: h, fPx: f,
+                                        roadBend: bend) {
+                if let fx = fix, signs.isOwnRoadSign(c), let code = c.group.sightingCode {
+                    signRecall.cameraSaw(code: code, group: c.group.rawValue, carLat: fx.lat, carLon: fx.lon,
+                                         courseDeg: fx.course, aheadM: c.distanceM ?? 0, lateralM: c.lateralM ?? 0,
+                                         odometer: odo, time: Date().timeIntervalSince1970)
+                    signMapDirty = true
+                }
                 signMsgs += signs.feed(c, odometer: odo, t: t, minuteOfDay: minuteOfDay, dayOfMonth: day)
             }
         } else if !p.settings.signDetection {
@@ -500,11 +557,23 @@ final class FrameProcessor {
         for sg in takeSightings() {
             signMsgs += signs.sighted(sg, odometer: odo, t: t, minuteOfDay: minuteOfDay, dayOfMonth: day)
         }
+        // biển đã nhớ trên tuyến: sắp tới thì đưa vào luật (hiệu lực từ chỗ cắm), kể cả khi camera chưa / không thấy
+        if let fx = fix {
+            let rc = signRecall.update(lat: fx.lat, lon: fx.lon, courseDeg: fx.course, odometer: odo,
+                                       cameraActive: p.settings.signDetection && signDetector != nil)
+            if rc.changed { signMapDirty = true }
+            for u in rc.due {
+                signMsgs += signs.sightedAhead(SignSighting(code: u.sign.code), aheadM: u.aheadM, odometer: odo, t: t,
+                                               minuteOfDay: minuteOfDay, dayOfMonth: day)
+            }
+        }
+        saveSignMapIfNeeded(t: t)
         let jam = (r.d ?? .infinity) < 8
         signMsgs += signs.update(DriveContext(t: t, odometer: odo, minuteOfDay: minuteOfDay, dayOfMonth: day, speedKmh: v,
                                               stoppedS: stoppedS, stopExcused: jam || lightState?.color == .red,
                                               junctionM: junction.nextM, junctionPassed: junction.passed,
-                                              turn: turn, turning: turnDetector.turning))
+                                              turn: turn, turning: turnDetector.turning,
+                                              mapSpeedLimitKmh: roadMatch?.match?.maxspeed))
         if p.settings.voiceOn { signMsgs.forEach(voice.offer) }
 
         if p.settings.voiceOn { voice.tick(t: t) }
@@ -564,6 +633,7 @@ final class FrameProcessor {
         s.activeSigns = signs.active
         s.seenSigns = t - (signTracker.visible.map(\.t).max() ?? -10) < 1.5 ? signTracker.visible : []
         s.signModel = signDetector?.modelName
+        s.rememberedSigns = signRecall.memory.signs.count
         onSnapshot?(s)
     }
 
