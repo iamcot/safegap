@@ -13,12 +13,15 @@ public enum SignGroup: String, CaseIterable, Codable, Sendable {
     case warning
     case endRestriction = "end_restriction"
     case other = "sign_other"
+    /// Cấm đỗ (P.131a/b/c, vẫn được dừng). Thêm sau cùng để chỉ số lớp của model cũ giữ nguyên.
+    case noPark = "no_park"
 
     /// Chữ ngắn để vẽ trên khung.
     public var label: String {
         switch self {
         case .noEntry: return "Cấm đi vào"
-        case .noStopPark: return "Cấm dừng/đỗ"
+        case .noStopPark: return "Cấm dừng đỗ"
+        case .noPark: return "Cấm đỗ"
         case .noTurn: return "Cấm rẽ"
         case .speedLimit: return "Tốc độ"
         case .prohibitOther: return "Biển cấm"
@@ -35,6 +38,7 @@ public enum SignGroup: String, CaseIterable, Codable, Sendable {
         switch self {
         case .noEntry: return "P.102"
         case .noStopPark: return "P.130"
+        case .noPark: return "P.131a"
         case .speedLimit: return "P.127"
         default: return nil
         }
@@ -43,9 +47,33 @@ public enum SignGroup: String, CaseIterable, Codable, Sendable {
     /// Biển cấm / hiệu lệnh màu đỏ-xanh nổi bật: vẽ đậm hơn.
     public var isRegulatory: Bool {
         switch self {
-        case .noEntry, .noStopPark, .noTurn, .speedLimit, .prohibitOther, .mandatory, .endRestriction: return true
+        case .noEntry, .noStopPark, .noPark, .noTurn, .speedLimit, .prohibitOther, .mandatory, .endRestriction: return true
         default: return false
         }
+    }
+}
+
+/// Phân biệt cấm dừng và đỗ (P.130, hai vạch đỏ chéo hình X) với cấm đỗ (P.131a, một vạch chéo) trong cùng nhóm
+/// `no_stop_park` của model: đếm điểm đỏ dọc hai đường chéo bên trong nền xanh (bỏ viền đỏ và tâm, nơi hai vạch giao).
+public enum NoStopParkClassifier {
+    /// `pixels`: lưới điểm trong khung biển, rgb 0..255, (u, v) 0..1 theo khung. nil = không chắc (giữ P.130, chặt hơn).
+    public static func classify(_ pixels: [(r: Double, g: Double, b: Double, u: Double, v: Double)],
+                                band: Double = 0.09, onFrac: Double = 0.3, offFrac: Double = 0.15) -> String? {
+        var d1 = (red: 0, n: 0), d2 = (red: 0, n: 0)
+        for p in pixels {
+            let du = p.u - 0.5, dv = p.v - 0.5
+            let r = (du * du + dv * dv).squareRoot()
+            guard r < 0.36, r > 0.1 else { continue }   // trong viền đỏ, ngoài tâm
+            let (h, s, v) = LightColorClassifier.hsv(p.r, p.g, p.b)
+            let red = (h < 20 || h > 335) && s > 0.35 && v > 0.25
+            if abs(p.u - p.v) < band { d1.n += 1; if red { d1.red += 1 } }
+            if abs(p.u + p.v - 1) < band { d2.n += 1; if red { d2.red += 1 } }
+        }
+        guard d1.n >= 4, d2.n >= 4 else { return nil }
+        let f1 = Double(d1.red) / Double(d1.n), f2 = Double(d2.red) / Double(d2.n)
+        if f1 >= onFrac && f2 >= onFrac { return "P.130" }
+        if max(f1, f2) >= onFrac && min(f1, f2) <= offFrac { return "P.131a" }
+        return nil
     }
 }
 
@@ -72,8 +100,14 @@ public struct ConfirmedSign: Equatable, Sendable {
     public var distanceM: Double?
     public var lateralM: Double?
     public var placement: SignPlacement = .applies
+    /// Mã cụ thể đọc được từ ảnh (vd P.131a trong nhóm cấm dừng/đỗ); nil = theo nhóm.
+    public var code: String? = nil
 
     public var applies: Bool { placement == .applies }
+    /// Mã đưa vào luật: mã đọc được, không thì mã mặc định của nhóm.
+    public var lawCode: String? { code ?? group.sightingCode }
+    /// Chữ vẽ trên khung: theo mã đọc được nếu có (biển cấm dừng đỗ đọc ra một vạch = cấm đỗ).
+    public var label: String { code == "P.131a" ? SignGroup.noPark.label : group.label }
 }
 
 public struct SignDetectionTracker: Equatable, Sendable {
@@ -114,6 +148,8 @@ public struct SignDetectionTracker: Equatable, Sendable {
         var lastT: Double
         var reported: Bool
         var totalHits = 0
+        var codeVotes: [String: Int] = [:]
+        var code: String? { codeVotes.max { $0.value < $1.value }?.key }
     }
 
     private(set) var tracks: [Track] = []
@@ -125,7 +161,7 @@ public struct SignDetectionTracker: Equatable, Sendable {
     public var visible: [ConfirmedSign] {
         tracks.filter { $0.hits.count >= minHits }.map {
             ConfirmedSign(group: $0.group, box: $0.box, conf: $0.conf, t: $0.lastT, distanceM: $0.distanceM,
-                          lateralM: $0.lateralM, placement: $0.placement)
+                          lateralM: $0.lateralM, placement: $0.placement, code: $0.code)
         }
     }
 
@@ -147,9 +183,10 @@ public struct SignDetectionTracker: Equatable, Sendable {
 
     /// Cập nhật với khung biển của model ở frame này; `vehicles` để bỏ biển nằm trên thân xe.
     /// Trả về các biển vừa được xác nhận lần đầu (mỗi biển một lần).
+    /// `codes[i]`: mã cụ thể đọc được từ ảnh cho biển `signs[i]` (nil / thiếu = không biết), bỏ phiếu theo track.
     public mutating func update(t: Double, signs: [Detection], vehicles: [Detection],
                                 frameWidth w: Double, frameHeight h: Double, fPx: Double? = nil,
-                                roadBend: ((Double) -> Double?)? = nil) -> [ConfirmedSign] {
+                                roadBend: ((Double) -> Double?)? = nil, codes: [String?] = []) -> [ConfirmedSign] {
         let windowS = self.windowS
         var out: [ConfirmedSign] = []
         // biển vừa ra khỏi khung hình mà chưa chốt (còn xa lúc thấy lần cuối): chốt theo vị trí lần cuối
@@ -159,7 +196,8 @@ public struct SignDetectionTracker: Equatable, Sendable {
         tracks.removeAll { t - $0.lastT > windowS }
         for i in tracks.indices { tracks[i].hits.removeAll { t - $0 > windowS } }
 
-        for d in signs {
+        for (k, d) in signs.enumerated() {
+            let readCode = k < codes.count ? codes[k] : nil
             guard let g = SignGroup(rawValue: d.cls), d.conf >= minConf, d.y2 - d.y1 >= minHeightPx else { continue }
             let cx = (d.x1 + d.x2) / 2, cy = (d.y1 + d.y2) / 2
             guard cy / h <= maxCenterY else { continue }
@@ -176,11 +214,13 @@ public struct SignDetectionTracker: Equatable, Sendable {
                 tracks[j].lateralM = x
                 tracks[j].hits.append(t)
                 tracks[j].totalHits += 1
+                if let rc = readCode { tracks[j].codeVotes[rc, default: 0] += 1 }
                 tracks[j].conf = max(tracks[j].conf, d.conf)
                 tracks[j].lastT = t
             } else {
                 tracks.append(Track(group: g, box: d.box, hits: [t], conf: d.conf, placement: pl, distanceM: z, lateralM: x,
-                                    lastT: t, reported: false, totalHits: 1))
+                                    lastT: t, reported: false, totalHits: 1,
+                                    codeVotes: readCode.map { [$0: 1] } ?? [:]))
             }
         }
 
@@ -194,7 +234,7 @@ public struct SignDetectionTracker: Equatable, Sendable {
 
     private mutating func confirm(_ tr: Track, t: Double) -> ConfirmedSign? {
         let c = ConfirmedSign(group: tr.group, box: tr.box, conf: tr.conf, t: t, distanceM: tr.distanceM,
-                              lateralM: tr.lateralM, placement: tr.placement)
+                              lateralM: tr.lateralM, placement: tr.placement, code: tr.code)
         // biển không dành cho làn mình: vẫn trả về (để vẽ mờ) nhưng không chiếm lượt cooldown
         if c.applies {
             if let last = lastReported[tr.group], t - last < cooldownS { return nil }
@@ -226,7 +266,7 @@ public extension ConfirmedSign {
     /// Biển cho SignEngine, nil khi nhóm chưa đủ để áp luật hoặc biển không dành cho làn mình.
     var sighting: SignSighting? {
         guard applies else { return nil }
-        return group.sightingCode.map { SignSighting(code: $0) }
+        return lawCode.map { SignSighting(code: $0) }
     }
 }
 
@@ -241,7 +281,7 @@ public extension SignEngine {
     /// - biển khác không dành cho làn mình, biển quay xiên: bỏ.
     mutating func feed(_ c: ConfirmedSign, odometer: Double, t: Double, minuteOfDay: Int, dayOfMonth: Int,
                        vehicle: String = "car") -> [VoiceMessage] {
-        guard let code = c.group.sightingCode, let rule = config.signs[code] else { return [] }
+        guard let code = c.lawCode, let rule = config.signs[code] else { return [] }
         let s = SignSighting(code: code)
         let ahead = max(0, c.distanceM ?? 0)
         let lateral = c.lateralM ?? 0

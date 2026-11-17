@@ -56,7 +56,39 @@ final class SignDetectionTests: XCTestCase {
         // proto/dataset.py SIGN_GROUPS: cùng thứ tự để chỉ số lớp của model khớp
         XCTAssertEqual(SignGroup.allCases.map(\.rawValue),
                        ["no_entry", "no_stop_park", "no_turn", "speed_limit", "prohibit_other", "mandatory", "warning",
-                        "end_restriction", "sign_other"])
+                        "end_restriction", "sign_other", "no_park"])
+    }
+
+    /// Biển giả: viền đỏ, nền xanh, 1 hoặc 2 vạch đỏ chéo.
+    private func signPixels(slashes: Int, n: Int = 16) -> [(r: Double, g: Double, b: Double, u: Double, v: Double)] {
+        var out: [(r: Double, g: Double, b: Double, u: Double, v: Double)] = []
+        for j in 0..<n {
+            for i in 0..<n {
+                let u = (Double(i) + 0.5) / Double(n), v = (Double(j) + 0.5) / Double(n)
+                let rad = ((u - 0.5) * (u - 0.5) + (v - 0.5) * (v - 0.5)).squareRoot()
+                let on = rad > 0.4 || abs(u - v) < 0.07 || (slashes == 2 && abs(u + v - 1) < 0.07)
+                out.append(on ? (217, 25, 25, u, v) : (25, 76, 204, u, v))
+            }
+        }
+        return out
+    }
+
+    func testSlashCountSplitsNoStopAndNoPark() {
+        XCTAssertEqual(NoStopParkClassifier.classify(signPixels(slashes: 2)), "P.130")
+        XCTAssertEqual(NoStopParkClassifier.classify(signPixels(slashes: 1)), "P.131a")
+        XCTAssertNil(NoStopParkClassifier.classify([]))
+    }
+
+    func testTrackerVotesReadCodeIntoSighting() {
+        var tr = SignDetectionTracker()
+        var out: [ConfirmedSign] = []
+        for (k, t) in [0.0, 0.3, 0.6].enumerated() {
+            out = tr.update(t: t, signs: [sign(.noStopPark, 1500 + Double(k) * 20, size: 30 + Double(k) * 4)],
+                            vehicles: [], frameWidth: W, frameHeight: H, codes: [k == 0 ? nil : "P.131a"])
+        }
+        XCTAssertEqual(out.first?.code, "P.131a")
+        XCTAssertEqual(out.first?.sighting?.code, "P.131a")
+        XCTAssertEqual(ConfirmedSign(group: .noPark, box: Box(0, 0, 1, 1), conf: 1, t: 0).sighting?.code, "P.131a")
     }
 }
 

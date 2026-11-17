@@ -85,7 +85,7 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
       4803 ảnh toàn cảnh, 7 lớp: Cam con lai, Cam dung va do, Cam nguoc chieu, Cam re, Gioi han toc do, Hieu lenh, Nguy hiem):
       `uv run python -m proto.dataset import-roboflow <thư mục>` → `<dataset>/signs`. Bộ dò biển dùng **nhóm biển**
       (`SIGN_GROUPS`: no_entry, no_stop_park, no_turn, speed_limit, prohibit_other, mandatory, warning, end_restriction,
-      sign_other); mã QCVN tự gán gom về nhóm (`sign_group`). Train riêng: `train --task signs` (imgsz 1280), không gộp
+      sign_other, no_park); mã QCVN tự gán gom về nhóm (`sign_group`). Train riêng: `train --task signs` (imgsz 1280), không gộp
       với model xe vì ảnh Roboflow không khoanh xe. Mã biển cụ thể (P.123a hay b, 40 hay 50) để classifier B4.
       → Kết quả lần 1 (`signs_20261116_2327`, 80 epoch, xong 17/11 6h): mAP50 0,614, mAP50-95 0,412, P 0,886, R 0,545
         (no_stop_park 0,667 · no_entry 0,644 · no_turn 0,604 · prohibit_other 0,609 · mandatory 0,595 · warning 0,596 ·
@@ -124,6 +124,18 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
         `mandatory`, `no_turn`...; `sign_group` hiểu). Phím `M` khoanh lại, ô "Gợi ý khung" bật/tắt.
       - App: model biển chạy ngưỡng 0,2 (tracker vẫn lọc 0,35); thu dữ liệu chụp mỗi 1,5 s khi model thấy biển (kể cả
         chưa chắc) và xe đang chạy (`CapturePolicy.signIntervalS`); meta.jsonl có `signs`, trang nhãn ghi "· biển".
+- [x] B3d. Tách cấm dừng đỗ (P.130, hai vạch chéo X) với cấm đỗ (P.131a, một vạch, vẫn được dừng) (chủ app 17/11):
+      - Model: thêm nhóm `no_park` vào **cuối** `SIGN_GROUPS` (chỉ số lớp cũ giữ nguyên, model cũ vẫn chạy). Nhãn tự gán
+        P.130 → no_stop_park, P.131a/b/c → no_park. Ảnh Roboflow "Cam dung va do" lẫn cả hai nên vẫn là no_stop_park;
+        model chỉ học no_park từ ảnh tự gán, cần gán đủ biển P.131a (vài chục khung trở lên) rồi train lại.
+      - Trong lúc chờ (và cho cả biển model vẫn gọi no_stop_park): đếm vạch đỏ chéo trong biển
+        (`NoStopParkClassifier`, SignDetection.swift): lưới 16×16 trong khung, bỏ viền đỏ (bán kính > 0,36) và tâm
+        (< 0,1), hai dải chéo |u−v| < 0,09 và |u+v−1| < 0,09; cả hai dải đỏ ≥ 30% → P.130, một dải ≥ 30% còn dải kia
+        ≤ 15% → P.131a, còn lại không chắc → giữ P.130. Khung cao < 16 px thì không đọc. Tracker bỏ phiếu mã theo track
+        (`ConfirmedSign.code`, `lawCode`), luật dùng `lawCode` (P.131a chỉ cấm đỗ ≥ 60 s, không nhắc khi dừng).
+        Khung trên camera / chip ghi "Cấm đỗ".
+      - Trang gán nhãn: gợi ý no_stop_park cũng đếm vạch như app (`labeler.slash_code`) để đề xuất P.130 hay P.131a;
+        no_park → P.131a. P.131b/c (ngày lẻ/chẵn) bạn tự đổi khi gán.
 - [x] Sửa sau chạy thử sáng 17/11 (ảnh chủ app gửi: kẹt xe, máy nóng 5 fps):
       - Làn vẽ sai mãi bên phải: (1) bỏ vệt sáng nằm trong khung xe frame trước (`LaneDetector.detect(exclude:)`,
         đèn phanh / biển số / kính xe trước giống vạch); (2) xe đứng yên thì không dò, `RoadLaneFilter.stationary()`

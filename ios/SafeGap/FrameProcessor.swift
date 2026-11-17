@@ -145,7 +145,7 @@ final class FrameProcessor {
     private var signDetector: YOLODetector?
     private let signQueue = DispatchQueue(label: "safegap.signs", qos: .userInitiated)
     private var signBusy = false
-    private var signResult: (t: Double, dets: [Detection])?
+    private var signResult: (t: Double, dets: [Detection], codes: [String?])?
     /// Lượt dò biển gần nhất: lúc nào, thấy mấy biển (thu dữ liệu chụp dày hơn khi có biển).
     private var lastSignSeen: (t: Double, n: Int)?
     private var signTracker = SignDetectionTracker()
@@ -296,15 +296,20 @@ final class FrameProcessor {
         signQueue.async { [weak self] in
             // ngưỡng thấp: bộ đếm phiếu tự lọc 0,35; biển 0,2–0,35 vẫn dùng để thu thêm ảnh (model đang lưỡng lự)
             let dets = (try? sd.detect(pb, frameWidth: w, frameHeight: h, classes: nil, minConf: 0.2)) ?? []
+            // model cũ gộp cấm dừng đỗ với cấm đỗ: đếm vạch đỏ chéo trong biển để tách P.130 / P.131a
+            let codes: [String?] = dets.map { d in
+                guard d.cls == SignGroup.noStopPark.rawValue, d.box.y2 - d.box.y1 >= 16 else { return nil }
+                return NoStopParkClassifier.classify(Self.samplePixels(pb, box: d.box, nx: 16, ny: 16))
+            }
             guard let self else { return }
             self.lock.lock()
-            self.signResult = (t, dets)
+            self.signResult = (t, dets, codes)
             self.signBusy = false
             self.lock.unlock()
         }
     }
 
-    private func takeSignResult() -> (t: Double, dets: [Detection])? {
+    private func takeSignResult() -> (t: Double, dets: [Detection], codes: [String?])? {
         lock.lock()
         defer { lock.unlock() }
         let r = signResult
@@ -573,8 +578,8 @@ final class FrameProcessor {
             // đường cong (OSM): trừ độ cong để biết biển nằm lề phải hay giữa đường thật
             let bend: ((Double) -> Double?)? = ahead.map { a in { z in a.x(at: z).map { $0 - (a.x(at: 0) ?? 0) } } }
             for c in signTracker.update(t: sr.t, signs: sr.dets, vehicles: dets, frameWidth: w, frameHeight: h, fPx: f,
-                                        roadBend: bend) {
-                if let fx = fix, signs.isOwnRoadSign(c), let code = c.group.sightingCode {
+                                        roadBend: bend, codes: sr.codes) {
+                if let fx = fix, signs.isOwnRoadSign(c), let code = c.lawCode {
                     signRecall.cameraSaw(code: code, group: c.group.rawValue, carLat: fx.lat, carLon: fx.lon,
                                          courseDeg: fx.course, aheadM: c.distanceM ?? 0, lateralM: c.lateralM ?? 0,
                                          odometer: odo, time: Date().timeIntervalSince1970)

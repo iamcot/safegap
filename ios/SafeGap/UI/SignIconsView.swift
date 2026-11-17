@@ -93,14 +93,15 @@ struct SeenSignsRow: View {
 
     var body: some View {
         // chỉ biển dành cho làn mình (biển bên trái / đường ngang vẫn vẽ xám trên hình camera)
-        let groups = signs.filter(\.applies).map(\.group).reduce(into: [SignGroup]()) { if !$0.contains($1) { $0.append($1) } }
+        let groups = signs.filter(\.applies).map { ($0.label, $0.group.isRegulatory) }
+            .reduce(into: [(String, Bool)]()) { acc, x in if !acc.contains(where: { $0.0 == x.0 }) { acc.append(x) } }
         if !groups.isEmpty { HStack(spacing: 6) {
             Image(systemName: "eye.fill").font(.caption2)
-            ForEach(groups, id: \.self) { g in
-                Text(g.label)
+            ForEach(groups, id: \.0) { g in
+                Text(g.0)
                     .font(.caption.weight(.semibold))
                     .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(Capsule().fill(g.isRegulatory ? Color.red.opacity(0.8) : Color.orange.opacity(0.8)))
+                    .background(Capsule().fill(g.1 ? Color.red.opacity(0.8) : Color.orange.opacity(0.8)))
                     .foregroundStyle(.white)
             }
         }

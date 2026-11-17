@@ -38,7 +38,8 @@ APP_CLASSES = ["car", "truck", "bus", "motorcycle", "traffic light"]   # = YOLOL
 OTHER_SIGN = "sign_other"
 # Model biển chỉ biết nhóm biển: nhóm có một mã QCVN chính thì gợi ý mã đó, nhóm còn lại giữ tên nhóm
 # (proto.dataset.sign_group hiểu cả hai; người gán đổi sang mã cụ thể nếu muốn).
-GROUP_CODE = {"no_entry": "P.102", "no_stop_park": "P.130", "speed_limit": "P.127", "sign_other": OTHER_SIGN}
+GROUP_CODE = {"no_entry": "P.102", "no_stop_park": "P.130", "no_park": "P.131a", "speed_limit": "P.127",
+              "sign_other": OTHER_SIGN}
 GROUP_NAMES = {"no_turn": "Nhóm cấm rẽ / quay đầu (chưa rõ mã)", "prohibit_other": "Nhóm biển cấm khác (chưa rõ mã)",
                "mandatory": "Nhóm biển hiệu lệnh (xanh tròn)", "warning": "Nhóm biển nguy hiểm (tam giác vàng)",
                "end_restriction": "Nhóm biển hết cấm"}
@@ -70,6 +71,47 @@ def suggest_class(name: str, task: str) -> Optional[str]:
     if task == "signs":
         return GROUP_CODE.get(name, name if name in GROUP_NAMES else None)
     return name if name in APP_CLASSES else None
+
+
+def slash_code(pixels) -> Optional[str]:
+    """Biển tròn nền xanh viền đỏ: hai vạch chéo (X) = P.130, một vạch = P.131a; None = không chắc.
+    `pixels`: list (r, g, b, u, v), rgb 0..1, (u, v) 0..1 theo khung. Giống NoStopParkClassifier trong app."""
+    import colorsys
+    d1, d2 = [0, 0], [0, 0]
+    for r, g, b, u, v in pixels:
+        rad = ((u - 0.5) ** 2 + (v - 0.5) ** 2) ** 0.5
+        if not 0.1 < rad < 0.36:
+            continue
+        h, s, val = colorsys.rgb_to_hsv(r, g, b)
+        red = (h * 360 < 20 or h * 360 > 335) and s > 0.35 and val > 0.25
+        if abs(u - v) < 0.09:
+            d1[0] += red
+            d1[1] += 1
+        if abs(u + v - 1) < 0.09:
+            d2[0] += red
+            d2[1] += 1
+    if d1[1] < 4 or d2[1] < 4:
+        return None
+    f1, f2 = d1[0] / d1[1], d2[0] / d2[1]
+    if f1 >= 0.3 and f2 >= 0.3:
+        return "P.130"
+    if max(f1, f2) >= 0.3 and min(f1, f2) <= 0.15:
+        return "P.131a"
+    return None
+
+
+def crop_pixels(img, cx: float, cy: float, w: float, h: float, n: int = 24) -> list:
+    """Lưới n×n điểm trong khung (ảnh PIL RGB, khung chuẩn hoá) → (r, g, b, u, v)."""
+    W, H = img.size
+    out = []
+    for j in range(n):
+        for i in range(n):
+            u, v = (i + 0.5) / n, (j + 0.5) / n
+            x = min(W - 1, max(0, int((cx - w / 2 + u * w) * W)))
+            y = min(H - 1, max(0, int((cy - h / 2 + v * h) * H)))
+            r, g, b = img.getpixel((x, y))[:3]
+            out.append((r / 255, g / 255, b / 255, u, v))
+    return out
 
 
 def _iou(a: dict, b: dict) -> float:
@@ -116,6 +158,7 @@ class Suggester:
 
     def __call__(self, img: Path) -> list[dict]:
         out: list[dict] = []
+        pil = None
         with self.lock:
             for task, w in self.weights().items():
                 if w is None:
@@ -126,6 +169,14 @@ class Suggester:
                 for (cx, cy, bw, bh), c, k in zip(res.boxes.xywhn.tolist(), res.boxes.conf.tolist(),
                                                    res.boxes.cls.tolist()):
                     cls = suggest_class(names[int(k)], task)
+                    if cls == "P.130":   # nhóm cũ gộp cả cấm đỗ: đếm vạch đỏ để tách P.131a
+                        try:
+                            if pil is None:
+                                from PIL import Image
+                                pil = Image.open(img).convert("RGB")
+                            cls = slash_code(crop_pixels(pil, cx, cy, bw, bh)) or cls
+                        except (OSError, ImportError):
+                            pass
                     if cls:
                         out.append({"cls": cls, "cx": cx, "cy": cy, "w": bw, "h": bh, "conf": round(c, 3)})
         return out

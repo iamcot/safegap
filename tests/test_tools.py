@@ -233,3 +233,27 @@ def test_labeler_suggest_maps_groups_and_skips_existing(tmp_path):
         import os
         os.utime(w, (1000 + i, 1000 + i))
     assert L.Suggester(ds).weights() == {"signs": w, "drive": None}
+
+
+def _sign_pixels(slashes: int, n: int = 24) -> list:
+    """Biển giả: viền đỏ, nền xanh, 1 hoặc 2 vạch đỏ chéo."""
+    out = []
+    for j in range(n):
+        for i in range(n):
+            u, v = (i + 0.5) / n, (j + 0.5) / n
+            rad = ((u - 0.5) ** 2 + (v - 0.5) ** 2) ** 0.5
+            on = rad > 0.4 or abs(u - v) < 0.07 or (slashes == 2 and abs(u + v - 1) < 0.07)
+            out.append(((0.85, 0.1, 0.1) if on else (0.1, 0.3, 0.8)) + (u, v))
+    return out
+
+
+def test_labeler_slash_code_splits_no_stop_and_no_park():
+    from proto import dataset as D
+    from proto import labeler as L
+
+    assert L.slash_code(_sign_pixels(2)) == "P.130"
+    assert L.slash_code(_sign_pixels(1)) == "P.131a"
+    assert L.slash_code([(0.5, 0.5, 0.5, 0.5, 0.5)]) is None
+    assert L.suggest_class("no_park", "signs") == "P.131a"
+    assert D.sign_group("P.130") == "no_stop_park" and D.sign_group("P.131b") == "no_park"
+    assert D.SIGN_GROUPS[:9][-1] == "sign_other" and D.SIGN_GROUPS[-1] == "no_park"

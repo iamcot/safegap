@@ -63,7 +63,7 @@ struct DetectionOverlay: View {
                 // biển không dành cho làn mình (bên trái, đường ngang, quay xiên): xám
                 let color: Color = !sg.applies ? .gray : (sg.group.isRegulatory ? .red : .orange)
                 ctx.stroke(Path(rect), with: .color(color), lineWidth: 2.5)
-                let label = Text(sg.group.label).font(.system(size: 12, weight: .bold)).foregroundColor(.white)
+                let label = Text(sg.label).font(.system(size: 12, weight: .bold)).foregroundColor(.white)
                 let pos = CGPoint(x: rect.midX, y: rect.minY - 10)
                 ctx.fill(Path(roundedRect: CGRect(x: pos.x - 42, y: pos.y - 9, width: 84, height: 18), cornerRadius: 4),
                          with: .color(color.opacity(0.85)))

@@ -165,7 +165,9 @@ def reviewed_frames(sess: Path) -> set[str] | None:
 # ---- Bộ dò biển (B3): nhóm biển thô, train riêng ở <dataset>/signs ----
 # Ảnh Roboflow/Zalo chỉ khoanh biển (không khoanh xe) nên không gộp chung với model xe: xe sẽ thành "nền".
 SIGN_GROUPS = ["no_entry", "no_stop_park", "no_turn", "speed_limit", "prohibit_other", "mandatory", "warning",
-               "end_restriction", "sign_other"]
+               "end_restriction", "sign_other", "no_park"]
+# no_park (P.131a/b/c, cấm đỗ, vẫn được dừng) thêm ở cuối để chỉ số lớp cũ giữ nguyên. Ảnh Roboflow "Cam dung va do"
+# lẫn cả hai loại nên vẫn vào no_stop_park; model chỉ học no_park từ ảnh tự gán P.131*.
 # Tên lớp bộ "Biển báo giao thông Việt Nam (Zalo)" trên Roboflow (CC BY 4.0)
 ROBOFLOW_ZALO = {"Cam nguoc chieu": "no_entry", "Cam dung va do": "no_stop_park", "Cam re": "no_turn",
                  "Gioi han toc do": "speed_limit", "Cam con lai": "prohibit_other", "Hieu lenh": "mandatory",
@@ -181,8 +183,10 @@ def sign_group(name: str) -> str | None:
         return name
     if name == "P.102":
         return "no_entry"
-    if name == "P.130" or name.startswith("P.131"):
+    if name == "P.130":
         return "no_stop_park"
+    if name.startswith("P.131"):
+        return "no_park"
     if name.startswith("P.123") or name.startswith("P.124"):
         return "no_turn"
     if name.startswith("P.127"):
