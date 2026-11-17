@@ -238,6 +238,8 @@ final class FrameProcessor {
     private var lastVehicleBoxes: [NormBox] = []
     /// Lần dừng hiện tại là do kẹt xe (giữ tới khi xe chạy lại).
     private var stopJam = false
+    /// Khoảng cách tới mép phải đường theo GPS + OSM lúc còn chạy, và sai số GPS (m).
+    private var curbGap: (gap: Double, acc: Double)?
     /// Ghi log làn (vì sao vẽ sai): vạch thô frame này, có dùng cổng không, lý do bỏ.
     private var laneDebug = ""
     private let roadLane = RoadLaneFilter()
@@ -595,15 +597,23 @@ final class FrameProcessor {
             }
         }
         saveSignMapIfNeeded(t: t)
-        // Đứng vì kẹt xe, không phải dừng / đỗ: xe sát phía trước (kể cả khi làn vẽ sai nên chưa chọn được xe trước),
-        // hoặc có xe sát bên phải (mình không nằm sát lề). Đã thấy một lần trong lần dừng này thì cả lần dừng được miễn.
-        let packed = f > 0 && dets.contains { d in
+        // Cấm dừng / đỗ chỉ tính khi xe có thể đang sát lề phải. Không tính khi: có xe ngay bên phải (làn bên phải,
+        // lệch 1,5–5 m, gần < 10 m), hoặc GPS + số làn OSM cho thấy xe cách mép phải hơn 1,5 làn kể cả sai số GPS.
+        // Xe sát phía trước KHÔNG được miễn (đỗ sau một xe đang đỗ cũng vậy). Thấy một lần là miễn cả lần dừng.
+        let vehicleRight = f > 0 && dets.contains { d in
             let dy = d.y2 - yH
             guard dy > 1 else { return false }
-            let z = f * hCam / dy, cx = (d.x1 + d.x2) / 2 / w
-            return (z < 12 && cx > 0.3 && cx < 0.7) || (z < 8 && cx >= 0.7)
+            let z = f * hCam / dy, x = ((d.x1 + d.x2) / 2 - w / 2) * z / f
+            return z < 10 && x > 1.5 && x < 5
         }
-        stopJam = stoppedS != nil && (stopJam || packed || (r.d ?? .infinity) < 8)
+        if stoppedS == nil, let m = roadMatch?.match, let gap = m.rightEdgeGapM, let g = gps, g.courseDeg != nil,
+           g.horizontalAccuracyM > 0 {
+            curbGap = (gap, g.horizontalAccuracyM)   // lúc còn chạy (có hướng đi); đứng yên thì giữ số này
+        } else if stoppedS == nil, roadMatch == nil {
+            curbGap = nil
+        }
+        let farFromCurb = curbGap.map { $0.gap - $0.acc > RoadMatch.laneWidthM * 1.5 } ?? false
+        stopJam = stoppedS != nil && (stopJam || vehicleRight || farFromCurb)
         let jam = stopJam
         signMsgs += signs.update(DriveContext(t: t, odometer: odo, minuteOfDay: minuteOfDay, dayOfMonth: day, speedKmh: v,
                                               stoppedS: stoppedS, stopExcused: jam || lightState?.color == .red,

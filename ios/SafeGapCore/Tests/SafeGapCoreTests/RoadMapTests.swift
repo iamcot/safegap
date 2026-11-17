@@ -56,6 +56,11 @@ final class RoadMapTests: XCTestCase {
         let south = m.match(lat: 10.7740, lon: 106.69995, courseDeg: 181)!
         XCTAssertEqual(south.lanesSame, 2)
         XCTAssertEqual(south.lanesOpposite, 4)
+        // lệch ~5,5 m bên phải tim đường ở cả hai chiều; mép phải: 4 làn → còn ~8,5 m, 2 làn → ~1,5 m (sát lề)
+        XCTAssertEqual(north.rightOfCenterM, 5.5, accuracy: 0.3)
+        XCTAssertEqual(south.rightOfCenterM, 5.5, accuracy: 0.3)
+        XCTAssertEqual(north.rightEdgeGapM ?? -1, 8.5, accuracy: 0.3)
+        XCTAssertEqual(south.rightEdgeGapM ?? -1, 1.5, accuracy: 0.3)
     }
 
     func testCrossingAndFarAreRejected() throws {

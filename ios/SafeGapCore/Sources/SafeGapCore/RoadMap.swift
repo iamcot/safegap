@@ -38,6 +38,17 @@ public struct RoadMatch: Equatable, Sendable {
     /// Khoảng cách từ vị trí GPS tới tim đường (m).
     public var distanceM: Double
     public var name: String? = nil
+    /// Xe nằm bên phải tim đường bao nhiêu mét (theo chiều xe đi; âm = bên trái). GPS lệch 5–10 m.
+    public var rightOfCenterM: Double = 0
+    public static let laneWidthM = 3.5
+
+    /// Từ xe tới mép phải đường (m) theo số làn OSM; nil nếu OSM không ghi số làn.
+    public var rightEdgeGapM: Double? {
+        let w = Self.laneWidthM
+        // đường một chiều: tim đường ở giữa; hai chiều: tim đường là vạch giữa hai chiều
+        let edge: Double? = oneway ? lanesSame.map { Double($0) * w / 2 } : lanesSame.map { Double($0) * w }
+        return edge.map { $0 - rightOfCenterM }
+    }
 }
 
 public enum OSMTile {
@@ -182,17 +193,21 @@ public final class RoadMap {
         let w = b.way
         if w.oneway != 0 {
             return RoadMatch(wayId: w.id, cls: w.cls, oneway: true, lanesSame: w.lanes, lanesOpposite: 0,
-                             maxspeed: w.maxspeed, distanceM: b.dist, name: w.name)
+                             maxspeed: w.maxspeed, distanceM: b.dist, name: w.name, rightOfCenterM: b.right)
         }
         let fwd = w.lanesForward ?? w.lanes.map { $0 / 2 }
         let bwd = w.lanesBackward ?? w.lanes.map { $0 - $0 / 2 }
         return RoadMatch(wayId: w.id, cls: w.cls, oneway: false,
                          lanesSame: (b.along ? fwd : bwd).flatMap { $0 > 0 ? $0 : nil },
                          lanesOpposite: (b.along ? bwd : fwd).flatMap { $0 > 0 ? $0 : nil },
-                         maxspeed: w.maxspeed, distanceM: b.dist, name: w.name)
+                         maxspeed: w.maxspeed, distanceM: b.dist, name: w.name, rightOfCenterM: b.right)
     }
 
-    struct Located { var dist: Double; var way: RoadWay; var seg: Int; var t: Double; var along: Bool }
+    struct Located {
+        var dist: Double; var way: RoadWay; var seg: Int; var t: Double; var along: Bool
+        /// Xe bên phải tim đường (m) theo chiều đi.
+        var right: Double = 0
+    }
 
     func locate(lat: Double, lon: Double, courseDeg: Double?, maxDistanceM: Double) -> Located? {
         let mPerLat = 111_320.0, mPerLon = 111_320.0 * cos(lat * .pi / 180)
@@ -224,7 +239,13 @@ public final class RoadMap {
                         if w.oneway == -1 && along { continue }
                     }
                     let score = dist + penalty
-                    if best == nil || score < best!.score { best = (score, Located(dist: dist, way: w, seg: i, t: t, along: along)) }
+                    // xe so với điểm gần nhất trên tim đường: (-px, -py); bên phải của hướng đi (fx, fy) là (fy, -fx)
+                    let l = len2.squareRoot(), s = along ? 1.0 : -1.0
+                    let fx = s * dx / l, fy = s * dy / l
+                    let right = -px * fy + -py * -fx
+                    if best == nil || score < best!.score {
+                        best = (score, Located(dist: dist, way: w, seg: i, t: t, along: along, right: right))
+                    }
                 }
             }
         }

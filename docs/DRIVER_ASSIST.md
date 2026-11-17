@@ -130,8 +130,10 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
         giữ rồi duỗi về làn thẳng giữa, vẽ mờ, chạy lại thì dò từ đầu không theo cổng; (3) chỉ bám một bên > 60 frame
         → `needsReacquire`, bỏ cổng để dò lại; (4) đổi làn: tâm làn lệch quá nửa làn thì đổi gốc sang làn mới
         (cả mô hình lẫn số đo), không kéo ngang qua giữa.
-      - Dừng trong kẹt xe bị nhắc cấm dừng đỗ: `stopExcused` khi có xe sát trước (< 12 m, giữa ảnh, không cần chọn được
-        xe mục tiêu) hoặc xe sát bên phải (< 8 m, mình không ở sát lề); thấy một lần là miễn cả lần dừng.
+      - Dừng trong kẹt xe bị nhắc cấm dừng đỗ: chỉ tính khi xe có thể đang sát lề phải. `stopExcused` khi có xe ngay
+        bên phải (lệch 1,5–5 m, < 10 m) hoặc GPS + số làn OSM (`RoadMatch.rightEdgeGapM`, chốt lúc còn chạy) cho thấy
+        cách mép phải > 1,5 làn sau khi trừ sai số GPS; thấy một lần là miễn cả lần dừng. Xe sát phía trước KHÔNG
+        miễn (chủ app: đỗ sau xe đang đỗ cũng là đỗ).
       - Biển cấm ngược chiều bên trái vẫn báo: biển ở xa > 30 m chưa chốt (xa thì biển nào cũng gần tâm ảnh), chốt khi
         tới gần hoặc khi biển ra khỏi khung (theo vị trí cuối); ngưỡng trái −1,5 → −1 m; đường một chiều (OSM) thì
         biển bên trái cũng áp dụng (`leftSideApplies`). Biển đã nhớ sai trước đây: Cài đặt > Xoá bản đồ biển.
