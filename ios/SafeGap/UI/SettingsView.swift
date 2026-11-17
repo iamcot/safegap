@@ -170,6 +170,7 @@ private struct RoadStatusRow: View {
 
 /// Danh sách file log CSV, mới nhất trước, mỗi file có nút chia sẻ.
 private struct LogFilesList: View {
+    @EnvironmentObject var model: AppModel
     @State private var files: [(url: URL, size: Int)] = []
 
     var body: some View {
@@ -186,6 +187,15 @@ private struct LogFilesList: View {
                     }
                     Spacer()
                     ShareLink(item: f.url) { Image(systemName: "square.and.arrow.up") }
+                        .buttonStyle(.borderless)
+                    // file đang ghi (đang chạy) thì không cho xoá
+                    if f.url != model.logURL {
+                        ConfirmDeleteButton(systemImage: "trash", question: "Xoá log \(f.url.lastPathComponent)? Không lấy lại được.") {
+                            try? FileManager.default.removeItem(at: f.url)
+                            reload()
+                        }
+                        .buttonStyle(.borderless)
+                    }
                 }
             }
         }
