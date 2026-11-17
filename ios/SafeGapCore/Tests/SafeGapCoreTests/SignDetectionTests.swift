@@ -184,6 +184,25 @@ final class SignPlacementTests: XCTestCase {
         var e = try engine()
         let m = e.feed(confirmed(.noEntry, .applies, lateral: 3), odometer: 100, t: 0, minuteOfDay: 600, dayOfMonth: 1)
         XCTAssertEqual(m.map(\.kind), [.signViolation])
+        // có bản đồ, không có ngã rẽ gần biển: vẫn là biển của đường mình
+        var e2 = try engine()
+        let m2 = e2.feed(confirmed(.noEntry, .applies, lateral: 3), odometer: 100, t: 0, minuteOfDay: 600, dayOfMonth: 1,
+                         junctionsAheadM: [80])
+        XCTAssertEqual(m2.map(\.kind), [.signViolation])
+    }
+
+    func testNoEntryAtCurbNearJunctionIsSideRoad() throws {
+        // biển lề phải (3 m) cách ngã rẽ OSM 5 m: biển của đường nhánh, đi thẳng không nói
+        var e = try engine()
+        let c = confirmed(.noEntry, .applies, lateral: 3)
+        XCTAssertTrue(e.feed(c, odometer: 100, t: 0, minuteOfDay: 600, dayOfMonth: 1, junctionsAheadM: [30]).isEmpty)
+        XCTAssertFalse(e.isOwnRoadSign(c, junctionsAheadM: [30]))
+        var said: [VoiceMessage] = []
+        for (i, odo) in stride(from: 105.0, through: 170, by: 5).enumerated() {
+            said += e.update(DriveContext(t: Double(i), odometer: odo))
+        }
+        XCTAssertTrue(said.isEmpty)
+        XCTAssertEqual(e.update(DriveContext(t: 20, odometer: 172, turning: .right)).count, 0)   // đã qua chỗ rẽ
     }
 
     func testNoEntryInMedianOnlyWhenTurningLeft() throws {

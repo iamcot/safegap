@@ -155,6 +155,10 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
 - [x] B3g. Biển phụ (S.5xx) dưới biển cấm: khoanh **riêng** biển chính và biển phụ (hai khung). Nhóm mới `aux_plate`
       (cuối `SIGN_GROUPS`), danh mục S.501 cự ly, S.502, S.503 hướng, S.505a loại xe, S.508 giờ, S.509 chữ. App chỉ hiện
       "Biển phụ"; sau này: biển phụ nằm ngay dưới biển chính → đọc giờ / cự ly (OCR) để áp `window` / `distance`.
+- [x] Biển cấm đi ngược chiều ở lề phải vẫn báo loạn (chủ app tối 17/11): biển của đường nhánh đứng ngay góc lề phải,
+      tới gần thì lệch chỉ 2–4 m nên lọt ngưỡng 5 m. Có OSM: biển cấm đi vào lệch phải > 1,5 m mà cách ngã rẽ phía trước
+      ≤ 20 m → biển đường nhánh (`SignEngine.isSideRoadEntry`), chỉ nói khi rẽ phải vào đó, không nhớ vào bản đồ biển.
+      Không có bản đồ thì giữ ngưỡng 5 m. Biển đã nhớ sai trước đó: Cài đặt > Xoá bản đồ biển.
 - [x] Log tối 17/11 (`safegap_20261117_195657.csv`, 53 phút chạy thật, ≤ 60 km/h, máy "fair" 77%, ~10 fps):
       - RED 18% số frame khi chạy, tập trung 30–45 km/h, d_min luôn 35 m (xe trước ~15 m). Bản cài trên máy là bản
         trước quy tắc 1,5 s (36 km/h → 15 m, không còn RED ở các ca này). Thêm test đọc đúng file law_vn.json thật

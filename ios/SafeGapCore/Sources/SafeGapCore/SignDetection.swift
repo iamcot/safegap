@@ -279,6 +279,21 @@ public extension ConfirmedSign {
 public extension SignEngine {
     /// Biển ở miệng đường nhánh bên phải: lệch phải hơn mức này (m) thì coi là biển của đường nhánh.
     static let sideRoadLateralM = 5.0
+    /// Có bản đồ: biển cấm đi vào ở lề phải (lệch > 1,5 m) mà cách ngã rẽ OSM ≤ 20 m là biển của đường nhánh
+    /// (chủ app 17/11: biển cấm ngược chiều phía trên bên phải đầu xe vẫn báo loạn).
+    static let sideRoadCurbM = 1.5
+    static let sideRoadJunctionM = 20.0
+
+    /// Biển cấm đi vào bên phải là của đường nhánh (chỉ áp khi rẽ phải vào đó)?
+    /// `junctionsAheadM`: khoảng cách tới các ngã rẽ phía trước theo OSM (nil = không có bản đồ).
+    static func isSideRoadEntry(_ c: ConfirmedSign, junctionsAheadM: [Double]?) -> Bool {
+        if c.placement == .farRight { return true }
+        guard c.placement == .applies else { return false }
+        let lateral = c.lateralM ?? 0
+        if lateral > sideRoadLateralM { return true }
+        guard let js = junctionsAheadM, lateral > sideRoadCurbM, let z = c.distanceM else { return false }
+        return js.contains { abs($0 - z) <= sideRoadJunctionM }
+    }
 
     /// Đưa biển model vừa xác nhận vào luật, theo chỗ cắm biển (QCVN 41: biển có hiệu lực cho phần đường bên trái nó):
     /// - biển bên phải / trên làn mình: có hiệu lực từ chỗ cắm biển (chờ xe tới đó);
@@ -286,13 +301,16 @@ public extension SignEngine {
     /// - biển cấm đi vào xa bên phải (miệng đường nhánh): chỉ khi xe rẽ phải vào đó;
     /// - biển khác không dành cho làn mình, biển quay xiên: bỏ.
     mutating func feed(_ c: ConfirmedSign, odometer: Double, t: Double, minuteOfDay: Int, dayOfMonth: Int,
-                       vehicle: String = "car") -> [VoiceMessage] {
+                       vehicle: String = "car", junctionsAheadM: [Double]? = nil) -> [VoiceMessage] {
         guard let code = c.lawCode, let rule = config.signs[code] else { return [] }
         let s = SignSighting(code: code)
         let ahead = max(0, c.distanceM ?? 0)
-        let lateral = c.lateralM ?? 0
+        if rule.scope == .entry, Self.isSideRoadEntry(c, junctionsAheadM: junctionsAheadM) {
+            sightedIfTurn(s, turn: .right, aheadM: ahead, odometer: odometer)
+            return []
+        }
         switch c.placement {
-        case .applies where rule.scope == .entry && lateral > Self.sideRoadLateralM, .farRight where rule.scope == .entry:
+        case .farRight where rule.scope == .entry:
             sightedIfTurn(s, turn: .right, aheadM: ahead, odometer: odometer)
             return []
         case .leftOfUs where rule.scope == .entry:
