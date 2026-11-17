@@ -155,6 +155,17 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
 - [x] B3g. Biển phụ (S.5xx) dưới biển cấm: khoanh **riêng** biển chính và biển phụ (hai khung). Nhóm mới `aux_plate`
       (cuối `SIGN_GROUPS`), danh mục S.501 cự ly, S.502, S.503 hướng, S.505a loại xe, S.508 giờ, S.509 chữ. App chỉ hiện
       "Biển phụ"; sau này: biển phụ nằm ngay dưới biển chính → đọc giờ / cự ly (OCR) để áp `window` / `distance`.
+- [x] Log tối 17/11 (`safegap_20261117_195657.csv`, 53 phút chạy thật, ≤ 60 km/h, máy "fair" 77%, ~10 fps):
+      - RED 18% số frame khi chạy, tập trung 30–45 km/h, d_min luôn 35 m (xe trước ~15 m). Bản cài trên máy là bản
+        trước quy tắc 1,5 s (36 km/h → 15 m, không còn RED ở các ca này). Thêm test đọc đúng file law_vn.json thật
+        (`testRepoLawUsesHeadwayRule`). Cần build lại.
+      - Đèn ban đêm nhảy màu: 1.500 lần đổi trạng thái trong 53 phút, mỗi màu giữ trung vị < 1 s, "vàng" 1.900 frame
+        (cả lúc 45 km/h). Nghi đèn hậu / đèn đường bị nhận là đèn giao thông. Sửa: bỏ khung đèn dưới chân trời
+        (+5% ảnh) hoặc có tâm nằm trong khung xe; ban đêm `minHeightPx` 20, `fastSwitch` 3. light_debug ghi
+        "giữ/thô" và " N" khi ban đêm.
+      - Làn: hai vạch 55%, một vạch 36%, không có 9% (khi chạy).
+      - Cài đặt: nút xoá phiên ảnh / bản đồ biển / dữ liệu đường hỏi lại trước khi xoá; log CSV có nút xoá (trừ file
+        đang ghi).
 - [x] Sửa sau chạy thử sáng 17/11 (ảnh chủ app gửi: kẹt xe, máy nóng 5 fps):
       - Làn vẽ sai mãi bên phải: (1) bỏ vệt sáng nằm trong khung xe frame trước (`LaneDetector.detect(exclude:)`,
         đèn phanh / biển số / kính xe trước giống vạch); (2) xe đứng yên thì không dò, `RoadLaneFilter.stationary()`

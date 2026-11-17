@@ -465,6 +465,13 @@ final class FrameProcessor {
         }
         lightDets = dets.filter { $0.cls == Self.trafficLightClass }
         dets.removeAll { $0.cls == Self.trafficLightClass }
+        // đèn treo cao hơn mắt camera: bỏ khung dưới đường chân trời hoặc nằm trong khung xe (đèn hậu, đèn phanh;
+        // log tối 17/11: đèn nhảy màu liên tục, mỗi màu giữ chưa tới 1 s)
+        let lightsRaw = lightDets.count
+        lightDets.removeAll { l in
+            let cx = (l.x1 + l.x2) / 2, cy = (l.y1 + l.y2) / 2
+            return cy > yH + 0.05 * h || dets.contains { cx > $0.x1 && cx < $0.x2 && cy > $0.y1 && cy < $0.y2 }
+        }
         lastVehicleBoxes = dets.map { NormBox($0.x1 / w, $0.y1 / h, $0.x2 / w, $0.y2 / h) }
         if let last = lastFrameTime, t1 > last {
             let inst = 1.0 / (t1 - last)
@@ -533,6 +540,9 @@ final class FrameProcessor {
         var lightState: TrafficLightState?
         var lightDebug = ""
         if p.settings.trafficLights {
+            // ban đêm đèn đường / đèn xe dễ thành "đèn giao thông": cần khung to hơn, đổi màu chậm hơn
+            lightTracker.fastSwitch = night ? 3 : 2
+            lightTracker.minHeightPx = night ? 20 : 14
             let picked = lightTracker.pick(lightDets, frameWidth: w, frameHeight: h)
             // qua ngã tư / vừa rẽ: đèn cũ không còn áp dụng
             if junction.passed || turn != nil { lightTracker.reset() }
@@ -541,8 +551,8 @@ final class FrameProcessor {
                                               aspect: (d.y2 - d.y1) / max(1, d.x2 - d.x1))
             }
             lightState = lightTracker.update(t: t, light: picked, color: color, speedKmh: v)
-            lightDebug = String(format: "%d lights raw %@ state %@ h %.0f", lightDets.count, color?.rawValue ?? "-",
-                                lightState?.color.rawValue ?? "-", picked.map { $0.y2 - $0.y1 } ?? 0)
+            lightDebug = String(format: "%d/%d lights raw %@ state %@ h %.0f%@", lightDets.count, lightsRaw, color?.rawValue ?? "-",
+                                lightState?.color.rawValue ?? "-", picked.map { $0.y2 - $0.y1 } ?? 0, night ? " N" : "")
             if p.settings.voiceOn, let m = lightRules.check(state: lightState, t: t, speedKmh: v,
                                                             junctionM: junction.nextM, stoppedS: stoppedS) {
                 voice.offer(m)
