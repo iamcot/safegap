@@ -70,8 +70,8 @@ def test_select_ego_box_touching_bottom_edge():
 
 
 # --- law / alert ---
-# dưới 60 km/h: quy tắc 2 giây (config/law_vn.json below_first_headway_s), không dưới 5 m, không quá 35 m
-@pytest.mark.parametrize("v,expected", [(5, 5.0), (30, 30 / 3.6 * 2), (50, 50 / 3.6 * 2), (59.9, 59.9 / 3.6 * 2), (60, 35), (61, 55), (80, 55), (95, 70), (110, 100), (130, 100)])
+# dưới 60 km/h: quy tắc 1,5 giây (config/law_vn.json below_first_headway_s), không dưới 5 m, không quá 35 m
+@pytest.mark.parametrize("v,expected", [(5, 5.0), (30, 30 / 3.6 * 1.5), (50, 50 / 3.6 * 1.5), (59.9, 59.9 / 3.6 * 1.5), (60, 35), (61, 55), (80, 55), (95, 70), (110, 100), (130, 100)])
 def test_law_table(v, expected):
     assert LawTable(LAW).d_min(v) == expected
 

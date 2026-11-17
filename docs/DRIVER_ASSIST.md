@@ -148,7 +148,7 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
         trời > 0,08 thì bỏ cả hai), log `hz L/R/P`. Chủ app cần chỉnh vạch capo (◎) ở 1x. Đèn: 43% frame thấy đèn
         nhưng màu "không rõ" → bộ phân màu HSV kém ban ngày, cần ảnh thu để chỉnh.
       - Khoảng cách tối thiểu dưới 60 km/h: log cho thấy 11% thời gian chạy phố bị ĐỎ (30 km/h, cách 12–24 m < 35 m).
-        Luật chỉ cho số từ 60 km/h; dưới đó dùng quy tắc N giây `below_first_headway_s` (law_vn.json, mặc định 2 s,
+        Luật chỉ cho số từ 60 km/h; dưới đó dùng quy tắc N giây `below_first_headway_s` (law_vn.json, chủ app chọn 1,5 s cho phố đông,
         sàn 5 m, trần 35 m), Python + Swift cùng công thức.
       - Log: CSV thêm cột `lane_debug` (vạch thô c0/c1, có cổng không, số vệt bị che, lý do bỏ, mô hình
         offset/heading/width, T = đang bám) và `light_debug` (số đèn, màu thô, màu chốt, cao khung);
