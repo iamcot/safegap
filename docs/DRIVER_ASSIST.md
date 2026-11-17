@@ -140,6 +140,13 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
       - Đèn đổi màu chậm: 2 lần liên tiếp cùng màu rõ thì đổi ngay (`fastSwitch`); giữ đèn đang theo, chỉ đổi sang
         đèn khác khi to / rõ hơn 1,6 lần (`stickiness`). Nhận diện đèn kém là do lớp traffic light của COCO yolo11n:
         cần gán nhãn đèn trong ảnh tự thu rồi train model xe + đèn (B2).
+      - Đọc log 9h09–9h59 (22 nghìn frame): máy nóng "serious" 72% thời gian (~7,5 fps). Ở 1x, cặp vạch thô cắt nhau ở
+        y ≈ 0,78 ảnh trong khi chân trời (IMU) ở ≈ 0,53, vạch trái kéo lên lệch phải (điểm tụ x ≈ 0,65), vạch phải lệch
+        trái (≈ 0,32): không phải vạch kẻ mà là mép capo / phản chiếu (vạch capo hiệu chỉnh để mặc định 0,97, thấp hơn
+        capo thật ~0,83). Ở 2x (capo ra ngoài khung) cặp vạch cắt nhau ở 0,60, khớp chân trời 0,58. Sửa:
+        `HorizonCheck` (vạch kéo lên phải tụ gần giữa ảnh trên chân trời, ±0,04 + 0,12·f/W; cặp vạch cắt nhau cách chân
+        trời > 0,08 thì bỏ cả hai), log `hz L/R/P`. Chủ app cần chỉnh vạch capo (◎) ở 1x. Đèn: 43% frame thấy đèn
+        nhưng màu "không rõ" → bộ phân màu HSV kém ban ngày, cần ảnh thu để chỉnh.
       - Log: CSV thêm cột `lane_debug` (vạch thô c0/c1, có cổng không, số vệt bị che, lý do bỏ, mô hình
         offset/heading/width, T = đang bám) và `light_debug` (số đèn, màu thô, màu chốt, cao khung);
         meta.jsonl của ảnh thu dữ liệu có `lane`, `lightDebug`.

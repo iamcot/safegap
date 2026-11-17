@@ -52,6 +52,27 @@ final class LaneTests: XCTestCase {
         XCTAssertGreaterThan(d.masked, 0)
     }
 
+    func testHorizonCheckDropsHoodEdges() throws {
+        // hai mép capo / phản chiếu: cắt nhau ở y 0,70, xa chân trời 0,45
+        let l = { (y: Double) in 0.5 - 0.8 * (y - 0.70) }, r = { (y: Double) in 0.5 + 0.8 * (y - 0.70) }
+        var c = LaneConfig()
+        c.yTop = 0.80; c.yBottom = 0.95
+        let img = road([(l, false), (r, false)])
+        let raw = LaneDetector.detect(img, config: c, center: center)
+        XCTAssertNotNil(raw.left); XCTAssertNotNil(raw.right)
+        let hz = HorizonCheck(yHorizonNorm: 0.45, fPx: 1350, imageWidth: 1920)
+        let d = LaneDetector.detect(img, config: c, center: center, horizon: hz)
+        XCTAssertNil(d.left); XCTAssertNil(d.right)
+        XCTAssertFalse(d.offHorizon.isEmpty)
+        // vạch làn thật hội tụ gần chân trời: giữ
+        let left = { (y: Double) in 0.30 + (0.47 - 0.30) * (1 - y) / 0.55 }
+        let right = { (y: Double) in 0.72 + (0.53 - 0.72) * (1 - y) / 0.55 }
+        let ok = LaneDetector.detect(road([(left, false), (right, false)]), center: center,
+                                     horizon: HorizonCheck(yHorizonNorm: 0.38, fPx: 1350, imageWidth: 1920))
+        XCTAssertNotNil(ok.left); XCTAssertNotNil(ok.right)
+        XCTAssertEqual(ok.offHorizon, "")
+    }
+
     func testCurvedLane() throws {
         let left = { (y: Double) in 0.32 + 0.6 * (1 - y) * (1 - y) + 0.05 * (1 - y) }
         let right = { (y: Double) in 0.70 + 0.6 * (1 - y) * (1 - y) - 0.30 * (1 - y) }

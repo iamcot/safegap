@@ -72,6 +72,30 @@ public struct LaneDetection: Equatable, Sendable {
     public var rightPoints: Int
     /// Số vệt sáng bị bỏ vì nằm trên thân xe (ghi log).
     public var masked: Int = 0
+    /// Vạch bị bỏ vì kéo dài lên không hội tụ về chân trời (mép capo, cột, thành xe...): "L", "R", "P" (cả cặp).
+    public var offHorizon: String = ""
+}
+
+/// Vạch kẻ đường thật trên mặt đường phẳng hội tụ ở điểm tụ trên đường chân trời. Dùng để loại vệt sáng không phải vạch
+/// (mép capo / phản chiếu trên kính khi vạch capo hiệu chỉnh quá thấp, thành xe, cột).
+public struct HorizonCheck: Equatable, Sendable {
+    /// Chân trời (chuẩn hoá theo chiều cao ảnh).
+    public var y: Double
+    /// Điểm tụ được lệch khỏi giữa ảnh tối đa (chuẩn hoá theo chiều rộng): xe lệch hướng làn ≤ ~7°, camera lệch nhẹ.
+    public var maxVanishOffset: Double
+    /// Hai vạch cắt nhau cách chân trời tối đa (chuẩn hoá theo chiều cao).
+    public var maxPairGap: Double = 0.08
+
+    public init(y: Double, maxVanishOffset: Double, maxPairGap: Double = 0.08) {
+        self.y = y; self.maxVanishOffset = maxVanishOffset; self.maxPairGap = maxPairGap
+    }
+
+    /// Theo tiêu cự: hướng lệch 0,12 rad ra bao nhiêu phần bề rộng ảnh, cộng 0,04 cho camera đặt lệch.
+    public init(yHorizonNorm: Double, fPx: Double, imageWidth: Double) {
+        self.init(y: yHorizonNorm, maxVanishOffset: 0.04 + 0.12 * fPx / max(1, imageWidth))
+    }
+
+    func vanishX(_ c: LaneCurve) -> Double { c.c0 + c.c1 * (y - c.yRef) }   // phần thẳng, không ngoại suy bậc 2
 }
 
 /// Vùng chữ nhật chuẩn hoá (0..1) không tìm vạch: thân xe (đèn phanh, biển số, kính phản chiếu sáng như vạch).
@@ -88,7 +112,7 @@ public enum LaneDetector {
     /// Có gate thì mỗi hàng chỉ nhận vệt gần vị trí dự đoán nhất, nằm trong sai lệch; vệt khác (xe, đèn, vạch làn khác) bỏ qua.
     public static func detect(_ img: GrayImage, config c: LaneConfig = .init(), center: (Double) -> Double,
                               gate: ((Double) -> (left: Double, right: Double, tol: Double))? = nil,
-                              exclude: [NormBox] = []) -> LaneDetection {
+                              exclude: [NormBox] = [], horizon: HorizonCheck? = nil) -> LaneDetection {
         let W = img.width, H = img.height
         var leftPts: [(y: Double, x: Double)] = []
         var rightPts: [(y: Double, x: Double)] = []
@@ -153,6 +177,19 @@ public enum LaneDetector {
         let cB = center(c.yBottom)
         var left = chooseLane(leftPts, centerAtBottom: cB, config: c)
         var right = chooseLane(rightPts, centerAtBottom: cB, config: c)
+        var offHorizon = ""
+        if let hz = horizon {
+            if let l = left, abs(hz.vanishX(l.curve) - 0.5) > hz.maxVanishOffset { left = nil; offHorizon += "L" }
+            if let r = right, abs(hz.vanishX(r.curve) - 0.5) > hz.maxVanishOffset { right = nil; offHorizon += "R" }
+            if let l = left, let r = right, abs(l.curve.c1 - r.curve.c1) > 1e-6 {
+                // hai vạch cắt nhau ở đâu (theo phần thẳng): phải gần chân trời
+                let yi = l.curve.yRef + (r.curve.c0 - l.curve.c0) / (l.curve.c1 - r.curve.c1)
+                if abs(yi - hz.y) > hz.maxPairGap {
+                    // cắt nhau xa chân trời: không phải cặp vạch làn (thường là hai mép capo), bỏ cả hai
+                    left = nil; right = nil; offHorizon += "P"
+                }
+            }
+        }
         // kiểm tra hình học: bề rộng làn hợp lý
         if let l = left, let r = right {
             let width = r.curve.x(at: c.yBottom) - l.curve.x(at: c.yBottom)
@@ -161,7 +198,8 @@ public enum LaneDetector {
             }
         }
         return LaneDetection(left: left?.curve, right: right?.curve,
-                             leftPoints: left?.inliers ?? 0, rightPoints: right?.inliers ?? 0, masked: masked)
+                             leftPoints: left?.inliers ?? 0, rightPoints: right?.inliers ?? 0, masked: masked,
+                             offHorizon: offHorizon)
     }
 
     /// Tách các đường thẳng bằng RANSAC (vét cạn cặp điểm, kết quả xác định), lấy đường gần tâm làn nhất

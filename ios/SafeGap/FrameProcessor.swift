@@ -373,7 +373,7 @@ final class FrameProcessor {
         let yH = yHorizon ?? p.config.distance.yHorizonNorm * h
         let hCam = p.calibration.hCamM
         let laneFrozen = isStopped
-        var rawL: LaneCurve?, rawR: LaneCurve?, gated = false, masked = 0
+        var rawL: LaneCurve?, rawR: LaneCurve?, gated = false, masked = 0, offHorizon = ""
         if p.settings.laneFollow, !laneFrozen, let gray = Self.gray(pb) {
             let cal = p.calibration
             let top = cal.roi.map(\.y).min() ?? 0.45
@@ -395,8 +395,9 @@ final class FrameProcessor {
             }
             let d = LaneDetector.detect(gray, config: lc, center: { y in
                 LaneROI.center(at: y, left: tl, right: tr, calibrated: cal.roi)
-            }, gate: gate, exclude: lastVehicleBoxes)
-            rawL = d.left; rawR = d.right; gated = gate != nil; masked = d.masked
+            }, gate: gate, exclude: lastVehicleBoxes,
+               horizon: f > 0 ? HorizonCheck(yHorizonNorm: yH / h, fPx: f, imageWidth: w) : nil)
+            rawL = d.left; rawR = d.right; gated = gate != nil; masked = d.masked; offHorizon = d.offHorizon
             let found = d.left != nil || d.right != nil
             if found { gateMisses = 0 } else if gate != nil { gateMisses += 1 }
             laneTracker.update(d)
@@ -421,9 +422,10 @@ final class FrameProcessor {
         let road = laneFrozen ? roadLane.stationary()
                               : roadLane.update(left: ground(laneTracker.left), right: ground(laneTracker.right))
         func c3(_ c: LaneCurve?) -> String { c.map { String(format: "%.3f/%.2f", $0.c0, $0.c1) } ?? "-" }
-        laneDebug = laneFrozen ? "frozen" : String(format: "raw %@ %@ g%d m%d rej %@ | off %.2f hd %.3f w %.2f %@",
+        laneDebug = laneFrozen ? "frozen" : String(format: "raw %@ %@ g%d m%d rej %@ | off %.2f hd %.3f w %.2f %@ hz %@",
                                                    c3(rawL), c3(rawR), gated ? 1 : 0, masked, roadLane.lastReject,
-                                                   road.offset, road.heading, road.width, road.tracked ? "T" : "-")
+                                                   road.offset, road.heading, road.width, road.tracked ? "T" : "-",
+                                                   offHorizon.isEmpty ? "-" : offHorizon)
         // Vạch vẽ trên ảnh và ROI theo làn ổn định (không theo vạch thô từng frame).
         var stableL: LaneCurve?, stableR: LaneCurve?
         if p.settings.laneFollow, road.tracked {
