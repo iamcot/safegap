@@ -88,7 +88,7 @@
   </main>
   <aside class="right">
     <h2 style="margin-top:0">Lớp</h2>
-    <input id="search" placeholder="Tìm: P.130, cấm đỗ… (phím /)">
+    <input id="search" placeholder="Tìm theo tên, gõ không dấu được: cam do, nguoc chieu… (phím /)">
     <div class="cls" id="classes" style="margin-top:6px"></div>
   </aside>
 </div>
@@ -97,6 +97,7 @@ const $ = id => document.getElementById(id);
 const api = async (url, opt) => { const r = await fetch(url, opt); if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText); return r.json(); };
 const post = (url, body) => api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 // lớp hay dùng lên đầu, có phím 1–9
+const APP = ['car', 'truck', 'bus', 'motorcycle', 'traffic light'];
 const HOT = ['car', 'truck', 'bus', 'motorcycle', 'traffic light', 'P.130', 'P.131a', 'P.123a', 'P.127'];
 let S = { classes: [], names: {}, sessions: [], session: null, frames: [], idx: -1, boxes: [], sel: -1, cls: 'car', hide: false, img: null, undo: [], dirty: false };
 
@@ -107,12 +108,14 @@ function color(name) {
 }
 function ordered() { return [...HOT.filter(c => S.classes.includes(c)), ...S.classes.filter(c => !HOT.includes(c))]; }
 
+// tìm không dấu: "cam do" khớp "Cấm đỗ"
+const fold = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
 function renderClasses() {
-  const q = $('search').value.trim().toLowerCase();
+  const q = fold($('search').value.trim());
   const el = $('classes'); el.innerHTML = '';
   ordered().forEach((c, i) => {
     const nm = S.names[c] || '';
-    if (q && !c.toLowerCase().includes(q) && !nm.toLowerCase().includes(q)) return;
+    if (q && !fold(c).includes(q) && !fold(nm).includes(q)) return;
     const d = document.createElement('div');
     if (c === S.cls) d.className = 'on';
     d.innerHTML = `<i style="background:${color(c)}"></i><span>${c}</span><small>${nm}</small>${i < 9 ? `<kbd>${i + 1}</kbd>` : ''}`;
@@ -254,7 +257,10 @@ function draw() {
     ctx.lineWidth = on ? 2.5 : 1.5; ctx.strokeStyle = c; ctx.setLineDash(b.sug ? [5, 4] : []);
     ctx.strokeRect(p.x1, p.y1, p.x2 - p.x1, p.y2 - p.y1); ctx.setLineDash([]);
     if (on) { ctx.fillStyle = c; for (const [x, y] of [[p.x1, p.y1], [p.x2, p.y1], [p.x1, p.y2], [p.x2, p.y2]]) ctx.fillRect(x - 4, y - 4, 8, 8); }
-    ctx.font = '12px system-ui'; const t = b.sug ? `${b.cls} ${Math.round(b.conf * 100)}%` : b.cls, tw = ctx.measureText(t).width + 6;
+    ctx.font = '12px system-ui';
+    // biển: kèm tên tiếng Việt ngắn để khỏi phải nhớ mã
+    const nm = S.names[b.cls] && !APP.includes(b.cls) ? ' ' + (S.names[b.cls].length > 22 ? S.names[b.cls].slice(0, 21) + '…' : S.names[b.cls]) : '';
+    const t = (b.sug ? `${b.cls}${nm} ${Math.round(b.conf * 100)}%` : b.cls + nm), tw = ctx.measureText(t).width + 6;
     ctx.fillStyle = c; ctx.fillRect(p.x1, p.y1 - 15, tw, 15); ctx.fillStyle = '#000'; ctx.fillText(t, p.x1 + 3, p.y1 - 3);
   });
 }
