@@ -5,6 +5,8 @@
 - Thả file .zip phiên thu (chia sẻ từ app) vào ~/safegap-dataset/inbox/ hoặc kéo thả lên trang: tự giải nén.
 - Ảnh có sẵn khung máy khoanh (xe, đèn). Sửa / thêm khung, chọn lớp (biển theo mã QCVN), bấm Duyệt.
   Chỉ ảnh đã duyệt mới vào bộ train (ghi trong <phiên>/review.json).
+- Khung gợi ý: model biển / xe mới nhất đã train trên Mac (runs/*/weights/best.pt) tự khoanh sẵn ảnh chưa duyệt
+  (nét đứt), người gán chỉ sửa / xoá / thêm rồi duyệt.
 - Nút "Gộp + Train" chạy `proto.dataset merge` (mọi phiên trong inbox) rồi `train` (mps) ở nền, xem log ngay trên trang.
 
 Danh sách lớp = lớp của app (YOLOLabel.classes) + mã biển trong config/signs_vn.json + "sign_other" (biển khác).
@@ -14,6 +16,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import threading
 import os
 import re
 import subprocess
@@ -33,6 +36,13 @@ ROOT = Path(__file__).resolve().parent.parent
 HTML = Path(__file__).with_name("labeler.html")
 APP_CLASSES = ["car", "truck", "bus", "motorcycle", "traffic light"]   # = YOLOLabel.classes trong app
 OTHER_SIGN = "sign_other"
+# Model biển chỉ biết nhóm biển: nhóm có một mã QCVN chính thì gợi ý mã đó, nhóm còn lại giữ tên nhóm
+# (proto.dataset.sign_group hiểu cả hai; người gán đổi sang mã cụ thể nếu muốn).
+GROUP_CODE = {"no_entry": "P.102", "no_stop_park": "P.130", "speed_limit": "P.127", "sign_other": OTHER_SIGN}
+GROUP_NAMES = {"no_turn": "Nhóm cấm rẽ / quay đầu (chưa rõ mã)", "prohibit_other": "Nhóm biển cấm khác (chưa rõ mã)",
+               "mandatory": "Nhóm biển hiệu lệnh (xanh tròn)", "warning": "Nhóm biển nguy hiểm (tam giác vàng)",
+               "end_restriction": "Nhóm biển hết cấm"}
+SUGGEST_CONF = 0.25
 
 
 def sign_names() -> dict[str, str]:
@@ -46,7 +56,79 @@ def sign_names() -> dict[str, str]:
 def class_list(ds: Path) -> list[str]:
     """Lớp chung: những gì bộ dữ liệu đã có (giữ chỉ số), thêm lớp app + biển còn thiếu ở cuối."""
     return D.merge_classes(D.read_classes(ds / "classes.txt"),
-                           APP_CLASSES + list(sign_names()) + [OTHER_SIGN])
+                           APP_CLASSES + list(sign_names()) + [OTHER_SIGN] + list(GROUP_NAMES))
+
+
+def latest_weights(runs: Path) -> Optional[Path]:
+    """best.pt mới nhất trong <runs>/*/weights/."""
+    found = sorted(runs.glob("*/weights/best.pt"), key=lambda p: p.stat().st_mtime) if runs.is_dir() else []
+    return found[-1] if found else None
+
+
+def suggest_class(name: str, task: str) -> Optional[str]:
+    """Tên lớp model → lớp trang gán nhãn; None = bỏ (lớp xe COCO khác, lớp lạ)."""
+    if task == "signs":
+        return GROUP_CODE.get(name, name if name in GROUP_NAMES else None)
+    return name if name in APP_CLASSES else None
+
+
+def _iou(a: dict, b: dict) -> float:
+    ax1, ay1, ax2, ay2 = a["cx"] - a["w"] / 2, a["cy"] - a["h"] / 2, a["cx"] + a["w"] / 2, a["cy"] + a["h"] / 2
+    bx1, by1, bx2, by2 = b["cx"] - b["w"] / 2, b["cy"] - b["h"] / 2, b["cx"] + b["w"] / 2, b["cy"] + b["h"] / 2
+    iw, ih = max(0.0, min(ax2, bx2) - max(ax1, bx1)), max(0.0, min(ay2, by2) - max(ay1, by1))
+    inter = iw * ih
+    union = a["w"] * a["h"] + b["w"] * b["h"] - inter
+    return inter / union if union > 0 else 0.0
+
+
+def new_suggestions(existing: list[dict], proposed: list[dict], iou: float = 0.4) -> list[dict]:
+    """Khung gợi ý chưa trùng khung đã có (cùng loại biển / xe), khung tin cậy cao trước."""
+    def kind(c: str) -> str:
+        return "vehicle" if c in APP_CLASSES else "sign"
+    out: list[dict] = []
+    for p in sorted(proposed, key=lambda b: -b.get("conf", 0)):
+        if any(kind(e["cls"]) == kind(p["cls"]) and _iou(e, p) > iou for e in existing + out):
+            continue
+        out.append(p)
+    return out
+
+
+class Suggester:
+    """Chạy model đã train (Ultralytics) trên một ảnh. Nạp chậm lần đầu, giữ trong bộ nhớ, đổi khi có best.pt mới."""
+
+    def __init__(self, ds: Path):
+        self.ds = ds
+        self.lock = threading.Lock()
+        self.cache: dict[str, tuple[Path, object]] = {}
+
+    def weights(self) -> dict[str, Optional[Path]]:
+        # model xe COCO gốc giống hệt model trên app (nhãn máy đã có): chỉ gợi ý xe khi đã tự train
+        return {"signs": latest_weights(self.ds / "signs" / "runs"), "drive": latest_weights(self.ds / "runs")}
+
+    def _model(self, task: str, w: Path):
+        hit = self.cache.get(task)
+        if hit and hit[0] == w:
+            return hit[1]
+        from ultralytics import YOLO
+        m = YOLO(str(w))
+        self.cache[task] = (w, m)
+        return m
+
+    def __call__(self, img: Path) -> list[dict]:
+        out: list[dict] = []
+        with self.lock:
+            for task, w in self.weights().items():
+                if w is None:
+                    continue
+                m = self._model(task, w)
+                res = m.predict(str(img), imgsz=1280 if task == "signs" else 640, conf=SUGGEST_CONF, verbose=False)[0]
+                names = res.names
+                for (cx, cy, bw, bh), c, k in zip(res.boxes.xywhn.tolist(), res.boxes.conf.tolist(),
+                                                   res.boxes.cls.tolist()):
+                    cls = suggest_class(names[int(k)], task)
+                    if cls:
+                        out.append({"cls": cls, "cx": cx, "cy": cy, "w": bw, "h": bh, "conf": round(c, 3)})
+        return out
 
 
 def _safe(name: str) -> str:
@@ -91,9 +173,9 @@ class TrainReq(BaseModel):
     task: str = "drive"
 
 
-def make_router(ds_dir: Optional[Path] = None) -> APIRouter:
+def make_router(ds_dir: Optional[Path] = None, suggester=None) -> APIRouter:
     r = APIRouter()
-    job: dict = {"proc": None}
+    job: dict = {"proc": None, "suggester": suggester}
 
     def ds() -> Path:
         return (ds_dir or D.dataset_dir()).expanduser()
@@ -139,7 +221,7 @@ def make_router(ds_dir: Optional[Path] = None) -> APIRouter:
             out.append({"name": d.name, "images": n, "reviewed": len(reviewed(d))})
         names = sign_names()
         return {"sessions": out, "classes": class_list(ds()), "inbox": str(box),
-                "names": {**names, OTHER_SIGN: "Biển khác (chưa có trong danh sách)"}}
+                "names": {**names, OTHER_SIGN: "Biển khác (chưa có trong danh sách)", **GROUP_NAMES}}
 
     @r.post("/api/label/upload")
     async def upload(request: Request, name: str):
@@ -163,7 +245,7 @@ def make_router(ds_dir: Optional[Path] = None) -> APIRouter:
             for ln in (d / "meta.jsonl").read_text(encoding="utf-8").splitlines():
                 try:
                     m = json.loads(ln)
-                    meta[Path(m["file"]).stem] = {k: m.get(k) for k in ("speedKmh", "light", "time")}
+                    meta[Path(m["file"]).stem] = {k: m.get(k) for k in ("speedKmh", "light", "time", "signs")}
                 except (ValueError, KeyError, TypeError):
                     continue
         done = reviewed(d)
@@ -177,6 +259,30 @@ def make_router(ds_dir: Optional[Path] = None) -> APIRouter:
         if not p.is_file():
             raise HTTPException(404, "Không thấy ảnh")
         return FileResponse(p, media_type="image/jpeg")
+
+    def get_suggester():
+        if job["suggester"] is None:
+            job["suggester"] = Suggester(ds())
+        return job["suggester"]
+
+    @r.get("/api/label/suggest/models")
+    def suggest_models():
+        sg = get_suggester()
+        w = sg.weights() if hasattr(sg, "weights") else {}
+        return {k: (str(v) if v else None) for k, v in w.items()}
+
+    @r.post("/api/label/suggest")
+    def suggest(req: SaveReq):
+        """Khung model đề xuất cho ảnh, bỏ những khung trùng khung đang có trên trang (req.boxes)."""
+        d = session_dir(req.session)
+        img = d / "images" / f"{_safe(req.frame)}.jpg"
+        if not img.is_file():
+            raise HTTPException(404, "Không thấy ảnh")
+        try:
+            proposed = get_suggester()(img)
+        except ImportError:
+            raise HTTPException(500, "Chưa cài ultralytics (uv sync)")
+        return {"boxes": new_suggestions([b.model_dump() for b in req.boxes], proposed)}
 
     @r.get("/api/label/boxes")
     def boxes(session: str, frame: str):

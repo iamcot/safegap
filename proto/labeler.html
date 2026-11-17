@@ -73,6 +73,9 @@
     <div class="bar">
       <button id="prev">← Trước</button><button id="next">Sau →</button>
       <span id="info" class="hint"></span><span class="sp"></span>
+      <label class="hint" title="Model mới nhất đã train trên Mac tự khoanh sẵn ảnh chưa duyệt"><input type="checkbox" id="autoSug" style="width:auto" checked> Gợi ý khung</label>
+      <button id="sugBtn" title="M">Khoanh lại (M)</button>
+      <span id="sugInfo" class="hint"></span>
       <span id="status" class="pill"></span>
       <button id="toggle" title="H">Ẩn khung</button>
       <button class="primary" id="approve" title="Enter / Space">Duyệt ✓ (Enter)</button>
@@ -80,7 +83,8 @@
     <div class="stage"><canvas id="cv"></canvas></div>
     <div class="hint">Kéo trên ảnh: vẽ khung lớp đang chọn · Bấm khung: chọn, kéo để dời, kéo góc để đổi cỡ · <kbd>Del</kbd> xoá ·
       <kbd>1</kbd>–<kbd>9</kbd> chọn lớp (đổi lớp khung đang chọn) · <kbd>/</kbd> tìm lớp · <kbd>Enter</kbd> duyệt + ảnh sau ·
-      <kbd>←</kbd><kbd>→</kbd> chuyển ảnh · <kbd>Ctrl/⌘Z</kbd> hoàn tác · Chỉ ảnh đã duyệt mới vào bộ train.</div>
+      <kbd>←</kbd><kbd>→</kbd> chuyển ảnh · <kbd>Ctrl/⌘Z</kbd> hoàn tác · <kbd>M</kbd> model khoanh lại ·
+      Khung nét đứt là model gợi ý: sai thì xoá / sửa, đúng thì cứ duyệt. Chỉ ảnh đã duyệt mới vào bộ train.</div>
   </main>
   <aside class="right">
     <h2 style="margin-top:0">Lớp</h2>
@@ -118,7 +122,7 @@ function renderClasses() {
 }
 function pickClass(c) {
   S.cls = c;
-  if (S.sel >= 0 && S.boxes[S.sel].cls !== c) { snap(); S.boxes[S.sel].cls = c; S.dirty = true; }
+  if (S.sel >= 0 && S.boxes[S.sel].cls !== c) { snap(); S.boxes[S.sel].cls = c; delete S.boxes[S.sel].sug; S.dirty = true; }
   renderClasses(); draw();
 }
 
@@ -155,7 +159,7 @@ function renderFrames() {
     const d = document.createElement('div');
     if (i === S.idx) d.className = 'on';
     const sp = f.speedKmh != null ? `${Math.round(f.speedKmh)} km/h` : '';
-    d.innerHTML = `<span>${f.reviewed ? '✓ ' : ''}${f.id}</span><span class="n">${sp}${f.light ? ' · ' + f.light : ''}</span>`;
+    d.innerHTML = `<span>${f.reviewed ? '✓ ' : ''}${f.id}</span><span class="n">${sp}${f.light ? ' · ' + f.light : ''}${f.signs ? ' · biển' : ''}</span>`;
     d.onclick = () => go(i);
     el.appendChild(d);
   });
@@ -171,8 +175,31 @@ async function openFrame(i) {
   })]);
   if (S.idx !== i) return;
   S.boxes = r.boxes; S.img = img;
+  if ($('autoSug').checked && !f.reviewed) suggest(i);
   $('info').textContent = `${i + 1}/${S.frames.length} · ${f.id}${f.speedKmh != null ? ' · ' + Math.round(f.speedKmh) + ' km/h' : ''}`;
   updateStatus(); renderFrames(); draw();
+}
+// khung model gợi ý (nét đứt): không tự lưu, chỉ lưu khi duyệt hoặc sửa ảnh
+async function suggest(i) {
+  const f = S.frames[i]; if (!f || !S.models) return;
+  $('sugInfo').textContent = 'model đang khoanh…';
+  let r;
+  try { r = await post('/api/label/suggest', { session: S.session, frame: f.id, boxes: S.boxes, reviewed: false }); }
+  catch (err) { $('sugInfo').textContent = '✗ ' + err.message; return; }
+  if (S.idx !== i) return;
+  if (r.boxes.length) { snap(); for (const b of r.boxes) { b.sug = true; S.boxes.push(b); } }
+  for (const b of r.boxes) if (!S.classes.includes(b.cls)) S.classes.push(b.cls);
+  $('sugInfo').textContent = r.boxes.length ? `model gợi ý ${r.boxes.length} khung` : 'model không thấy thêm gì';
+  draw();
+}
+async function loadModels() {
+  try {
+    const m = await api('/api/label/suggest/models');
+    const have = Object.entries(m).filter(([, v]) => v).map(([k]) => k === 'signs' ? 'biển' : 'xe');
+    S.models = have.length > 0;
+    $('sugInfo').textContent = have.length ? `gợi ý bằng model ${have.join(' + ')}` : 'chưa có model đã train để gợi ý';
+    $('sugBtn').disabled = !have.length;
+  } catch { S.models = false; }
 }
 function updateStatus() {
   const f = S.frames[S.idx]; const st = $('status');
@@ -224,9 +251,10 @@ function draw() {
   if (S.hide) return;
   all.forEach((b, i) => {
     const p = toPx(b), c = color(b.cls), on = i === S.sel;
-    ctx.lineWidth = on ? 2.5 : 1.5; ctx.strokeStyle = c; ctx.strokeRect(p.x1, p.y1, p.x2 - p.x1, p.y2 - p.y1);
+    ctx.lineWidth = on ? 2.5 : 1.5; ctx.strokeStyle = c; ctx.setLineDash(b.sug ? [5, 4] : []);
+    ctx.strokeRect(p.x1, p.y1, p.x2 - p.x1, p.y2 - p.y1); ctx.setLineDash([]);
     if (on) { ctx.fillStyle = c; for (const [x, y] of [[p.x1, p.y1], [p.x2, p.y1], [p.x1, p.y2], [p.x2, p.y2]]) ctx.fillRect(x - 4, y - 4, 8, 8); }
-    ctx.font = '12px system-ui'; const t = b.cls, tw = ctx.measureText(t).width + 6;
+    ctx.font = '12px system-ui'; const t = b.sug ? `${b.cls} ${Math.round(b.conf * 100)}%` : b.cls, tw = ctx.measureText(t).width + 6;
     ctx.fillStyle = c; ctx.fillRect(p.x1, p.y1 - 15, tw, 15); ctx.fillStyle = '#000'; ctx.fillText(t, p.x1 + 3, p.y1 - 3);
   });
 }
@@ -275,7 +303,7 @@ window.addEventListener('mouseup', () => {
   if (drag.mode === 'new') {
     const p = toPx(drag.box);
     if (p.x2 - p.x1 > 4 && p.y2 - p.y1 > 4) { snap(); S.boxes.push(drag.box); S.sel = S.boxes.length - 1; S.dirty = true; }
-  } else if (drag.moved) S.dirty = true;
+  } else if (drag.moved) { S.dirty = true; delete S.boxes[S.sel].sug; }
   else S.undo.pop();
   drag = null; updateStatus(); draw();
 });
@@ -295,11 +323,15 @@ document.addEventListener('keydown', e => {
   else if (k === 'ArrowLeft') go(S.idx - 1);
   else if (k === '/') { $('search').focus(); $('search').select(); e.preventDefault(); }
   else if (k === 'h' || k === 'H') toggleHide();
+  else if (k === 'm' || k === 'M') suggest(S.idx);
   else if (k === 'Escape') { S.sel = -1; draw(); }
   else if (/^[1-9]$/.test(k)) { const c = ordered()[+k - 1]; if (c) pickClass(c); }
 });
 function toggleHide() { S.hide = !S.hide; $('toggle').textContent = S.hide ? 'Hiện khung' : 'Ẩn khung'; draw(); }
 $('toggle').onclick = toggleHide;
+$('sugBtn').onclick = () => suggest(S.idx);
+try { $('autoSug').checked = localStorage.getItem('autoSug') !== '0'; } catch {}
+$('autoSug').onchange = () => { try { localStorage.setItem('autoSug', $('autoSug').checked ? '1' : '0'); } catch {} };
 $('approve').onclick = approveNext;
 $('prev').onclick = () => go(S.idx - 1);
 $('next').onclick = () => go(S.idx + 1);
@@ -374,7 +406,7 @@ async function pollTrain() {
 $('trainBtn').onclick = () => startTrain(false);
 $('mergeBtn').onclick = () => startTrain(true);
 
-loadSessions().then(() => { if (S.sessions.length) openSession(S.sessions[0].name); });
+loadModels().then(loadSessions).then(() => { if (S.sessions.length) openSession(S.sessions[0].name); });
 pollTrain();
 </script>
 </body>

@@ -19,6 +19,8 @@ final class RoadStore: ObservableObject {
     private let lock = NSLock()
     private let queue = DispatchQueue(label: "roads", qos: .utility)
     private var have = Set<OSMTile.Key>()
+    /// Ô tải từ bản cũ (chưa có tên đường): vẫn dùng, tải lại dần ở cuối hàng.
+    private var stale = Set<OSMTile.Key>()
     private var pending: [OSMTile.Key] = []
     private var failedAt: [OSMTile.Key: Date] = [:]
     /// Số lần đã thử lại mỗi ô khi máy chủ bận (429/502/503/504, hết giờ).
@@ -63,6 +65,7 @@ final class RoadStore: ObservableObject {
             try? FileManager.default.createDirectory(at: self.dir, withIntermediateDirectories: true)
             self.lock.lock()
             self.have.removeAll()
+            self.stale.removeAll()
             self.pending.removeAll()
             self.failedAt.removeAll()
             self.lock.unlock()
@@ -76,7 +79,7 @@ final class RoadStore: ObservableObject {
         queue.async {
             let now = Date()
             self.lock.lock()
-            for k in keys where !self.have.contains(k) && !self.pending.contains(k) {
+            for k in keys where (!self.have.contains(k) || self.stale.contains(k)) && !self.pending.contains(k) {
                 if !force, let f = self.failedAt[k], now.timeIntervalSince(f) < 600 { continue }  // lỗi gần đây: 10 phút sau thử lại
                 self.pending.append(k)
             }
@@ -125,6 +128,7 @@ final class RoadStore: ObservableObject {
                 lock.lock()
                 map.add(ways)
                 have.insert(k)
+                stale.remove(k)
                 lock.unlock()
             } catch {
                 failure = "Đọc dữ liệu ô \(k.name) lỗi: \(error.localizedDescription)"
@@ -160,16 +164,26 @@ final class RoadStore: ObservableObject {
 
     private func loadAll() {
         let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+        var old: [OSMTile.Key] = []
         for f in files where f.pathExtension == "json" {
             let parts = f.deletingPathExtension().lastPathComponent.split(separator: "_").compactMap { Int($0) }
             guard parts.count == 2, let d = try? Data(contentsOf: f),
                   let ways = try? JSONDecoder().decode([RoadWay].self, from: d) else { continue }
+            let k = OSMTile.Key(lat: parts[0], lon: parts[1])
+            // ô tải trước khi lưu tên đường: không đường nào có tên
+            if ways.count > 20 && !ways.contains(where: { $0.name != nil }) { old.append(k) }
             lock.lock()
             map.add(ways)
-            have.insert(OSMTile.Key(lat: parts[0], lon: parts[1]))
+            have.insert(k)
             lock.unlock()
         }
         publishStats(error: nil)
+        if !old.isEmpty {
+            lock.lock()
+            stale.formUnion(old)
+            lock.unlock()
+            enqueue(old.sorted(), force: true)
+        }
     }
 
     private func reloadMapFromDisk() {

@@ -351,6 +351,17 @@ private struct RoadCanvas: View {
             for car in cars.sorted(by: { $0.pos.z > $1.pos.z }) + [Car.own] {
                 drawCar(ctx, cam, car)
             }
+            // tên đường đang chạy (OpenStreetMap), ngay dưới xe mình
+            if let name = snapshot.road?.name {
+                let rear = cam.point3(0, 0, Car.own.pos.z - 0.3)   // pos.z là đuôi xe
+                let t = ctx.resolve(Text(name).font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .foregroundColor(pal.text.opacity(0.85)))
+                let sz = t.measure(in: CGSize(width: size.width * 0.45, height: 40))
+                let y = min(rear.y + 4, size.height - sz.height - 10)
+                let rect = CGRect(x: size.width / 2 - sz.width / 2 - 10, y: y, width: sz.width + 20, height: sz.height + 6)
+                ctx.fill(Path(roundedRect: rect, cornerRadius: rect.height / 2), with: .color(pal.bgBottom.opacity(0.75)))
+                ctx.draw(t, in: rect.insetBy(dx: 10, dy: 3))
+            }
             // số khoảng cách tới xe trước: to, nằm giữa dải màu (dải quá ngắn thì đặt trên nóc xe trước)
             if let t = target, let d = r.d {
                 if pathEnd > 4 {

@@ -289,5 +289,11 @@ final class CaptureTests: XCTestCase {
         XCTAssertTrue(q.shouldCapture(t: 2.0, speedKmh: 0, hasLight: true))
         q.maxImages = 2
         XCTAssertFalse(q.shouldCapture(t: 5, speedKmh: 40, hasLight: false))
+        // model đang thấy biển: mỗi 1,5 s khi xe chạy, đứng yên thì không
+        var s = CapturePolicy()
+        var m = 0
+        for i in 0..<150 where s.shouldCapture(t: Double(i) / 15, speedKmh: 30, hasLight: false, hasSign: true) { m += 1 }
+        XCTAssertEqual(m, 7)   // 10 s
+        XCTAssertFalse(CapturePolicy().shouldCapture(t: 0, speedKmh: 0, hasLight: false, hasSign: true))
     }
 }

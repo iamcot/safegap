@@ -116,6 +116,16 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
       đã nhớ + nút Xoá. Lệch ngang trừ độ cong đường từ OSM (`roadBend`). Tốc độ: `DriveContext.mapSpeedLimitKmh` =
       maxspeed OSM, dùng khi biển P.127 chưa có số hoặc không có biển tốc độ nào.
       Chưa làm: so toạ độ biển với các way OSM để biết biển thuộc đường ngang (GPS lệch 5–10 m, cần thử trên log thật).
+- [x] B2d. Thu + gán nhãn nhanh hơn (17/11, chủ app thu sáng + chiều, train qua đêm):
+      - Trang `/label` tự khoanh sẵn ảnh chưa duyệt bằng model mới nhất đã train trên Mac (`Suggester`: `best.pt` mới
+        nhất trong `<ds>/signs/runs/*` và `<ds>/runs/*`; model xe COCO gốc không dùng vì trùng nhãn máy). Khung nét đứt
+        kèm % tin cậy, bỏ khung trùng khung đã có (IoU > 0,4); không tự lưu, duyệt (Enter) mới lưu. Nhóm biển có mã chính
+        → mã (no_entry P.102, no_stop_park P.130, speed_limit P.127), nhóm khác giữ tên nhóm làm lớp (`warning`,
+        `mandatory`, `no_turn`...; `sign_group` hiểu). Phím `M` khoanh lại, ô "Gợi ý khung" bật/tắt.
+      - App: model biển chạy ngưỡng 0,2 (tracker vẫn lọc 0,35); thu dữ liệu chụp mỗi 1,5 s khi model thấy biển (kể cả
+        chưa chắc) và xe đang chạy (`CapturePolicy.signIntervalS`); meta.jsonl có `signs`, trang nhãn ghi "· biển".
+- [x] A9. Tên đường đang chạy (OSM `name:vi` / `name`, kèm `ref` như QL1A) hiện dưới xe mình trên màn lái
+      (`RoadWay.name`, `RoadMatch.name`). Ô OSM tải từ bản cũ (không tên) vẫn dùng, tự tải lại dần ở cuối hàng.
 - [ ] B3. Train dò biển (YOLO11n, vùng cắt 640×360) trên Mac M5, export Core ML, chạy 4 lượt/giây xen kẽ 2 vùng cắt
       qua `InferenceScheduler` (task `signsLights`). Đo nhiệt.
 - [ ] B4. Classifier ~12–40 loại biển (64×64), bỏ phiếu ≥ 3 lần; tracker biển; lọc biển trên thân xe / mặt nghiêng.

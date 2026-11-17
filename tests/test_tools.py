@@ -200,3 +200,36 @@ def test_labeler_train_job_survives_in_files(tmp_path):
     # viewer mới (khởi động lại) vẫn đọc được trạng thái từ file
     c2 = TestClient(create_app(make_detector=lambda: None, out_dir=tmp_path / "out", label_dir=ds))
     assert c2.get("/api/label/train").json()["code"] == 0
+
+
+def test_labeler_suggest_maps_groups_and_skips_existing(tmp_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from proto import labeler as L
+
+    assert L.suggest_class("no_stop_park", "signs") == "P.130"
+    assert L.suggest_class("warning", "signs") == "warning"
+    assert L.suggest_class("person", "drive") is None and L.suggest_class("car", "drive") == "car"
+    assert "warning" in L.class_list(tmp_path)
+
+    ds = tmp_path / "ds"
+    _session(ds / "inbox", "capture_x", ["car"], {"0000010_00": "0 0.5 0.5 0.2 0.2\n"}, reviewed=False)
+    proposed = [{"cls": "P.130", "cx": 0.8, "cy": 0.2, "w": 0.03, "h": 0.05, "conf": 0.7},
+                {"cls": "P.130", "cx": 0.801, "cy": 0.2, "w": 0.03, "h": 0.05, "conf": 0.4},   # trùng khung trên
+                {"cls": "car", "cx": 0.5, "cy": 0.5, "w": 0.2, "h": 0.2, "conf": 0.9}]         # trùng khung đã có
+    app = FastAPI()
+    app.include_router(L.make_router(ds, suggester=lambda img: proposed))
+    c = TestClient(app)
+    r = c.post("/api/label/suggest", json={"session": "capture_x", "frame": "0000010_00",
+                                           "boxes": [{"cls": "car", "cx": 0.5, "cy": 0.5, "w": 0.2, "h": 0.2}]})
+    assert [(b["cls"], b["conf"]) for b in r.json()["boxes"]] == [("P.130", 0.7)]
+    assert c.post("/api/label/suggest", json={"session": "capture_x", "frame": "../x", "boxes": []}).status_code == 400
+
+    # model mới nhất trong runs/*/weights/best.pt
+    for i, n in enumerate(["signs_a", "signs_b"]):
+        w = ds / "signs" / "runs" / n / "weights" / "best.pt"
+        w.parent.mkdir(parents=True)
+        w.write_bytes(b"x")
+        import os
+        os.utime(w, (1000 + i, 1000 + i))
+    assert L.Suggester(ds).weights() == {"signs": w, "drive": None}

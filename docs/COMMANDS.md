@@ -23,7 +23,10 @@ uv run python -m proto.viewer              # rồi mở http://127.0.0.1:8501/la
 3. Kéo thả file .zip vào trang, hoặc chép vào `~/safegap-dataset/inbox/`.
 4. Phím tắt: kéo chuột để vẽ khung · `1`–`9` chọn lớp · `/` tìm lớp (ví dụ "P.130", "cấm đỗ") · `Del` xoá khung ·
    `Enter` duyệt rồi sang ảnh sau · `←` `→` chuyển ảnh · `H` ẩn/hiện khung · `Ctrl/⌘Z` hoàn tác.
-   Chỉ ảnh đã duyệt mới được đưa vào train.
+   `M` cho model khoanh lại. Chỉ ảnh đã duyệt mới được đưa vào train.
+5. Ảnh chưa duyệt được model mới nhất đã train (biển + xe) khoanh sẵn bằng **khung nét đứt**: sai thì xoá / sửa, đúng
+   thì cứ Enter. Lần đầu mở trang chờ vài giây để nạp model. Tắt bằng ô "Gợi ý khung".
+   Ảnh model trên xe thấy biển có ghi "· biển" trong danh sách.
 
 ## Train trên Mac M5
 

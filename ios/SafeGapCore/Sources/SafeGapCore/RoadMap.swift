@@ -13,14 +13,16 @@ public struct RoadWay: Codable, Equatable, Sendable {
     public var lanesForward: Int?
     public var lanesBackward: Int?
     public var maxspeed: Int?
+    /// Tên đường (name:vi, name) hoặc số hiệu (ref, ví dụ "QL1A"). Ô tải trước khi có trường này: nil.
+    public var name: String?
     public var lat: [Double]
     public var lon: [Double]
 
     public init(id: Int64, cls: Int, oneway: Int, lanes: Int? = nil, lanesForward: Int? = nil, lanesBackward: Int? = nil,
-                maxspeed: Int? = nil, lat: [Double], lon: [Double]) {
+                maxspeed: Int? = nil, name: String? = nil, lat: [Double], lon: [Double]) {
         self.id = id; self.cls = cls; self.oneway = oneway; self.lanes = lanes
         self.lanesForward = lanesForward; self.lanesBackward = lanesBackward; self.maxspeed = maxspeed
-        self.lat = lat; self.lon = lon
+        self.name = name; self.lat = lat; self.lon = lon
     }
 }
 
@@ -35,6 +37,7 @@ public struct RoadMatch: Equatable, Sendable {
     public var maxspeed: Int?
     /// Khoảng cách từ vị trí GPS tới tim đường (m).
     public var distanceM: Double
+    public var name: String? = nil
 }
 
 public enum OSMTile {
@@ -80,6 +83,13 @@ public enum OSMTile {
         return "[out:json][timeout:120];way[\"highway\"~\"^(\(highwayClasses))$\"](\(b.s),\(b.w),\(b.n),\(b.e));out tags geom;"
     }
 
+    static func roadName(_ tags: [String: String]) -> String? {
+        let n = [tags["name:vi"], tags["name"]].compactMap { $0 }.first { !$0.isEmpty }
+        let ref = tags["ref"].flatMap { $0.isEmpty ? nil : $0 }
+        if let n, let ref, !n.contains(ref) { return "\(n) (\(ref))" }
+        return n ?? ref
+    }
+
     /// Đọc JSON trả về từ Overpass (`out tags geom`).
     public static func parseOverpass(_ data: Data) throws -> [RoadWay] {
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -119,7 +129,7 @@ public enum OSMTile {
             guard lat.count == geom.count, lon.count == geom.count else { continue }
             out.append(RoadWay(id: id, cls: cls, oneway: oneway, lanes: int(tags["lanes"]),
                                lanesForward: int(tags["lanes:forward"]), lanesBackward: int(tags["lanes:backward"]),
-                               maxspeed: int(tags["maxspeed"]), lat: lat, lon: lon))
+                               maxspeed: int(tags["maxspeed"]), name: roadName(tags), lat: lat, lon: lon))
         }
         return out
     }
@@ -149,9 +159,13 @@ public final class RoadMap {
         nodes.removeAll()
     }
 
-    /// Thêm đường (từ một ô). Way đã có (ô khác cũng chứa) thì bỏ qua.
+    /// Thêm đường (từ một ô). Way đã có (ô khác cũng chứa) thì bỏ qua, chỉ bổ sung tên nếu bản cũ chưa có.
     public func add(_ list: [RoadWay]) {
-        for w in list where ways[w.id] == nil {
+        for w in list {
+            if let old = ways[w.id] {
+                if old.name == nil, let n = w.name { ways[w.id]?.name = n }
+                continue
+            }
             ways[w.id] = w
             for i in 0..<(w.lat.count - 1) {
                 let a0 = Int(floor(min(w.lat[i], w.lat[i + 1]) / Self.cell)), a1 = Int(floor(max(w.lat[i], w.lat[i + 1]) / Self.cell))
@@ -168,14 +182,14 @@ public final class RoadMap {
         let w = b.way
         if w.oneway != 0 {
             return RoadMatch(wayId: w.id, cls: w.cls, oneway: true, lanesSame: w.lanes, lanesOpposite: 0,
-                             maxspeed: w.maxspeed, distanceM: b.dist)
+                             maxspeed: w.maxspeed, distanceM: b.dist, name: w.name)
         }
         let fwd = w.lanesForward ?? w.lanes.map { $0 / 2 }
         let bwd = w.lanesBackward ?? w.lanes.map { $0 - $0 / 2 }
         return RoadMatch(wayId: w.id, cls: w.cls, oneway: false,
                          lanesSame: (b.along ? fwd : bwd).flatMap { $0 > 0 ? $0 : nil },
                          lanesOpposite: (b.along ? bwd : fwd).flatMap { $0 > 0 ? $0 : nil },
-                         maxspeed: w.maxspeed, distanceM: b.dist)
+                         maxspeed: w.maxspeed, distanceM: b.dist, name: w.name)
     }
 
     struct Located { var dist: Double; var way: RoadWay; var seg: Int; var t: Double; var along: Bool }

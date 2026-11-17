@@ -23,10 +23,12 @@ public enum YOLOLabel {
 }
 
 /// Lưu ảnh mỗi `movingIntervalS` khi xe chạy; khi thấy đèn thì dày hơn (`lightIntervalS`), kể cả lúc đứng chờ đèn.
-/// Đứng yên không có đèn thì không lưu (ảnh trùng nhau, tốn chỗ).
+/// Model biển đang thấy biển (kể cả chưa chắc) thì cũng dày hơn (`signIntervalS`, chỉ khi xe chạy): đó là ảnh model
+/// đang yếu, đáng gán nhãn nhất. Đứng yên không có đèn thì không lưu (ảnh trùng nhau, tốn chỗ).
 public struct CapturePolicy: Equatable, Sendable {
     public var movingIntervalS = 4.0
     public var lightIntervalS = 2.0
+    public var signIntervalS = 1.5
     public var minSpeedKmh = 5.0
     /// Giới hạn số ảnh mỗi phiên (~250 KB/ảnh → ~375 MB). Chủ app gán nhãn ~300–500 ảnh/tối nên không cần nhiều hơn.
     public var maxImages = 1500
@@ -35,11 +37,12 @@ public struct CapturePolicy: Equatable, Sendable {
 
     public init() {}
 
-    public mutating func shouldCapture(t: Double, speedKmh: Double?, hasLight: Bool) -> Bool {
+    public mutating func shouldCapture(t: Double, speedKmh: Double?, hasLight: Bool, hasSign: Bool = false) -> Bool {
         guard count < maxImages else { return false }
         let moving = (speedKmh ?? 0) >= minSpeedKmh
         guard moving || hasLight else { return false }
-        let interval = hasLight ? lightIntervalS : movingIntervalS
+        var interval = hasLight ? lightIntervalS : movingIntervalS
+        if hasSign && moving { interval = min(interval, signIntervalS) }
         if let last = lastT, t - last < interval, t >= last { return false }
         lastT = t
         count += 1

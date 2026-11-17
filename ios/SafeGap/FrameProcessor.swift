@@ -146,6 +146,8 @@ final class FrameProcessor {
     private let signQueue = DispatchQueue(label: "safegap.signs", qos: .userInitiated)
     private var signBusy = false
     private var signResult: (t: Double, dets: [Detection])?
+    /// Lượt dò biển gần nhất: lúc nào, thấy mấy biển (thu dữ liệu chụp dày hơn khi có biển).
+    private var lastSignSeen: (t: Double, n: Int)?
     private var signTracker = SignDetectionTracker()
     /// Bản đồ biển tự học trên tuyến hay đi (Documents/sign_map.json): nhắc biển đã nhớ trước cả khi camera thấy.
     private var signRecall = SignRecall(memory: FrameProcessor.loadSignMap())
@@ -284,7 +286,8 @@ final class FrameProcessor {
         lock.unlock()
         guard !busy else { return }
         signQueue.async { [weak self] in
-            let dets = (try? sd.detect(pb, frameWidth: w, frameHeight: h, classes: nil, minConf: night ? 0.25 : 0.3)) ?? []
+            // ngưỡng thấp: bộ đếm phiếu tự lọc 0,35; biển 0,2–0,35 vẫn dùng để thu thêm ảnh (model đang lưỡng lự)
+            let dets = (try? sd.detect(pb, frameWidth: w, frameHeight: h, classes: nil, minConf: 0.2)) ?? []
             guard let self else { return }
             self.lock.lock()
             self.signResult = (t, dets)
@@ -535,6 +538,7 @@ final class FrameProcessor {
             saveSignMapIfNeeded(t: t, force: true)
         }
         if let sr = takeSignResult() {
+            lastSignSeen = (sr.t, sr.dets.count)
             // biển từ model: đủ phiếu qua nhiều lượt mới tính là đã đi qua biển
             // biển chỉ có hiệu lực cho phần đường bên trái nó: biển xa bên phải là của đường ngang / nhánh
             let lanes = Double(roadMatch?.match?.lanesSame ?? 2)
@@ -582,7 +586,8 @@ final class FrameProcessor {
         if p.settings.dataCapture {
             capture.start()
             capture.offer(pb, t: t, frameWidth: w, frameHeight: h, detections: dets + lightDets, speed: gps, speedKmh: v,
-                          light: lightState?.box != nil ? lightState?.color : nil, thermal: thermal)
+                          light: lightState?.box != nil ? lightState?.color : nil, thermal: thermal,
+                          signCount: lastSignSeen.flatMap { t - $0.t < 0.8 ? $0.n : nil } ?? 0)
         } else if capture.isRunning {
             capture.stop()
         }

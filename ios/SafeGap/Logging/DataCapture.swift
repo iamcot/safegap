@@ -19,6 +19,8 @@ final class DataCapture {
         var courseDeg: Double?
         var light: String?
         var thermal: String
+        /// Số biển model biển thấy trong ảnh (trang gán nhãn đánh dấu ảnh có biển).
+        var signs: Int?
     }
 
     private let queue = DispatchQueue(label: "safegap.capture", qos: .utility)
@@ -64,9 +66,10 @@ final class DataCapture {
 
     /// Gọi mỗi frame đã xử lý (hàng đợi camera). Tự quyết có lưu không theo CapturePolicy.
     func offer(_ pb: CVPixelBuffer, t: Double, frameWidth w: Double, frameHeight h: Double, detections: [Detection],
-               speed: SpeedProvider.Reading?, speedKmh: Double?, light: LightColor?, thermal: ThermalLevel) {
+               speed: SpeedProvider.Reading?, speedKmh: Double?, light: LightColor?, thermal: ThermalLevel,
+               signCount: Int = 0) {
         guard let dir = sessionDir,
-              policy.shouldCapture(t: t, speedKmh: speedKmh, hasLight: light != nil) else { return }
+              policy.shouldCapture(t: t, speedKmh: speedKmh, hasLight: light != nil, hasSign: signCount > 0) else { return }
         // Ghi đĩa chậm hơn tốc độ lưu: bỏ ảnh này thay vì dồn hàng (giữ RAM thấp).
         lock.lock()
         let busy = pending >= 3
@@ -79,7 +82,7 @@ final class DataCapture {
         let labels = YOLOLabel.file(detections, frameWidth: w, frameHeight: h)
         let meta = Meta(file: name + ".jpg", time: iso.string(from: Date()), t: t, speedKmh: speedKmh,
                         lat: speed?.lat, lon: speed?.lon, courseDeg: speed?.courseDeg, light: light?.rawValue,
-                        thermal: thermal.rawValue)
+                        thermal: thermal.rawValue, signs: signCount > 0 ? signCount : nil)
         lock.lock()
         pending += 1
         lock.unlock()

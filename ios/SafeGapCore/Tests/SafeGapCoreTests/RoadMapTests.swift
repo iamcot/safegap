@@ -5,11 +5,11 @@ final class RoadMapTests: XCTestCase {
     // Đường hai chiều chạy hướng bắc (vẽ từ nam lên bắc), 6 làn: 4 chiều đi, 2 chiều về; và đường một chiều hướng đông.
     let json = """
     {"elements":[
-     {"type":"way","id":1,"tags":{"highway":"primary","lanes":"6","lanes:forward":"4","lanes:backward":"2","maxspeed":"60"},
+     {"type":"way","id":1,"tags":{"highway":"primary","name":"Nguyễn Huệ","lanes":"6","lanes:forward":"4","lanes:backward":"2","maxspeed":"60"},
       "geometry":[{"lat":10.7700,"lon":106.7000},{"lat":10.7750,"lon":106.7000},{"lat":10.7800,"lon":106.7000}]},
-     {"type":"way","id":2,"tags":{"highway":"secondary","oneway":"yes","lanes":"3"},
+     {"type":"way","id":2,"tags":{"highway":"secondary","oneway":"yes","lanes":"3","name":"Quốc lộ 1A","ref":"QL1A"},
       "geometry":[{"lat":10.7900,"lon":106.7100},{"lat":10.7900,"lon":106.7200}]},
-     {"type":"way","id":3,"tags":{"highway":"tertiary","lanes":"4"},
+     {"type":"way","id":3,"tags":{"highway":"tertiary","lanes":"4","ref":"ĐT743"},
       "geometry":[{"lat":10.8000,"lon":106.7300},{"lat":10.8050,"lon":106.7300}]},
      {"type":"node","id":9,"lat":1,"lon":2}
     ]}
@@ -27,6 +27,20 @@ final class RoadMapTests: XCTestCase {
         XCTAssertEqual(w[0].cls, 2)
         XCTAssertEqual(w[0].maxspeed, 60)
         XCTAssertEqual(w[1].oneway, 1)
+        XCTAssertEqual(w.map(\.name), ["Nguyễn Huệ", "Quốc lộ 1A (QL1A)", "ĐT743"])
+    }
+
+    func testRoadNameInMatchAndOldTilesGetNames() throws {
+        XCTAssertEqual(try map().match(lat: 10.7740, lon: 106.70005, courseDeg: 2)?.name, "Nguyễn Huệ")
+        // ô lưu từ bản cũ (không có tên), sau đó tải lại ô: tên được bổ sung
+        let m = RoadMap()
+        let w = try OSMTile.parseOverpass(json)
+        let old = try JSONDecoder().decode([RoadWay].self, from: JSONEncoder().encode(w.map { var x = $0; x.name = nil; return x }))
+        m.add(old)
+        XCTAssertNil(m.match(lat: 10.7740, lon: 106.70005, courseDeg: 2)?.name)
+        m.add(w)
+        XCTAssertEqual(m.count, 3)
+        XCTAssertEqual(m.match(lat: 10.7740, lon: 106.70005, courseDeg: 2)?.name, "Nguyễn Huệ")
     }
 
     func testMatchAlongAndAgainst() throws {
