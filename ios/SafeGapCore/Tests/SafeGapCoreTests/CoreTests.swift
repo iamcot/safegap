@@ -126,6 +126,17 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(LawTable(LawConfig(table: law.table)).dMin(speedKmh: 30), 35)   // không cấu hình: như cũ
     }
 
+    /// File luật thật (app đóng gói cùng file này): 36 km/h → quy tắc 1,5 s = 15 m, không phải 35 m.
+    func testRepoLawUsesHeadwayRule() throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("config/law_vn.json")
+        let law = try LawConfig.decode(Data(contentsOf: url))
+        XCTAssertEqual(law.belowFirstHeadwayS, 1.5)
+        XCTAssertEqual(LawTable(law).dMin(speedKmh: 36), 15, accuracy: 1e-9)
+    }
+
     func testFrameLogRow() {
         var r = FrameResult(frame: 3, t: 0.1, speedKmh: 92.5)
         r.cls = "car"; r.wPx = 68.85; r.dRaw = 40.0; r.d = 40.0; r.dMin = 70; r.level = .red; r.sound = true; r.trackId = 1
