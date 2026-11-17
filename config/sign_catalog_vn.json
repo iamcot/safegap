@@ -28,6 +28,9 @@
     "S.503": "Biển phụ: hướng tác dụng (mũi tên)",
     "S.505a": "Biển phụ: loại xe áp dụng",
     "S.508": "Biển phụ: thời gian (giờ / ngày)",
-    "S.509": "Biển phụ: thuyết minh (chữ)"
+    "S.509": "Biển phụ: thuyết minh (chữ)",
+    "P.127a": "Tốc độ tối đa cho phép về ban đêm",
+    "P.127b": "Bảng tốc độ tối đa trên từng làn",
+    "P.127c": "Bảng tốc độ tối đa theo loại xe trên từng làn"
   }
 }

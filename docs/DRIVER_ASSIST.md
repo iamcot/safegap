@@ -138,7 +138,7 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
         no_park → P.131a. P.131b/c (ngày lẻ/chẵn) bạn tự đổi khi gán.
 - [x] B3e. Biển phân làn + vạch mặt đường trên trang gán nhãn (chủ app 17/11):
       - Nhóm biển mới `lane_sign` (cuối `SIGN_GROUPS`): R.411 hướng đi từng làn, R.412 làn riêng theo loại xe, R.415 gộp
-        làn. Biển chữ nhật xanh treo trên làn, khác biển hiệu lệnh tròn nên tách; app chỉ hiện "Phân làn", chưa áp luật
+        làn, và bảng ghép tốc độ theo làn P.127b / theo loại xe trên từng làn P.127c (khoanh cả bảng). Biển chữ nhật xanh treo trên làn, khác biển hiệu lệnh tròn nên tách; app chỉ hiện "Phân làn", chưa áp luật
         (cần đọc mũi tên từng làn, để sau). Bộ Roboflow gộp chúng vào "Hieu lenh" nên model học nhóm này từ ảnh tự gán.
       - `config/sign_catalog_vn.json`: tên các biển hay gặp chưa có luật (R.411/412/415, R.301–303, R.122, P.104,
         P.125, P.128, DP.135, W.207/208/224/225/227/245) để có trong danh sách lớp trang `/label`.
