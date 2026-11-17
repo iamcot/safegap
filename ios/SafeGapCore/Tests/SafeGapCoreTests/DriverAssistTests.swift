@@ -294,6 +294,7 @@ final class CaptureTests: XCTestCase {
         var m = 0
         for i in 0..<150 where s.shouldCapture(t: Double(i) / 15, speedKmh: 30, hasLight: false, hasSign: true) { m += 1 }
         XCTAssertEqual(m, 7)   // 10 s
-        XCTAssertFalse(CapturePolicy().shouldCapture(t: 0, speedKmh: 0, hasLight: false, hasSign: true))
+        var still = CapturePolicy()
+        XCTAssertFalse(still.shouldCapture(t: 0, speedKmh: 0, hasLight: false, hasSign: true))
     }
 }
