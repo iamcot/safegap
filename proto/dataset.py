@@ -186,6 +186,9 @@ def sign_group(name: str) -> str | None:
         return ROBOFLOW_ZALO[name]
     if name in SIGN_GROUPS:
         return name
+    # bảng chữ nhật treo trên làn: phân làn, kể cả bảng ghép tốc độ theo làn (P.127b/c) — khác hẳn biển tốc độ tròn
+    if name[:5] in ("R.411", "R.412", "R.415") or name[:6] in ("P.127b", "P.127c"):
+        return "lane_sign"
     if name == "P.102":
         return "no_entry"
     if name == "P.130":
@@ -202,9 +205,6 @@ def sign_group(name: str) -> str | None:
         return "prohibit_other"
     if name.startswith("S.5"):   # biển phụ dưới biển chính (giờ, cự ly, loại xe...), khoanh riêng
         return "aux_plate"
-    # bảng chữ nhật treo trên làn: phân làn, kể cả bảng ghép tốc độ theo làn (P.127b/c) — khác hẳn biển tốc độ tròn
-    if name[:5] in ("R.411", "R.412", "R.415") or name[:6] in ("P.127b", "P.127c"):
-        return "lane_sign"
     if name.startswith("R."):
         return "mandatory"
     if name.startswith("W."):
