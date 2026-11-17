@@ -125,8 +125,15 @@ public struct TrafficLightTracker: Equatable, Sendable {
     /// Đèn nhỏ hơn (pixel chiều cao) thì bỏ qua (quá xa, dễ nhầm đèn xe).
     public var minHeightPx = 14.0
 
+    /// Đèn đang theo: giữ đèn cũ (không nhảy sang đèn khác cùng khung hình) trừ khi đèn mới nổi trội hơn hẳn.
+    public var stickiness = 1.6
+    /// Bao nhiêu lần liên tiếp cùng một màu rõ (đỏ / xanh / vàng) thì đổi ngay, không chờ đủ phiếu
+    /// (máy nóng chỉ còn 5 fps: chờ 3/5 phiếu là trễ gần 1 s).
+    public var fastSwitch = 2
+
     private var history: [LightColor] = []
     public private(set) var state: TrafficLightState?
+    private var lastBox: Box?
 
     public init() {}
 
@@ -141,8 +148,17 @@ public struct TrafficLightTracker: Equatable, Sendable {
 
     /// Chọn đèn liên quan trong các detection lớp "traffic light".
     public func pick(_ lights: [Detection], frameWidth w: Double, frameHeight h: Double) -> Detection? {
-        lights.filter { $0.y2 - $0.y1 >= minHeightPx }
-            .max { Self.score($0, frameWidth: w, frameHeight: h) < Self.score($1, frameWidth: w, frameHeight: h) }
+        let cands = lights.filter { $0.y2 - $0.y1 >= minHeightPx }
+        let best = cands.max { Self.score($0, frameWidth: w, frameHeight: h) < Self.score($1, frameWidth: w, frameHeight: h) }
+        guard let best, let prev = lastBox else { return best }
+        // đèn gần chỗ đèn cũ nhất (xe chạy thì đèn trôi dần, khung to dần)
+        let reach = max(prev.x2 - prev.x1, prev.y2 - prev.y1) * 1.5
+        let same = cands.filter {
+            abs(($0.x1 + $0.x2) / 2 - (prev.x1 + prev.x2) / 2) < reach && abs(($0.y1 + $0.y2) / 2 - (prev.y1 + prev.y2) / 2) < reach
+        }.max { Self.score($0, frameWidth: w, frameHeight: h) < Self.score($1, frameWidth: w, frameHeight: h) }
+        guard let same else { return best }
+        return Self.score(best, frameWidth: w, frameHeight: h) > stickiness * Self.score(same, frameWidth: w, frameHeight: h)
+            ? best : same
     }
 
     /// Cập nhật với màu của đèn được chọn ở frame này (nil = không thấy đèn).
@@ -152,6 +168,7 @@ public struct TrafficLightTracker: Equatable, Sendable {
             let hold = (speedKmh ?? 0) >= movingKmh ? holdMovingS : holdS
             if let s = state, t - s.lastSeen > hold {
                 state = nil
+                lastBox = nil
                 history.removeAll()
             } else if state != nil {
                 state?.box = nil
@@ -163,9 +180,15 @@ public struct TrafficLightTracker: Equatable, Sendable {
         // bỏ phiếu cả "không rõ": phần lớn frame không rõ màu thì về không rõ (không giữ mãi màu cũ)
         var counts: [LightColor: Int] = [:]
         for c in history { counts[c, default: 0] += 1 }
-        let voted = counts.max { $0.value < $1.value }.flatMap { $0.value * 2 > history.count ? $0.key : nil }
+        var voted = counts.max { $0.value < $1.value }.flatMap { $0.value * 2 > history.count ? $0.key : nil }
         let prev = state?.color ?? .unknown
+        if color != .unknown, color != prev, history.count >= fastSwitch,
+           history.suffix(fastSwitch).allSatisfy({ $0 == color }) {
+            voted = color
+            history = Array(repeating: color, count: fastSwitch)   // phiếu cũ (màu trước) không kéo ngược lại
+        }
         let newColor = voted ?? prev
+        lastBox = light.box
         let since = newColor == prev ? (state?.since ?? t) : t
         state = TrafficLightState(color: newColor, since: since, lastSeen: t, box: light.box, heightPx: light.y2 - light.y1)
         return state
@@ -174,6 +197,7 @@ public struct TrafficLightTracker: Equatable, Sendable {
     public mutating func reset() {
         history.removeAll()
         state = nil
+        lastBox = nil
     }
 }
 

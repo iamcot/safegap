@@ -180,6 +180,16 @@ final class TrafficLightTests: XCTestCase {
         XCTAssertNil(tr.pick([tiny], frameWidth: 1920, frameHeight: 1080))
     }
 
+    func testPickSticksToCurrentLight() {
+        var tr = TrafficLightTracker()
+        let ours = Detection(1100, 80, 1130, 160, "traffic light")
+        let other = Detection(700, 60, 735, 165, "traffic light")   // hơi to hơn, chỗ khác (đèn hướng khác)
+        tr.update(t: 0, light: ours, color: .red)
+        XCTAssertEqual(tr.pick([other, ours], frameWidth: 1920, frameHeight: 1080), ours)
+        let huge = Detection(600, 40, 680, 240, "traffic light")    // to hơn hẳn: đổi
+        XCTAssertEqual(tr.pick([huge, ours], frameWidth: 1920, frameHeight: 1080), huge)
+    }
+
     func testVotingAndHold() throws {
         var tr = TrafficLightTracker()
         let d = Detection(1100, 80, 1130, 160, "traffic light")
@@ -188,10 +198,15 @@ final class TrafficLightTests: XCTestCase {
         // 1 frame nhiễu không đổi màu
         tr.update(t: 1.25, light: d, color: .green)
         XCTAssertEqual(tr.state?.color, .red)
-        for i in 6..<9 { tr.update(t: Double(i) * 0.25, light: d, color: .green) }
+        // 2 lần liên tiếp cùng màu rõ: đổi ngay (không chờ đủ 3/5 phiếu)
+        tr.update(t: 1.5, light: d, color: .green)
         let s = try XCTUnwrap(tr.state)
         XCTAssertEqual(s.color, .green)
-        XCTAssertEqual(s.since, 2.0, accuracy: 0.3)
+        XCTAssertEqual(s.since, 1.5, accuracy: 0.01)
+        // 1 frame nhiễu đỏ sau đó không kéo ngược lại
+        tr.update(t: 1.75, light: d, color: .red)
+        XCTAssertEqual(tr.state?.color, .green)
+        for i in 8..<9 { tr.update(t: Double(i) * 0.25, light: d, color: .green) }
         // mất đèn: giữ trạng thái 8 s
         tr.update(t: 5, light: nil, color: nil)
         XCTAssertEqual(tr.state?.color, .green)

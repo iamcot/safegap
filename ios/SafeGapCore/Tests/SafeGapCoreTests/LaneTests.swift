@@ -39,6 +39,19 @@ final class LaneTests: XCTestCase {
         }
     }
 
+    func testVehicleBoxMasksBrightStreaks() {
+        let left = { (y: Double) in 0.30 + (0.47 - 0.30) * (1 - y) / 0.55 }
+        // vệt sáng thẳng đứng giữa làn (đèn phanh / biển số xe trước) bị nhận nhầm là vạch phải
+        let fake = { (_: Double) in 0.56 }
+        let img = road([(left, false), (fake, false)])
+        XCTAssertNotNil(LaneDetector.detect(img, center: center).right)
+        let car = NormBox(0.48, 0.40, 0.66, 1.0)
+        let d = LaneDetector.detect(img, center: center, exclude: [car])
+        XCTAssertNil(d.right)
+        XCTAssertNotNil(d.left)
+        XCTAssertGreaterThan(d.masked, 0)
+    }
+
     func testCurvedLane() throws {
         let left = { (y: Double) in 0.32 + 0.6 * (1 - y) * (1 - y) + 0.05 * (1 - y) }
         let right = { (y: Double) in 0.70 + 0.6 * (1 - y) * (1 - y) - 0.30 * (1 - y) }

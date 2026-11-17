@@ -56,6 +56,9 @@ public struct RoadLaneConfig: Equatable, Sendable {
     /// Số frame giữ nguyên khi mất vạch, sau đó duỗi dần về thẳng giữa.
     public var holdFrames = 45
     public var relaxAlpha = 0.02
+    /// Chỉ bám một bên vạch liên tục ngần này frame (không thấy bên kia) thì coi là kém tin: app bỏ cổng dò theo
+    /// mô hình để tìm lại từ đầu (một bên dễ bám nhầm vạch làn khác / mép xe).
+    public var oneSideMaxFrames = 60
 
     public init() {}
 }
@@ -65,6 +68,11 @@ public final class RoadLaneFilter {
     public private(set) var lane = RoadLane()
     private var missed = Int.max / 2
     private var hasModel = false
+    private var oneSide = 0
+    /// Lý do frame vừa rồi bỏ vạch đo được (ghi log): "", "implausible", "width", "heading".
+    public private(set) var lastReject = ""
+    /// Đang bám một bên quá lâu: không nên dò theo cổng của mô hình nữa.
+    public var needsReacquire: Bool { oneSide > config.oneSideMaxFrames }
 
     public init(config: RoadLaneConfig = RoadLaneConfig()) { self.config = config }
 
@@ -72,6 +80,15 @@ public final class RoadLaneFilter {
         lane = RoadLane()
         missed = Int.max / 2
         hasModel = false
+        oneSide = 0
+    }
+
+    /// Xe đứng yên (kẹt xe, chờ đèn): xe khác che vạch, cảnh không đổi nên vạch sai không tự hết. Không đo, coi như mất
+    /// vạch: giữ một lúc rồi duỗi về làn thẳng giữa, vẽ mờ.
+    @discardableResult
+    public func stationary() -> RoadLane {
+        oneSide = 0
+        return update(left: nil, right: nil)
     }
 
     /// Một vạch đã khớp: x(z) = a0 + a1·z + a2·z².
@@ -122,11 +139,13 @@ public final class RoadLaneFilter {
     @discardableResult
     public func update(left: [(x: Double, z: Double)]?, right: [(x: Double, z: Double)]?) -> RoadLane {
         var fl = left.flatMap(fit), fr = right.flatMap(fit)
-        if let f = fl, !plausible(f) { fl = nil }
-        if let f = fr, !plausible(f) { fr = nil }
+        lastReject = ""
+        if let f = fl, !plausible(f) { fl = nil; lastReject = "implausible" }
+        if let f = fr, !plausible(f) { fr = nil; lastReject = "implausible" }
         if let a = fl, let b = fr {
             let w = b.x(10) - a.x(10)
             if w < config.minWidth || w > config.maxWidth || abs(a.a1 - b.a1) > config.maxHeadingDiff {
+                lastReject = abs(a.a1 - b.a1) > config.maxHeadingDiff ? "heading" : "width"
                 // hai vạch mâu thuẫn: giữ vạch gần với mô hình hiện tại hơn
                 if hasModel {
                     let el = abs(a.x(10) - lane.left(10)), er = abs(b.x(10) - lane.right(10))
@@ -150,6 +169,7 @@ public final class RoadLaneFilter {
         default: break
         }
 
+        oneSide = (fl == nil) != (fr == nil) ? oneSide + 1 : 0
         if let m = meas {
             if !hasModel {
                 lane = m
@@ -157,12 +177,17 @@ public final class RoadLaneFilter {
                 hasModel = true
             } else {
                 let c = config
-                let dOff = c.alphaOffset * (m.offset - lane.offset)
+                // đo được lệch hơn nửa làn so với mô hình: cùng một vạch nhưng tính theo làn bên cạnh (xe vừa đổi làn)
+                var mOff = m.offset
+                if mOff - lane.offset > lane.width / 2 { mOff -= lane.width } else if lane.offset - mOff > lane.width / 2 { mOff += lane.width }
+                let dOff = c.alphaOffset * (mOff - lane.offset)
                 lane.offset += min(max(dOff, -c.maxOffsetStep), c.maxOffsetStep)
                 lane.heading += c.alphaHeading * (m.heading - lane.heading)
                 lane.curvature += c.alphaCurvature * (m.curvature - lane.curvature)
                 lane.width += c.alphaWidth * (min(max(m.width, c.minWidth), c.maxWidth) - lane.width)
             }
+            // xe đã sang làn bên cạnh (tâm làn lệch quá nửa làn): vạch vừa vượt qua thành vạch kia của làn mới
+            if lane.offset > lane.width / 2 { lane.offset -= lane.width } else if lane.offset < -lane.width / 2 { lane.offset += lane.width }
             missed = 0
             lane.tracked = true
         } else {

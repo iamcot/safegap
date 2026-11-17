@@ -30,6 +30,36 @@ final class RoadLaneTests: XCTestCase {
         XCTAssertEqual(f.lane.heading, 0, accuracy: 1e-6)
     }
 
+    func testLaneChangeWrapsInsteadOfDraggingAcross() {
+        let f = RoadLaneFilter()
+        f.update(left: line(-1.75), right: line(1.75))
+        // xe dạt dần sang trái tới khi vạch trái nằm dưới xe rồi qua hẳn làn trái
+        for i in 0...40 {
+            let o = min(2.2, 0.06 * Double(i))
+            f.update(left: line(-1.75 + o), right: line(1.75 + o))
+        }
+        // giờ thấy vạch của làn mới (tâm làn lệch -1,3 m): mô hình đã đổi gốc, không kéo ngang qua giữa
+        var maxJump = 0.0, prev = f.lane.offset
+        for _ in 0..<30 {
+            f.update(left: line(-3.05), right: line(0.45))
+            let d = f.lane.offset - prev, w = f.lane.width   // đổi gốc (±1 làn) không phải là nhảy
+            maxJump = max(maxJump, min(abs(d), abs(d - w), abs(d + w))); prev = f.lane.offset
+        }
+        XCTAssertEqual(f.lane.offset, -1.3, accuracy: 0.1)
+        XCTAssertLessThanOrEqual(maxJump, f.config.maxOffsetStep + 1e-9)
+    }
+
+    func testOneSideTooLongAsksReacquireAndStationaryRelaxes() {
+        let f = RoadLaneFilter()
+        f.update(left: line(-1.75), right: line(1.75))
+        for _ in 0...f.config.oneSideMaxFrames { f.update(left: nil, right: line(1.75)) }
+        XCTAssertTrue(f.needsReacquire)
+        f.update(left: line(-1.75), right: line(1.75))
+        XCTAssertFalse(f.needsReacquire)
+        for _ in 0..<(f.config.holdFrames + 5) { f.stationary() }
+        XCTAssertFalse(f.lane.tracked)
+    }
+
     func testSlowSmoothFollow() {
         let f = RoadLaneFilter()
         f.update(left: line(-1.75), right: line(1.75))

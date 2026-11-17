@@ -91,7 +91,13 @@ public struct SignDetectionTracker: Equatable, Sendable {
     public var signSizeM = 0.7
     /// Biển có hiệu lực cho phần đường bên trái nó (theo hướng nhìn tài xế): biển lệch trái quá mức này
     /// (m, so với tâm camera) là biển của chiều ngược lại / dải phân cách.
-    public var minLateralM = -1.5
+    /// Xe đi làn trái cạnh dải phân cách thì biển giữa đường chỉ lệch ~ -2,5 m, sai số ước lượng ±1 m: để -1.
+    public var minLateralM = -1.0
+    /// Đường một chiều (OSM): biển cắm bên trái cũng dành cho mình (app đặt theo đường đang chạy).
+    public var leftSideApplies = false
+    /// Biển còn xa hơn ngần này (m) thì chưa chốt: ở xa biển nào cũng gần tâm ảnh, vị trí trái / phải chưa chắc.
+    /// Chốt khi tới gần, hoặc khi biển ra khỏi khung hình (đi qua) mà vẫn đủ phiếu.
+    public var confirmWithinM = 30.0
     /// Biển lệch phải xa hơn mức này là biển của đường ngang / nhánh rẽ. App chỉnh theo số làn (OSM).
     public var maxLateralM = 10.0
     /// Khung hẹp hơn tỉ lệ rộng/cao này: biển quay xiên, không hướng về mình.
@@ -107,6 +113,7 @@ public struct SignDetectionTracker: Equatable, Sendable {
         var lateralM: Double?
         var lastT: Double
         var reported: Bool
+        var totalHits = 0
     }
 
     private(set) var tracks: [Track] = []
@@ -133,7 +140,7 @@ public struct SignDetectionTracker: Equatable, Sendable {
         guard let f = fPx, f > 0 else { return (.applies, nil, nil) }
         let z = f * signSizeM / bh
         let x = ((b.x1 + b.x2) / 2 - w / 2) * z / f - (roadBend?(z) ?? 0)
-        if x < minLateralM { return (.leftOfUs, z, x) }
+        if x < (leftSideApplies ? -maxLateralM : minLateralM) { return (.leftOfUs, z, x) }
         if x > maxLateralM { return (.farRight, z, x) }
         return (.applies, z, x)
     }
@@ -144,6 +151,11 @@ public struct SignDetectionTracker: Equatable, Sendable {
                                 frameWidth w: Double, frameHeight h: Double, fPx: Double? = nil,
                                 roadBend: ((Double) -> Double?)? = nil) -> [ConfirmedSign] {
         let windowS = self.windowS
+        var out: [ConfirmedSign] = []
+        // biển vừa ra khỏi khung hình mà chưa chốt (còn xa lúc thấy lần cuối): chốt theo vị trí lần cuối
+        for tr in tracks where t - tr.lastT > windowS && !tr.reported && tr.totalHits >= minHits {
+            if let c = confirm(tr, t: t) { out.append(c) }
+        }
         tracks.removeAll { t - $0.lastT > windowS }
         for i in tracks.indices { tracks[i].hits.removeAll { t - $0 > windowS } }
 
@@ -163,28 +175,32 @@ public struct SignDetectionTracker: Equatable, Sendable {
                 tracks[j].distanceM = z
                 tracks[j].lateralM = x
                 tracks[j].hits.append(t)
+                tracks[j].totalHits += 1
                 tracks[j].conf = max(tracks[j].conf, d.conf)
                 tracks[j].lastT = t
             } else {
                 tracks.append(Track(group: g, box: d.box, hits: [t], conf: d.conf, placement: pl, distanceM: z, lateralM: x,
-                                    lastT: t, reported: false))
+                                    lastT: t, reported: false, totalHits: 1))
             }
         }
 
-        var out: [ConfirmedSign] = []
-        for i in tracks.indices where !tracks[i].reported && tracks[i].hits.count >= minHits {
+        for i in tracks.indices where !tracks[i].reported && tracks[i].hits.count >= minHits
+            && (tracks[i].distanceM ?? 0) <= confirmWithinM {
             tracks[i].reported = true
-            let tr = tracks[i]
-            let c = ConfirmedSign(group: tr.group, box: tr.box, conf: tr.conf, t: t, distanceM: tr.distanceM,
-                                  lateralM: tr.lateralM, placement: tr.placement)
-            // biển không dành cho làn mình: vẫn trả về (để vẽ mờ) nhưng không chiếm lượt cooldown
-            if c.applies {
-                if let last = lastReported[tr.group], t - last < cooldownS { continue }
-                lastReported[tr.group] = t
-            }
-            out.append(c)
+            if let c = confirm(tracks[i], t: t) { out.append(c) }
         }
         return out
+    }
+
+    private mutating func confirm(_ tr: Track, t: Double) -> ConfirmedSign? {
+        let c = ConfirmedSign(group: tr.group, box: tr.box, conf: tr.conf, t: t, distanceM: tr.distanceM,
+                              lateralM: tr.lateralM, placement: tr.placement)
+        // biển không dành cho làn mình: vẫn trả về (để vẽ mờ) nhưng không chiếm lượt cooldown
+        if c.applies {
+            if let last = lastReported[tr.group], t - last < cooldownS { return nil }
+            lastReported[tr.group] = t
+        }
+        return c
     }
 
     /// Track cùng nhóm gần nhất: khung chồng nhau, hoặc tâm cách < 2 lần bề rộng (biển trôi ra mép khi xe tới gần).

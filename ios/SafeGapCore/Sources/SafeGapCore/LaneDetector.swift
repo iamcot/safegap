@@ -70,6 +70,15 @@ public struct LaneDetection: Equatable, Sendable {
     public var right: LaneCurve?
     public var leftPoints: Int
     public var rightPoints: Int
+    /// Số vệt sáng bị bỏ vì nằm trên thân xe (ghi log).
+    public var masked: Int = 0
+}
+
+/// Vùng chữ nhật chuẩn hoá (0..1) không tìm vạch: thân xe (đèn phanh, biển số, kính phản chiếu sáng như vạch).
+public struct NormBox: Equatable, Sendable {
+    public var x1, y1, x2, y2: Double
+    public init(_ x1: Double, _ y1: Double, _ x2: Double, _ y2: Double) { self.x1 = x1; self.y1 = y1; self.x2 = x2; self.y2 = y2 }
+    func contains(x: Double, y: Double) -> Bool { x >= x1 && x <= x2 && y >= y1 && y <= y2 }
 }
 
 public enum LaneDetector {
@@ -78,13 +87,15 @@ public enum LaneDetector {
     /// gate(y): khi đã có làn ổn định, vị trí dự đoán của vạch trái / phải ở hàng y và sai lệch cho phép.
     /// Có gate thì mỗi hàng chỉ nhận vệt gần vị trí dự đoán nhất, nằm trong sai lệch; vệt khác (xe, đèn, vạch làn khác) bỏ qua.
     public static func detect(_ img: GrayImage, config c: LaneConfig = .init(), center: (Double) -> Double,
-                              gate: ((Double) -> (left: Double, right: Double, tol: Double))? = nil) -> LaneDetection {
+                              gate: ((Double) -> (left: Double, right: Double, tol: Double))? = nil,
+                              exclude: [NormBox] = []) -> LaneDetection {
         let W = img.width, H = img.height
         var leftPts: [(y: Double, x: Double)] = []
         var rightPts: [(y: Double, x: Double)] = []
         let w = max(2, c.window)
         let maxRun = max(2, Int(c.maxMarkWidth * Double(W)))
         var prefix = [Int](repeating: 0, count: W + 1)
+        var masked = 0
 
         for r in 0..<c.rows {
             let yn = c.yTop + (c.yBottom - c.yTop) * Double(r) / Double(max(1, c.rows - 1))
@@ -106,6 +117,14 @@ public enum LaneDetector {
                 if !on, start >= 0 { runs.append((start, x)); start = -1 }
             }
             if start >= 0 { runs.append((start, W - w)) }
+            if !exclude.isEmpty {
+                let before = runs.count
+                runs.removeAll { run in
+                    let xn = (Double(run.start + run.end - 1) / 2.0 + 0.5) / Double(W)
+                    return exclude.contains { $0.contains(x: xn, y: yn) }
+                }
+                masked += before - runs.count
+            }
 
             if let g = gate?(yn) {
                 let xs = runs.filter { $0.end - $0.start <= maxRun }
@@ -142,7 +161,7 @@ public enum LaneDetector {
             }
         }
         return LaneDetection(left: left?.curve, right: right?.curve,
-                             leftPoints: left?.inliers ?? 0, rightPoints: right?.inliers ?? 0)
+                             leftPoints: left?.inliers ?? 0, rightPoints: right?.inliers ?? 0, masked: masked)
     }
 
     /// Tách các đường thẳng bằng RANSAC (vét cạn cặp điểm, kết quả xác định), lấy đường gần tâm làn nhất

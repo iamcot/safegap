@@ -90,6 +90,39 @@ final class SignPlacementTests: XCTestCase {
         XCTAssertNil(confirm(sign(.noStopPark, lateral: -3))?.sighting)
     }
 
+    /// Biển cách `z` m, lệch `x` m (cỡ 0,7 m).
+    func sign(_ g: SignGroup, z: Double, x: Double) -> Detection {
+        let hpx = F * 0.7 / z, cx = W / 2 + x * F / z
+        return Detection(cx - hpx / 2, 300, cx + hpx / 2, 300 + hpx, g.rawValue, 0.8)
+    }
+
+    func testFarSignWaitsUntilCloseOrGone() {
+        var tr = SignDetectionTracker()
+        // xa 60 m: đủ phiếu nhưng chưa chốt
+        for t in [0.0, 0.3, 0.6] {
+            XCTAssertTrue(tr.update(t: t, signs: [sign(.noEntry, z: 60, x: -2)], vehicles: [], frameWidth: W, frameHeight: H,
+                                    fPx: F).isEmpty)
+        }
+        // tới gần 25 m: lộ rõ là biển bên trái (giữa đường) → không áp dụng
+        let c = tr.update(t: 0.9, signs: [sign(.noEntry, z: 25, x: -2)], vehicles: [], frameWidth: W, frameHeight: H, fPx: F)
+        XCTAssertEqual(c.first?.placement, .leftOfUs)
+        // biển chỉ thấy khi xa rồi mất (bị che): chốt khi ra khỏi khung theo vị trí cuối
+        var tr2 = SignDetectionTracker()
+        for t in [0.0, 0.3, 0.6] {
+            _ = tr2.update(t: t, signs: [sign(.noStopPark, z: 50, x: 4)], vehicles: [], frameWidth: W, frameHeight: H, fPx: F)
+        }
+        let gone = tr2.update(t: 2.5, signs: [], vehicles: [], frameWidth: W, frameHeight: H, fPx: F)
+        XCTAssertEqual(gone.map(\.group), [.noStopPark])
+        XCTAssertEqual(gone.first?.placement, .applies)
+    }
+
+    func testLeftThresholdAndOneWay() {
+        var tr = SignDetectionTracker()
+        XCTAssertEqual(tr.place(sign(.noEntry, z: 20, x: -1.3).box, frameWidth: W, fPx: F).0, .leftOfUs)
+        tr.leftSideApplies = true   // đường một chiều: biển bên trái cũng cho mình
+        XCTAssertEqual(tr.place(sign(.noEntry, z: 20, x: -4).box, frameWidth: W, fPx: F).0, .applies)
+    }
+
     func engine() throws -> SignEngine { SignEngine(config: try SignTests.repoConfig()) }
 
     func confirmed(_ g: SignGroup, _ p: SignPlacement, lateral: Double, ahead: Double = 25) -> ConfirmedSign {

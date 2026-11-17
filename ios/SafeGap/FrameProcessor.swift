@@ -234,6 +234,12 @@ final class FrameProcessor {
     private var laneTracker = LaneTracker()
     /// Số frame liền không thấy vạch trong cửa sổ dự đoán; quá 30 thì dò lại cả ảnh.
     private var gateMisses = 0
+    /// Khung xe frame trước (chuẩn hoá): không tìm vạch làn trên thân xe.
+    private var lastVehicleBoxes: [NormBox] = []
+    /// Lần dừng hiện tại là do kẹt xe (giữ tới khi xe chạy lại).
+    private var stopJam = false
+    /// Ghi log làn (vì sao vẽ sai): vạch thô frame này, có dùng cổng không, lý do bỏ.
+    private var laneDebug = ""
     private let roadLane = RoadLaneFilter()
     private let oncoming = OncomingClassifier()
     /// Làn có xe ngược chiều gần nhất (1 = làn sát bên trái) và lúc thấy lần cuối, để giữ vạch vàng vài giây.
@@ -364,7 +370,9 @@ final class FrameProcessor {
         // mỗi hàng chỉ nhận vệt sáng sát vị trí vạch dự đoán (± 0,45 m), không nhảy sang xe / đèn / vạch làn khác.
         let yH = yHorizon ?? p.config.distance.yHorizonNorm * h
         let hCam = p.calibration.hCamM
-        if p.settings.laneFollow, let gray = Self.gray(pb) {
+        let laneFrozen = isStopped
+        var rawL: LaneCurve?, rawR: LaneCurve?, gated = false, masked = 0
+        if p.settings.laneFollow, !laneFrozen, let gray = Self.gray(pb) {
             let cal = p.calibration
             let top = cal.roi.map(\.y).min() ?? 0.45
             var lc = LaneConfig()
@@ -374,7 +382,7 @@ final class FrameProcessor {
             let (tl, tr) = (laneTracker.left, laneTracker.right)
             let prev = roadLane.lane
             var gate: ((Double) -> (left: Double, right: Double, tol: Double))?
-            if prev.tracked, gateMisses < 30, f > 0 {
+            if prev.tracked, gateMisses < 30, !roadLane.needsReacquire, f > 0 {
                 gate = { yn in
                     let dy = yn * h - yH
                     guard dy > 1 else { return (-1, -1, 0) }
@@ -385,10 +393,15 @@ final class FrameProcessor {
             }
             let d = LaneDetector.detect(gray, config: lc, center: { y in
                 LaneROI.center(at: y, left: tl, right: tr, calibrated: cal.roi)
-            }, gate: gate)
+            }, gate: gate, exclude: lastVehicleBoxes)
+            rawL = d.left; rawR = d.right; gated = gate != nil; masked = d.masked
             let found = d.left != nil || d.right != nil
             if found { gateMisses = 0 } else if gate != nil { gateMisses += 1 }
             laneTracker.update(d)
+        } else if laneFrozen {
+            // đứng yên: không dò (xe khác che vạch, vạch sai không tự hết); dò lại từ đầu khi xe chạy
+            laneTracker.reset()
+            gateMisses = 30
         } else {
             laneTracker.reset()
         }
@@ -403,7 +416,12 @@ final class FrameProcessor {
                 return ((c.x(at: yn) * w - w / 2) * z / f, z)
             }
         }
-        let road = roadLane.update(left: ground(laneTracker.left), right: ground(laneTracker.right))
+        let road = laneFrozen ? roadLane.stationary()
+                              : roadLane.update(left: ground(laneTracker.left), right: ground(laneTracker.right))
+        func c3(_ c: LaneCurve?) -> String { c.map { String(format: "%.3f/%.2f", $0.c0, $0.c1) } ?? "-" }
+        laneDebug = laneFrozen ? "frozen" : String(format: "raw %@ %@ g%d m%d rej %@ | off %.2f hd %.3f w %.2f %@",
+                                                   c3(rawL), c3(rawR), gated ? 1 : 0, masked, roadLane.lastReject,
+                                                   road.offset, road.heading, road.width, road.tracked ? "T" : "-")
         // Vạch vẽ trên ảnh và ROI theo làn ổn định (không theo vạch thô từng frame).
         var stableL: LaneCurve?, stableR: LaneCurve?
         if p.settings.laneFollow, road.tracked {
@@ -438,6 +456,7 @@ final class FrameProcessor {
         }
         lightDets = dets.filter { $0.cls == Self.trafficLightClass }
         dets.removeAll { $0.cls == Self.trafficLightClass }
+        lastVehicleBoxes = dets.map { NormBox($0.x1 / w, $0.y1 / h, $0.x2 / w, $0.y2 / h) }
         if let last = lastFrameTime, t1 > last {
             let inst = 1.0 / (t1 - last)
             fpsEMA = fpsEMA == 0 ? inst : 0.9 * fpsEMA + 0.1 * inst
@@ -503,6 +522,7 @@ final class FrameProcessor {
 
         // Đèn giao thông (A4): chọn đèn liên quan, màu theo HSV, bỏ phiếu; nhắc bằng giọng nói.
         var lightState: TrafficLightState?
+        var lightDebug = ""
         if p.settings.trafficLights {
             let picked = lightTracker.pick(lightDets, frameWidth: w, frameHeight: h)
             // qua ngã tư / vừa rẽ: đèn cũ không còn áp dụng
@@ -512,6 +532,8 @@ final class FrameProcessor {
                                               aspect: (d.y2 - d.y1) / max(1, d.x2 - d.x1))
             }
             lightState = lightTracker.update(t: t, light: picked, color: color, speedKmh: v)
+            lightDebug = String(format: "%d lights raw %@ state %@ h %.0f", lightDets.count, color?.rawValue ?? "-",
+                                lightState?.color.rawValue ?? "-", picked.map { $0.y2 - $0.y1 } ?? 0)
             if p.settings.voiceOn, let m = lightRules.check(state: lightState, t: t, speedKmh: v,
                                                             junctionM: junction.nextM, stoppedS: stoppedS) {
                 voice.offer(m)
@@ -543,6 +565,7 @@ final class FrameProcessor {
             // biển chỉ có hiệu lực cho phần đường bên trái nó: biển xa bên phải là của đường ngang / nhánh
             let lanes = Double(roadMatch?.match?.lanesSame ?? 2)
             signTracker.maxLateralM = max(8, lanes * 3.5 + 3.5)
+            signTracker.leftSideApplies = roadMatch?.match?.oneway == true
             // đường cong (OSM): trừ độ cong để biết biển nằm lề phải hay giữa đường thật
             let bend: ((Double) -> Double?)? = ahead.map { a in { z in a.x(at: z).map { $0 - (a.x(at: 0) ?? 0) } } }
             for c in signTracker.update(t: sr.t, signs: sr.dets, vehicles: dets, frameWidth: w, frameHeight: h, fPx: f,
@@ -572,7 +595,16 @@ final class FrameProcessor {
             }
         }
         saveSignMapIfNeeded(t: t)
-        let jam = (r.d ?? .infinity) < 8
+        // Đứng vì kẹt xe, không phải dừng / đỗ: xe sát phía trước (kể cả khi làn vẽ sai nên chưa chọn được xe trước),
+        // hoặc có xe sát bên phải (mình không nằm sát lề). Đã thấy một lần trong lần dừng này thì cả lần dừng được miễn.
+        let packed = f > 0 && dets.contains { d in
+            let dy = d.y2 - yH
+            guard dy > 1 else { return false }
+            let z = f * hCam / dy, cx = (d.x1 + d.x2) / 2 / w
+            return (z < 12 && cx > 0.3 && cx < 0.7) || (z < 8 && cx >= 0.7)
+        }
+        stopJam = stoppedS != nil && (stopJam || packed || (r.d ?? .infinity) < 8)
+        let jam = stopJam
         signMsgs += signs.update(DriveContext(t: t, odometer: odo, minuteOfDay: minuteOfDay, dayOfMonth: day, speedKmh: v,
                                               stoppedS: stoppedS, stopExcused: jam || lightState?.color == .red,
                                               junctionM: junction.nextM, junctionPassed: junction.passed,
@@ -587,7 +619,8 @@ final class FrameProcessor {
             capture.start()
             capture.offer(pb, t: t, frameWidth: w, frameHeight: h, detections: dets + lightDets, speed: gps, speedKmh: v,
                           light: lightState?.box != nil ? lightState?.color : nil, thermal: thermal,
-                          signCount: lastSignSeen.flatMap { t - $0.t < 0.8 ? $0.n : nil } ?? 0)
+                          signCount: lastSignSeen.flatMap { t - $0.t < 0.8 ? $0.n : nil } ?? 0,
+                          laneDebug: laneDebug, lightDebug: lightDebug)
         } else if capture.isRunning {
             capture.stop()
         }
@@ -595,10 +628,12 @@ final class FrameProcessor {
         if r.sound && p.settings.soundOn { sound.play() }
         let laneTag = (laneTracker.left != nil ? "L" : "") + (laneTracker.right != nil ? "R" : "")
         if p.settings.logOn {
-            let extra = FrameLog.Extra(time: isoFormatter.string(from: Date()), fPx: f, fSource: source, nDets: dets.count,
+            var extra = FrameLog.Extra(time: isoFormatter.string(from: Date()), fPx: f, fSource: source, nDets: dets.count,
                                        inferMs: (t1 - t0) * 1000, speedAccuracyKmh: gps?.accuracyKmh,
                                        thermal: thermal, lane: laneTag,
                                        pitchDeg: pitchDeg, yHorizon: pipeline.useGround ? yHorizon : nil)
+            extra.laneDebug = laneDebug
+            extra.lightDebug = lightDebug
             logger.append(FrameLog.row(r, extra))
         }
 

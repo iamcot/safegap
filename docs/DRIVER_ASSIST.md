@@ -124,6 +124,23 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
         `mandatory`, `no_turn`...; `sign_group` hiểu). Phím `M` khoanh lại, ô "Gợi ý khung" bật/tắt.
       - App: model biển chạy ngưỡng 0,2 (tracker vẫn lọc 0,35); thu dữ liệu chụp mỗi 1,5 s khi model thấy biển (kể cả
         chưa chắc) và xe đang chạy (`CapturePolicy.signIntervalS`); meta.jsonl có `signs`, trang nhãn ghi "· biển".
+- [x] Sửa sau chạy thử sáng 17/11 (ảnh chủ app gửi: kẹt xe, máy nóng 5 fps):
+      - Làn vẽ sai mãi bên phải: (1) bỏ vệt sáng nằm trong khung xe frame trước (`LaneDetector.detect(exclude:)`,
+        đèn phanh / biển số / kính xe trước giống vạch); (2) xe đứng yên thì không dò, `RoadLaneFilter.stationary()`
+        giữ rồi duỗi về làn thẳng giữa, vẽ mờ, chạy lại thì dò từ đầu không theo cổng; (3) chỉ bám một bên > 60 frame
+        → `needsReacquire`, bỏ cổng để dò lại; (4) đổi làn: tâm làn lệch quá nửa làn thì đổi gốc sang làn mới
+        (cả mô hình lẫn số đo), không kéo ngang qua giữa.
+      - Dừng trong kẹt xe bị nhắc cấm dừng đỗ: `stopExcused` khi có xe sát trước (< 12 m, giữa ảnh, không cần chọn được
+        xe mục tiêu) hoặc xe sát bên phải (< 8 m, mình không ở sát lề); thấy một lần là miễn cả lần dừng.
+      - Biển cấm ngược chiều bên trái vẫn báo: biển ở xa > 30 m chưa chốt (xa thì biển nào cũng gần tâm ảnh), chốt khi
+        tới gần hoặc khi biển ra khỏi khung (theo vị trí cuối); ngưỡng trái −1,5 → −1 m; đường một chiều (OSM) thì
+        biển bên trái cũng áp dụng (`leftSideApplies`). Biển đã nhớ sai trước đây: Cài đặt > Xoá bản đồ biển.
+      - Đèn đổi màu chậm: 2 lần liên tiếp cùng màu rõ thì đổi ngay (`fastSwitch`); giữ đèn đang theo, chỉ đổi sang
+        đèn khác khi to / rõ hơn 1,6 lần (`stickiness`). Nhận diện đèn kém là do lớp traffic light của COCO yolo11n:
+        cần gán nhãn đèn trong ảnh tự thu rồi train model xe + đèn (B2).
+      - Log: CSV thêm cột `lane_debug` (vạch thô c0/c1, có cổng không, số vệt bị che, lý do bỏ, mô hình
+        offset/heading/width, T = đang bám) và `light_debug` (số đèn, màu thô, màu chốt, cao khung);
+        meta.jsonl của ảnh thu dữ liệu có `lane`, `lightDebug`.
 - [x] A9. Tên đường đang chạy (OSM `name:vi` / `name`, kèm `ref` như QL1A) hiện dưới xe mình trên màn lái
       (`RoadWay.name`, `RoadMatch.name`). Ô OSM tải từ bản cũ (không tên) vẫn dùng, tự tải lại dần ở cuối hàng.
 - [ ] B3. Train dò biển (YOLO11n, vùng cắt 640×360) trên Mac M5, export Core ML, chạy 4 lượt/giây xen kẽ 2 vùng cắt
