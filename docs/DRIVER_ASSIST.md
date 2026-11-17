@@ -147,6 +147,10 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
 
 ## Giai đoạn E – Mở rộng
 
+- [ ] Tốc độ GPS (để làm sau, 17/11): GPS thấp hơn đồng hồ xe 2–5 km/h. Phần lớn do đồng hồ chỉ dư theo luật (~5–8%),
+  nên cảnh báo vẫn tính theo GPS (gần tốc độ thật, máy bắn tốc độ đo tốc độ thật). Việc cần làm: (1) ô "Bù đồng hồ (%)"
+  trong Cài đặt, chỉ đổi số hiển thị; (2) chỗ bị che (hẻm, nhà cao, hầm) GPS trễ/tụt: trộn gia tốc kế (CoreMotion) với
+  GPS, bỏ qua mẫu có `speedAccuracy` kém (`Sensors/SpeedProvider.swift`).
 - [ ] Biển hướng dẫn làn R.411 (làn thứ mấy từ `LaneTracker` + số làn OSM), biển "Cự ly tối thiểu" → `d_min`, ban đêm.
 
 ## Ghi chú đo đạc / học được
