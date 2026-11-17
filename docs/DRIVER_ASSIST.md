@@ -147,6 +147,11 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
         (`train --task marks`, imgsz 960, `<ds>/marks`), chỉ lấy ảnh có ít nhất một khung vạch (ảnh cũ chưa khoanh
         mũi tên sẽ dạy sai). Không dùng hộp cho vạch làn (dài, chéo cả khung): vạch làn vẫn do LaneDetector.
         Chưa làm: nạp model marks vào app (mũi tên trước mặt → làn đang đi là làn rẽ hay thẳng, nhắc khi đi sai làn).
+- [x] B3f. Trang nhãn nhanh hơn (chủ app 17/11): phím 1–9, 0 = car, truck, motorcycle, traffic light, P.130, P.131a,
+      R.411, R.412, P.127, bus. Biển tốc độ: lớp theo mốc `P.127_<số>` (5, 30, 40, 50, 60, 70, 80, 90, 100, 120), thanh
+      "Tốc độ" hiện khi lớp / khung đang chọn là biển tốc độ, bấm mốc để đổi. Khi train vẫn gom về nhóm speed_limit;
+      mốc giữ lại cho classifier số (B4). Kéo bên trong khung chưa chọn = vẽ khung mới (biển trong khung xe to),
+      Shift+kéo luôn vẽ mới.
 - [x] Sửa sau chạy thử sáng 17/11 (ảnh chủ app gửi: kẹt xe, máy nóng 5 fps):
       - Làn vẽ sai mãi bên phải: (1) bỏ vệt sáng nằm trong khung xe frame trước (`LaneDetector.detect(exclude:)`,
         đèn phanh / biển số / kính xe trước giống vạch); (2) xe đứng yên thì không dò, `RoadLaneFilter.stationary()`

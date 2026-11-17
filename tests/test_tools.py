@@ -279,3 +279,10 @@ def test_lane_signs_and_road_marks(tmp_path):
     assert (ds / "marks" / "labels" / "s__0000001_00.txt").read_text() == f"{D.MARK_CLASSES.index('mark_left')} .5 .9 .1 .05\n"
     sd = D.to_sign_labels("2 .5 .1 .1 .05\n", ["car", "mark_left", "R.411"])
     assert sd == f"{D.SIGN_GROUPS.index('lane_sign')} .5 .1 .1 .05\n"
+
+
+def test_speed_value_classes(tmp_path):
+    from proto import dataset as D
+    from proto import labeler as L
+
+    assert "P.127_50" in L.class_list(tmp_path) and D.sign_group("P.127_120") == "speed_limit"

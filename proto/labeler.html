@@ -26,7 +26,8 @@
   .stage { position:relative; flex:1; min-height:0; background:#000; border-radius:6px; overflow:hidden; }
   canvas { position:absolute; inset:0; width:100%; height:100%; cursor:crosshair; }
   .bar { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
-  .bar .sp { flex:1; }
+  .bar .sp { flex:1; } .bar[hidden] { display:none; }
+  #speeds { margin-top:6px; } #speeds button.on { background:var(--accent); color:#000; }
   .pill { padding:2px 8px; border-radius:10px; background:#252b33; font-size:12px; }
   .pill.ok { background:#1d4a2a; color:#9ff0b0; }
   .cls div { padding:3px 6px; border-radius:4px; cursor:pointer; display:flex; gap:6px; align-items:center; font-size:13px; }
@@ -80,9 +81,10 @@
       <button id="toggle" title="H">Ẩn khung</button>
       <button class="primary" id="approve" title="Enter / Space">Duyệt ✓ (Enter)</button>
     </div>
+    <div class="bar" id="speeds" hidden></div>
     <div class="stage"><canvas id="cv"></canvas></div>
     <div class="hint">Kéo trên ảnh (kể cả bên trong khung khác): vẽ khung lớp đang chọn · Bấm khung: chọn; khung đang chọn: kéo để dời, kéo góc để đổi cỡ · <kbd>Shift</kbd>+kéo: luôn vẽ mới · <kbd>Del</kbd> xoá ·
-      <kbd>1</kbd>–<kbd>9</kbd> chọn lớp (đổi lớp khung đang chọn) · <kbd>/</kbd> tìm lớp · <kbd>Enter</kbd> duyệt + ảnh sau ·
+      <kbd>1</kbd>–<kbd>9</kbd>, <kbd>0</kbd> lớp hay dùng (đổi lớp khung đang chọn) · biển tốc độ: bấm mốc trên thanh "Tốc độ" · <kbd>/</kbd> tìm lớp · <kbd>Enter</kbd> duyệt + ảnh sau ·
       <kbd>←</kbd><kbd>→</kbd> chuyển ảnh · <kbd>Ctrl/⌘Z</kbd> hoàn tác · <kbd>M</kbd> model khoanh lại ·
       Khung nét đứt là model gợi ý: sai thì xoá / sửa, đúng thì cứ duyệt. Chỉ ảnh đã duyệt mới vào bộ train.</div>
   </main>
@@ -98,7 +100,10 @@ const api = async (url, opt) => { const r = await fetch(url, opt); if (!r.ok) th
 const post = (url, body) => api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 // lớp hay dùng lên đầu, có phím 1–9
 const APP = ['car', 'truck', 'bus', 'motorcycle', 'traffic light'];
-const HOT = ['car', 'truck', 'bus', 'motorcycle', 'traffic light', 'P.130', 'P.131a', 'P.123a', 'P.127'];
+// phím 1–9 rồi 0: lớp hay dùng nhất (chủ app chọn 17/11)
+const HOT = ['car', 'truck', 'motorcycle', 'traffic light', 'P.130', 'P.131a', 'R.411', 'R.412', 'P.127', 'bus'];
+const SPEEDS = [5, 30, 40, 50, 60, 70, 80, 90, 100, 120];
+const isSpeed = c => c === 'P.127' || c.startsWith('P.127_');
 let S = { classes: [], names: {}, sessions: [], session: null, frames: [], idx: -1, boxes: [], sel: -1, cls: 'car', hide: false, img: null, undo: [], dirty: false };
 
 function color(name) {
@@ -118,7 +123,7 @@ function renderClasses() {
     if (q && !fold(c).includes(q) && !fold(nm).includes(q)) return;
     const d = document.createElement('div');
     if (c === S.cls) d.className = 'on';
-    d.innerHTML = `<i style="background:${color(c)}"></i><span>${c}</span><small>${nm}</small>${i < 9 ? `<kbd>${i + 1}</kbd>` : ''}`;
+    d.innerHTML = `<i style="background:${color(c)}"></i><span>${c}</span><small>${nm}</small>${i < 10 ? `<kbd>${(i + 1) % 10}</kbd>` : ''}`;
     d.onclick = () => pickClass(c);
     el.appendChild(d);
   });
@@ -127,6 +132,22 @@ function pickClass(c) {
   S.cls = c;
   if (S.sel >= 0 && S.boxes[S.sel].cls !== c) { snap(); S.boxes[S.sel].cls = c; delete S.boxes[S.sel].sug; S.dirty = true; }
   renderClasses(); draw();
+}
+// biển tốc độ: chọn mốc ngay sau khi khoanh (lớp P.127_<số>, gom về nhóm speed_limit khi train)
+let speedKey = null;
+function renderSpeeds() {
+  const el = $('speeds'), cur = S.sel >= 0 && S.boxes[S.sel] ? S.boxes[S.sel].cls : S.cls;
+  if (speedKey === cur) return;
+  speedKey = cur;
+  el.hidden = !isSpeed(cur);
+  if (el.hidden) return;
+  el.innerHTML = '<span class="hint">Tốc độ:</span>';
+  SPEEDS.forEach(v => {
+    const b = document.createElement('button'), c = `P.127_${v}`;
+    b.textContent = v; if (cur === c) b.className = 'on';
+    b.onclick = () => pickClass(c);
+    el.appendChild(b);
+  });
 }
 
 async function loadSessions() {
@@ -245,6 +266,7 @@ function fromPx(x1, y1, x2, y2, cls) {
   return { cls, cx: (u1 + u2) / 2, cy: (v1 + v2) / 2, w: u2 - u1, h: v2 - v1 };
 }
 function draw() {
+  renderSpeeds();
   layout();
   ctx.setTransform(view.dpr || 1, 0, 0, view.dpr || 1, 0, 0);
   ctx.clearRect(0, 0, cv.width, cv.height);
@@ -341,7 +363,7 @@ document.addEventListener('keydown', e => {
   else if (k === 'h' || k === 'H') toggleHide();
   else if (k === 'm' || k === 'M') suggest(S.idx);
   else if (k === 'Escape') { S.sel = -1; draw(); }
-  else if (/^[1-9]$/.test(k)) { const c = ordered()[+k - 1]; if (c) pickClass(c); }
+  else if (/^[0-9]$/.test(k)) { const c = ordered()[(+k + 9) % 10]; if (c) pickClass(c); }
 });
 function toggleHide() { S.hide = !S.hide; $('toggle').textContent = S.hide ? 'Hiện khung' : 'Ẩn khung'; draw(); }
 $('toggle').onclick = toggleHide;

@@ -44,6 +44,9 @@ GROUP_NAMES = {"no_turn": "Nhóm cấm rẽ / quay đầu (chưa rõ mã)", "pro
                "mandatory": "Nhóm biển hiệu lệnh (xanh tròn)", "warning": "Nhóm biển nguy hiểm (tam giác vàng)",
                "end_restriction": "Nhóm biển hết cấm", "lane_sign": "Nhóm biển phân làn (chưa rõ mã)"}
 SUGGEST_CONF = 0.25
+# biển tốc độ theo mốc (cho classifier số sau này); sign_group gom "P.127_50" về speed_limit
+SPEEDS = [5, 30, 40, 50, 60, 70, 80, 90, 100, 120]
+SPEED_CLASSES = [f"P.127_{v}" for v in SPEEDS]
 
 
 def sign_names() -> dict[str, str]:
@@ -65,7 +68,8 @@ def sign_names() -> dict[str, str]:
 def class_list(ds: Path) -> list[str]:
     """Lớp chung: những gì bộ dữ liệu đã có (giữ chỉ số), thêm lớp app + biển còn thiếu ở cuối."""
     return D.merge_classes(D.read_classes(ds / "classes.txt"),
-                           APP_CLASSES + list(sign_names()) + [OTHER_SIGN] + list(GROUP_NAMES) + D.MARK_CLASSES)
+                           APP_CLASSES + list(sign_names()) + SPEED_CLASSES + [OTHER_SIGN] + list(GROUP_NAMES)
+                           + D.MARK_CLASSES)
 
 
 def latest_weights(runs: Path) -> Optional[Path]:
@@ -283,7 +287,8 @@ def make_router(ds_dir: Optional[Path] = None, suggester=None) -> APIRouter:
             out.append({"name": d.name, "images": n, "reviewed": len(reviewed(d))})
         names = sign_names()
         return {"sessions": out, "classes": class_list(ds()), "inbox": str(box),
-                "names": {**names, OTHER_SIGN: "Biển khác (chưa có trong danh sách)", **GROUP_NAMES, **D.MARKS}}
+                "names": {**names, OTHER_SIGN: "Biển khác (chưa có trong danh sách)",
+                          **{c: f"Tốc độ tối đa {c[6:]} km/h" for c in SPEED_CLASSES}, **GROUP_NAMES, **D.MARKS}}
 
     @r.post("/api/label/upload")
     async def upload(request: Request, name: str):
