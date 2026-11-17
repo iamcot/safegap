@@ -232,7 +232,7 @@ def test_labeler_suggest_maps_groups_and_skips_existing(tmp_path):
         w.write_bytes(b"x")
         import os
         os.utime(w, (1000 + i, 1000 + i))
-    assert L.Suggester(ds).weights() == {"signs": w, "drive": None}
+    assert L.Suggester(ds).weights() == {"signs": w, "drive": None, "marks": None}
 
 
 def _sign_pixels(slashes: int, n: int = 24) -> list:
@@ -256,4 +256,26 @@ def test_labeler_slash_code_splits_no_stop_and_no_park():
     assert L.slash_code([(0.5, 0.5, 0.5, 0.5, 0.5)]) is None
     assert L.suggest_class("no_park", "signs") == "P.131a"
     assert D.sign_group("P.130") == "no_stop_park" and D.sign_group("P.131b") == "no_park"
-    assert D.SIGN_GROUPS[:9][-1] == "sign_other" and D.SIGN_GROUPS[-1] == "no_park"
+    assert D.SIGN_GROUPS[8:11] == ["sign_other", "no_park", "lane_sign"]
+
+
+def test_lane_signs_and_road_marks(tmp_path):
+    from proto import dataset as D
+    from proto import labeler as L
+
+    assert D.sign_group("R.411") == "lane_sign" and D.sign_group("R.412a") == "lane_sign"
+    assert D.sign_group("R.301a") == "mandatory"
+    assert "R.411" in L.sign_names() and "mark_left" in L.class_list(tmp_path)
+    assert L.suggest_class("lane_sign", "signs") == "lane_sign" and L.suggest_class("mark_left", "marks") == "mark_left"
+    # chỉ ảnh có khung vạch vào bộ marks; khung biển / xe bỏ
+    ds = tmp_path / "ds"
+    (ds / "images").mkdir(parents=True)
+    (ds / "labels").mkdir()
+    (ds / "classes.txt").write_text("car\nmark_left\nR.411\n")
+    for stem, txt in (("s__0000001_00", "0 .5 .5 .1 .1\n1 .5 .9 .1 .05\n2 .5 .1 .1 .05\n"), ("s__0000002_00", "0 .5 .5 .1 .1\n")):
+        (ds / "images" / f"{stem}.jpg").write_bytes(b"x")
+        (ds / "labels" / f"{stem}.txt").write_text(txt)
+    assert D.sync_own_marks(ds) == 1
+    assert (ds / "marks" / "labels" / "s__0000001_00.txt").read_text() == f"{D.MARK_CLASSES.index('mark_left')} .5 .9 .1 .05\n"
+    sd = D.to_sign_labels("2 .5 .1 .1 .05\n", ["car", "mark_left", "R.411"])
+    assert sd == f"{D.SIGN_GROUPS.index('lane_sign')} .5 .1 .1 .05\n"

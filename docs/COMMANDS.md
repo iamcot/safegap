@@ -42,6 +42,10 @@ uv run python -m proto.viewer              # rồi mở http://127.0.0.1:8501/la
 uv run python -m proto.dataset import-roboflow ~/datasets/vn-signs
 caffeinate -i uv run python -m proto.dataset train --task signs --batch 8 --name signs
 
+# vạch / mũi tên mặt đường (lớp mark_*, chỉ ảnh có khung vạch; cần ≥ 20 ảnh)
+caffeinate -i uv run python -m proto.dataset train --task marks --name marks
+./scripts/export_coreml.sh ~/safegap-dataset/marks/runs/<tên>/weights/best.pt marks 544,960
+
 # model xe + đèn từ ảnh tự gán (gộp các phiên đã duyệt trong inbox trước)
 uv run python -m proto.dataset merge ~/safegap-dataset/inbox
 caffeinate -i uv run python -m proto.dataset train --epochs 80 --name drive
@@ -55,7 +59,7 @@ Hoặc trên trang `/label`, cột trái "Train trên Mac": chọn Model rồi b
 dự kiến và điểm mAP50 theo epoch (log gốc ở "Log chi tiết"). Train chạy tách riêng và tự giữ máy thức: refresh trang hay
 tắt / mở lại viewer đều không ảnh hưởng.
 
-Kết quả nằm ở `~/safegap-dataset/runs/<tên>/` (xe) hoặc `~/safegap-dataset/signs/runs/<tên>/` (biển).
+Kết quả nằm ở `~/safegap-dataset/runs/<tên>/` (xe), `~/safegap-dataset/signs/runs/<tên>/` (biển) hoặc `~/safegap-dataset/marks/runs/<tên>/` (vạch mặt đường).
 Xem `results.png` (mAP50 càng cao càng tốt) và `val_batch0_pred.jpg` (ảnh model đoán thử).
 
 ## Đưa model vào app

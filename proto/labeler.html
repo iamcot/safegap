@@ -58,7 +58,7 @@
     <h2>Train trên Mac</h2>
     <div class="bar"><label class="hint" style="flex:1">Epoch <input type="number" id="epochs" value="80" min="1"></label>
       <label class="hint" style="flex:2">Từ model <input type="text" id="model" value="yolo11n.pt"></label></div>
-    <label class="hint" style="display:block;margin-top:6px">Model <select id="task"><option value="drive">Xe + đèn (lớp app)</option><option value="signs">Dò biển (nhóm biển, gồm bộ Roboflow đã nhập)</option></select></label>
+    <label class="hint" style="display:block;margin-top:6px">Model <select id="task"><option value="drive">Xe + đèn (lớp app)</option><option value="signs">Dò biển (nhóm biển, gồm bộ Roboflow đã nhập)</option><option value="marks">Vạch / mũi tên mặt đường (cần ≥ 20 ảnh đã gán)</option></select></label>
     <div class="bar" style="margin-top:6px"><button id="mergeBtn">Chỉ gộp</button><button class="primary" id="trainBtn">Gộp + Train</button></div>
     <div id="trainBox" class="train" hidden>
       <div id="trainHead" class="tl"></div>

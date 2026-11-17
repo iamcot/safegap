@@ -16,6 +16,9 @@ Bộ dò biển (B3), train riêng, lớp = nhóm biển (SIGN_GROUPS):
   uv run python -m proto.dataset train --task signs --batch 8 --name signs
   (ảnh tự thu đã duyệt tự được thêm vào, mã biển QCVN gom về nhóm; ảnh không biển làm mẫu nền)
 
+Bộ dò vạch / mũi tên mặt đường, train riêng, lớp = MARK_CLASSES (chỉ ảnh tự thu có ít nhất một khung vạch):
+  uv run python -m proto.dataset train --task marks --name marks
+
 Cấu trúc bộ dữ liệu (mặc định ~/safegap-dataset, đổi bằng SAFEGAP_DATASET_DIR):
   images/<phiên>__<frame>.jpg, labels/<phiên>__<frame>.txt
   classes.txt        hợp các lớp của mọi phiên, theo tên (lớp mới thêm vào cuối, chỉ số cũ không đổi)
@@ -165,9 +168,11 @@ def reviewed_frames(sess: Path) -> set[str] | None:
 # ---- Bộ dò biển (B3): nhóm biển thô, train riêng ở <dataset>/signs ----
 # Ảnh Roboflow/Zalo chỉ khoanh biển (không khoanh xe) nên không gộp chung với model xe: xe sẽ thành "nền".
 SIGN_GROUPS = ["no_entry", "no_stop_park", "no_turn", "speed_limit", "prohibit_other", "mandatory", "warning",
-               "end_restriction", "sign_other", "no_park"]
+               "end_restriction", "sign_other", "no_park", "lane_sign"]
 # no_park (P.131a/b/c, cấm đỗ, vẫn được dừng) thêm ở cuối để chỉ số lớp cũ giữ nguyên. Ảnh Roboflow "Cam dung va do"
 # lẫn cả hai loại nên vẫn vào no_stop_park; model chỉ học no_park từ ảnh tự gán P.131*.
+# lane_sign (R.411 hướng đi từng làn, R.412 làn riêng theo loại xe, R.415 gộp làn): biển chữ nhật xanh treo trên
+# làn, khác hẳn biển hiệu lệnh tròn nên tách nhóm; Roboflow gộp vào "Hieu lenh" nên chỉ học từ ảnh tự gán.
 # Tên lớp bộ "Biển báo giao thông Việt Nam (Zalo)" trên Roboflow (CC BY 4.0)
 ROBOFLOW_ZALO = {"Cam nguoc chieu": "no_entry", "Cam dung va do": "no_stop_park", "Cam re": "no_turn",
                  "Gioi han toc do": "speed_limit", "Cam con lai": "prohibit_other", "Hieu lenh": "mandatory",
@@ -195,11 +200,68 @@ def sign_group(name: str) -> str | None:
         return "end_restriction"
     if name.startswith("P."):
         return "prohibit_other"
+    if name[:5] in ("R.411", "R.412", "R.415"):
+        return "lane_sign"
     if name.startswith("R."):
         return "mandatory"
     if name.startswith("W."):
         return "warning"
     return None
+
+
+# ---- Vạch / mũi tên sơn trên mặt đường (QCVN 41:2019 vạch 7.x, 9.3), gán trên trang nhãn, train riêng ở <ds>/marks ----
+# Ảnh cũ chưa gán vạch (mũi tên có mà không khoanh) sẽ dạy model "không phải mũi tên", nên chỉ lấy ảnh có ít nhất
+# một khung vạch. Không lật ngang khi train (trái/phải đổi nghĩa).
+MARKS = {
+    "mark_straight": "Mũi tên đi thẳng",
+    "mark_left": "Mũi tên rẽ trái",
+    "mark_right": "Mũi tên rẽ phải",
+    "mark_straight_left": "Mũi tên đi thẳng + rẽ trái",
+    "mark_straight_right": "Mũi tên đi thẳng + rẽ phải",
+    "mark_uturn": "Mũi tên quay đầu (kể cả rẽ trái + quay đầu)",
+    "mark_stop_line": "Vạch dừng (ngang hết làn)",
+    "mark_crosswalk": "Vạch người đi bộ (vằn ngựa)",
+    "mark_other": "Chữ / số / ký hiệu khác trên mặt đường",
+}
+MARK_CLASSES = list(MARKS)
+
+
+def to_mark_labels(text: str, src: list[str]) -> str:
+    """Giữ các khung vạch mặt đường của một file nhãn, đổi chỉ số sang MARK_CLASSES."""
+    out = []
+    for ln in text.splitlines():
+        parts = ln.split()
+        if len(parts) != 5 or not parts[0].isdigit():
+            continue
+        i = int(parts[0])
+        name = src[i] if i < len(src) else None
+        if name in MARKS:
+            out.append(" ".join([str(MARK_CLASSES.index(name)), *parts[1:]]))
+    return "".join(ln + "\n" for ln in out)
+
+
+def sync_own_marks(ds: Path) -> int:
+    """Chép ảnh tự thu có khung vạch mặt đường sang <ds>/marks (dựng lại mỗi lần train)."""
+    md = ds / "marks"
+    shutil.rmtree(md / "images", ignore_errors=True)
+    shutil.rmtree(md / "labels", ignore_errors=True)
+    (md / "images").mkdir(parents=True)
+    (md / "labels").mkdir(parents=True)
+    (md / "classes.txt").write_text("\n".join(MARK_CLASSES) + "\n", encoding="utf-8")
+    src = read_classes(ds / "classes.txt")
+    n = 0
+    for img in _images(ds / "images"):
+        lbl = ds / "labels" / f"{img.stem}.txt"
+        text = to_mark_labels(lbl.read_text(encoding="utf-8"), src) if lbl.exists() else ""
+        if not text:
+            continue
+        try:
+            os.link(img, md / "images" / img.name)
+        except OSError:
+            shutil.copy2(img, md / "images" / img.name)
+        (md / "labels" / f"{img.stem}.txt").write_text(text, encoding="utf-8")
+        n += 1
+    return n
 
 
 def to_sign_labels(text: str, src: list[str]) -> str:
@@ -329,12 +391,18 @@ def train(ds: Path, *, model: str, epochs: int, imgsz: int, batch: int, device: 
     if task == "signs":
         print(f"Ảnh tự thu chép sang bộ biển: {sync_own_signs(ds)}")
         ds = ds / "signs"
+    elif task == "marks":
+        n = sync_own_marks(ds)
+        print(f"Ảnh có vạch mặt đường: {n}")
+        if n < 20:
+            raise SystemExit("Cần ít nhất 20 ảnh có khung vạch / mũi tên (gán trên trang /label) mới train.")
+        ds = ds / "marks"
     yaml = split(ds)
     YOLO(model).train(data=str(yaml), epochs=epochs, imgsz=imgsz, batch=batch, device=device,
                       project=str(ds / "runs"), name=name, exist_ok=False,
                       # ảnh camera xe: không lật dọc; lật ngang tắt vì biển rẽ trái/phải sẽ đổi nghĩa
                       fliplr=0.0, flipud=0.0, mosaic=1.0, close_mosaic=10, patience=20)
-    extra = " signs 736,1280" if task == "signs" else ""
+    extra = {"signs": " signs 736,1280", "marks": " marks 544,960"}.get(task, "")
     print(f"Xong. Export: ./scripts/export_coreml.sh {ds}/runs/{name}/weights/best.pt{extra}")
 
 
@@ -352,9 +420,10 @@ def main(argv: list[str] | None = None) -> None:
     t = sub.add_parser("train", help="split rồi train Ultralytics")
     t.add_argument("--model", default="yolo11n.pt", help="điểm bắt đầu (.pt), vd model đã train lần trước")
     t.add_argument("--epochs", type=int, default=80)
-    t.add_argument("--task", choices=["drive", "signs"], default="drive",
-                   help="drive = xe + đèn (lớp app); signs = bộ dò biển (nhóm biển, gồm ảnh Roboflow đã nhập)")
-    t.add_argument("--imgsz", type=int, default=None, help="mặc định 640 (drive) / 1280 (signs: biển rất nhỏ)")
+    t.add_argument("--task", choices=["drive", "signs", "marks"], default="drive",
+                   help="drive = xe + đèn (lớp app); signs = bộ dò biển (nhóm biển, gồm ảnh Roboflow đã nhập); "
+                        "marks = vạch / mũi tên mặt đường (ảnh tự gán)")
+    t.add_argument("--imgsz", type=int, default=None, help="mặc định 640 (drive) / 1280 (signs: biển rất nhỏ) / 960 (marks)")
     t.add_argument("--batch", type=int, default=16)
     t.add_argument("--device", default="mps")
     t.add_argument("--name", default="safegap")
@@ -372,7 +441,7 @@ def main(argv: list[str] | None = None) -> None:
         s = import_roboflow(a.source, ds, a.tag)
         print(f"Nhập {s['images']} ảnh, {s['boxes']} khung biển → {ds / 'signs'}")
     else:
-        imgsz = a.imgsz or (1280 if a.task == "signs" else 640)
+        imgsz = a.imgsz or {"signs": 1280, "marks": 960}.get(a.task, 640)
         train(ds, model=a.model, epochs=a.epochs, imgsz=imgsz, batch=a.batch, device=a.device, name=a.name,
               task=a.task)
 

@@ -1,0 +1,27 @@
+{
+  "note": "Tên biển chỉ để gán nhãn (trang /label), chưa có luật trong signs_vn.json. Mã theo QCVN 41:2024/BGTVT. proto.dataset.sign_group gom mã về nhóm biển.",
+  "signs": {
+    "R.411": "Hướng đi trên mỗi làn (phân làn theo mũi tên)",
+    "R.412": "Làn đường dành riêng cho từng loại xe",
+    "R.415": "Gộp làn đường theo phương tiện",
+    "R.301a": "Hướng đi phải theo: đi thẳng",
+    "R.301b": "Hướng đi phải theo: rẽ phải",
+    "R.301c": "Hướng đi phải theo: rẽ trái",
+    "R.302a": "Hướng phải đi vòng chướng ngại vật (sang phải)",
+    "R.302b": "Hướng phải đi vòng chướng ngại vật (sang trái)",
+    "R.303": "Nơi giao nhau chạy theo vòng xuyến",
+    "R.122": "Dừng lại (STOP)",
+    "P.104": "Cấm mô tô và xe máy",
+    "P.123c": "Cấm rẽ trái và rẽ phải",
+    "P.124b": "Cấm ô tô quay đầu xe",
+    "P.125": "Cấm vượt",
+    "P.128": "Cấm sử dụng còi",
+    "DP.135": "Hết tất cả các lệnh cấm",
+    "W.207": "Giao nhau với đường không ưu tiên",
+    "W.208": "Giao nhau với đường ưu tiên",
+    "W.224": "Đường người đi bộ cắt ngang",
+    "W.225": "Trẻ em",
+    "W.227": "Công trường",
+    "W.245": "Đi chậm"
+  }
+}

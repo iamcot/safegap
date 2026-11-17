@@ -56,7 +56,7 @@ final class SignDetectionTests: XCTestCase {
         // proto/dataset.py SIGN_GROUPS: cùng thứ tự để chỉ số lớp của model khớp
         XCTAssertEqual(SignGroup.allCases.map(\.rawValue),
                        ["no_entry", "no_stop_park", "no_turn", "speed_limit", "prohibit_other", "mandatory", "warning",
-                        "end_restriction", "sign_other", "no_park"])
+                        "end_restriction", "sign_other", "no_park", "lane_sign"])
     }
 
     /// Biển giả: viền đỏ, nền xanh, 1 hoặc 2 vạch đỏ chéo.

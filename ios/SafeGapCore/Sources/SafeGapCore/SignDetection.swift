@@ -15,6 +15,8 @@ public enum SignGroup: String, CaseIterable, Codable, Sendable {
     case other = "sign_other"
     /// Cấm đỗ (P.131a/b/c, vẫn được dừng). Thêm sau cùng để chỉ số lớp của model cũ giữ nguyên.
     case noPark = "no_park"
+    /// Biển phân làn (R.411 hướng đi từng làn, R.412 làn riêng theo loại xe, R.415 gộp làn). Chỉ hiện, chưa áp luật.
+    case laneSign = "lane_sign"
 
     /// Chữ ngắn để vẽ trên khung.
     public var label: String {
@@ -22,6 +24,7 @@ public enum SignGroup: String, CaseIterable, Codable, Sendable {
         case .noEntry: return "Cấm đi vào"
         case .noStopPark: return "Cấm dừng đỗ"
         case .noPark: return "Cấm đỗ"
+        case .laneSign: return "Phân làn"
         case .noTurn: return "Cấm rẽ"
         case .speedLimit: return "Tốc độ"
         case .prohibitOther: return "Biển cấm"
@@ -47,7 +50,7 @@ public enum SignGroup: String, CaseIterable, Codable, Sendable {
     /// Biển cấm / hiệu lệnh màu đỏ-xanh nổi bật: vẽ đậm hơn.
     public var isRegulatory: Bool {
         switch self {
-        case .noEntry, .noStopPark, .noPark, .noTurn, .speedLimit, .prohibitOther, .mandatory, .endRestriction: return true
+        case .noEntry, .noStopPark, .noPark, .laneSign, .noTurn, .speedLimit, .prohibitOther, .mandatory, .endRestriction: return true
         default: return false
         }
     }

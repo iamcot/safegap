@@ -136,6 +136,17 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
         Khung trên camera / chip ghi "Cấm đỗ".
       - Trang gán nhãn: gợi ý no_stop_park cũng đếm vạch như app (`labeler.slash_code`) để đề xuất P.130 hay P.131a;
         no_park → P.131a. P.131b/c (ngày lẻ/chẵn) bạn tự đổi khi gán.
+- [x] B3e. Biển phân làn + vạch mặt đường trên trang gán nhãn (chủ app 17/11):
+      - Nhóm biển mới `lane_sign` (cuối `SIGN_GROUPS`): R.411 hướng đi từng làn, R.412 làn riêng theo loại xe, R.415 gộp
+        làn. Biển chữ nhật xanh treo trên làn, khác biển hiệu lệnh tròn nên tách; app chỉ hiện "Phân làn", chưa áp luật
+        (cần đọc mũi tên từng làn, để sau). Bộ Roboflow gộp chúng vào "Hieu lenh" nên model học nhóm này từ ảnh tự gán.
+      - `config/sign_catalog_vn.json`: tên các biển hay gặp chưa có luật (R.411/412/415, R.301–303, R.122, P.104,
+        P.125, P.128, DP.135, W.207/208/224/225/227/245) để có trong danh sách lớp trang `/label`.
+      - Vạch / mũi tên sơn mặt đường (`MARKS` trong proto/dataset.py): mark_straight, mark_left, mark_right,
+        mark_straight_left, mark_straight_right, mark_uturn, mark_stop_line, mark_crosswalk, mark_other. Model **riêng**
+        (`train --task marks`, imgsz 960, `<ds>/marks`), chỉ lấy ảnh có ít nhất một khung vạch (ảnh cũ chưa khoanh
+        mũi tên sẽ dạy sai). Không dùng hộp cho vạch làn (dài, chéo cả khung): vạch làn vẫn do LaneDetector.
+        Chưa làm: nạp model marks vào app (mũi tên trước mặt → làn đang đi là làn rẽ hay thẳng, nhắc khi đi sai làn).
 - [x] Sửa sau chạy thử sáng 17/11 (ảnh chủ app gửi: kẹt xe, máy nóng 5 fps):
       - Làn vẽ sai mãi bên phải: (1) bỏ vệt sáng nằm trong khung xe frame trước (`LaneDetector.detect(exclude:)`,
         đèn phanh / biển số / kính xe trước giống vạch); (2) xe đứng yên thì không dò, `RoadLaneFilter.stationary()`
