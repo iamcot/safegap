@@ -9,7 +9,12 @@ git pull                                   # lấy code mới (Claude push thẳ
 scripts/dev.sh                             # export model xe nếu chưa có, test lõi Swift, mở Xcode
 scripts/dev.sh test                        # chạy hết test: pytest + swift test
 scripts/dev.sh viewer                      # web xem clip + trang gán nhãn (http://127.0.0.1:8501)
+scripts/install_device.sh                  # build Release + cài lên iPhone, không mở app, không debugger
 ```
+
+Cài app mà không bị Xcode giữ: `scripts/install_device.sh` (cắm cáp hoặc cùng wifi, máy mở khoá). Xong mở app bằng tay,
+app chạy độc lập và nhanh hơn bản Debug. Nếu đã bấm Run trong Xcode: menu **Debug > Detach from SafeGap**, rồi Stop
+cũng không tắt app.
 
 ## Gán nhãn ảnh tự thu (mỗi tối)
 
