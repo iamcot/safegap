@@ -81,7 +81,7 @@
       <button class="primary" id="approve" title="Enter / Space">Duyệt ✓ (Enter)</button>
     </div>
     <div class="stage"><canvas id="cv"></canvas></div>
-    <div class="hint">Kéo trên ảnh: vẽ khung lớp đang chọn · Bấm khung: chọn, kéo để dời, kéo góc để đổi cỡ · <kbd>Del</kbd> xoá ·
+    <div class="hint">Kéo trên ảnh (kể cả bên trong khung khác): vẽ khung lớp đang chọn · Bấm khung: chọn; khung đang chọn: kéo để dời, kéo góc để đổi cỡ · <kbd>Shift</kbd>+kéo: luôn vẽ mới · <kbd>Del</kbd> xoá ·
       <kbd>1</kbd>–<kbd>9</kbd> chọn lớp (đổi lớp khung đang chọn) · <kbd>/</kbd> tìm lớp · <kbd>Enter</kbd> duyệt + ảnh sau ·
       <kbd>←</kbd><kbd>→</kbd> chuyển ảnh · <kbd>Ctrl/⌘Z</kbd> hoàn tác · <kbd>M</kbd> model khoanh lại ·
       Khung nét đứt là model gợi ý: sai thì xoá / sửa, đúng thì cứ duyệt. Chỉ ảnh đã duyệt mới vào bộ train.</div>
@@ -281,11 +281,14 @@ cv.addEventListener('mousedown', e => {
   e.preventDefault();
   if (!S.img || S.hide) return;
   const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
-  const h = hit(x, y);
-  if (h) {
-    snap(); S.sel = h.i; const p = toPx(S.boxes[h.i]);
+  const h = e.shiftKey ? null : hit(x, y);
+  if (h && (h.corner || h.i === S.sel)) {
+    // góc khung đang chọn: kéo đổi cỡ; thân khung đang chọn: kéo di chuyển
+    snap(); const p = toPx(S.boxes[h.i]);
     drag = h.corner ? { mode: 'corner', corner: h.corner, p, x, y } : { mode: 'move', p, x, y };
-    if (S.boxes[h.i].cls !== S.cls) { S.cls = S.boxes[h.i].cls; renderClasses(); }
+  } else if (h) {
+    // bấm vào khung chưa chọn: nhả tại chỗ = chọn khung; kéo đi = vẽ khung mới (biển nằm trong khung xe to)
+    drag = { mode: 'pending', i: h.i, x, y, box: fromPx(x, y, x, y, S.cls) };
   } else {
     S.sel = -1; drag = { mode: 'new', x, y, box: fromPx(x, y, x, y, S.cls) };
   }
@@ -294,6 +297,8 @@ cv.addEventListener('mousedown', e => {
 window.addEventListener('mousemove', e => {
   if (!drag) return;
   const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  if (drag.mode === 'pending' && Math.abs(x - drag.x) + Math.abs(y - drag.y) > 6) { drag.mode = 'new'; S.sel = -1; }
+  if (drag.mode === 'pending') return;
   if (drag.mode === 'new') drag.box = fromPx(drag.x, drag.y, x, y, S.cls);
   else {
     const p = { ...drag.p }, dx = x - drag.x, dy = y - drag.y;
@@ -306,6 +311,11 @@ window.addEventListener('mousemove', e => {
 });
 window.addEventListener('mouseup', () => {
   if (!drag) return;
+  if (drag.mode === 'pending') {
+    S.sel = drag.i;
+    if (S.boxes[drag.i].cls !== S.cls) { S.cls = S.boxes[drag.i].cls; renderClasses(); }
+    drag = null; updateStatus(); draw(); return;
+  }
   if (drag.mode === 'new') {
     const p = toPx(drag.box);
     if (p.x2 - p.x1 > 4 && p.y2 - p.y1 > 4) { snap(); S.boxes.push(drag.box); S.sel = S.boxes.length - 1; S.dirty = true; }
