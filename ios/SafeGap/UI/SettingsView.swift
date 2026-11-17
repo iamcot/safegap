@@ -37,7 +37,9 @@ struct SettingsView: View {
                     HStack {
                         Text("Bản đồ biển đã nhớ: \(model.snapshot.rememberedSigns) biển")
                         Spacer()
-                        Button("Xoá", role: .destructive) { model.clearSignMap() }
+                        ConfirmDeleteButton(title: "Xoá", question: "Xoá \(model.snapshot.rememberedSigns) biển đã nhớ?") {
+                            model.clearSignMap()
+                        }
                             .disabled(model.snapshot.rememberedSigns == 0)
                     }
                 } header: {
@@ -96,7 +98,9 @@ struct SettingsView: View {
                     Toggle("Tự tải đường quanh xe", isOn: $model.settings.autoRoads)
                     RoadStatusRow(store: model.roads)
                     Button("Tải sẵn TP.HCM (36 ô)") { model.roads.downloadHCM() }
-                    Button("Xoá dữ liệu đường", role: .destructive) { model.roads.deleteAll() }
+                    ConfirmDeleteButton(title: "Xoá dữ liệu đường", question: "Xoá hết dữ liệu đường đã tải?") {
+                        model.roads.deleteAll()
+                    }
                 } header: {
                     Text("Dữ liệu đường (OpenStreetMap)")
                 } footer: {
@@ -199,6 +203,25 @@ private struct LogFilesList: View {
 }
 
 
+/// Nút xoá luôn hỏi lại trước (chủ app 17/11: lỡ bấm thùng rác mất cả phiên ảnh).
+private struct ConfirmDeleteButton: View {
+    var title: String? = nil
+    var systemImage: String? = nil
+    let question: String
+    let action: () -> Void
+    @State private var asking = false
+
+    var body: some View {
+        Button(role: .destructive) { asking = true } label: {
+            if let systemImage { Image(systemName: systemImage) } else { Text(title ?? "Xoá") }
+        }
+        .confirmationDialog(question, isPresented: $asking, titleVisibility: .visible) {
+            Button("Xoá", role: .destructive, action: action)
+            Button("Huỷ", role: .cancel) {}
+        }
+    }
+}
+
 /// Danh sách phiên thu dữ liệu: nén ZIP rồi chia sẻ, hoặc xoá.
 private struct CaptureSessionsList: View {
     @State private var sessions: [(url: URL, images: Int, bytes: Int)] = []
@@ -225,7 +248,10 @@ private struct CaptureSessionsList: View {
                     } else {
                         Button("ZIP") { zip(s.url) }.buttonStyle(.borderless)
                     }
-                    Button(role: .destructive) { delete(s.url) } label: { Image(systemName: "trash") }
+                    ConfirmDeleteButton(systemImage: "trash",
+                                        question: "Xoá phiên \(s.url.lastPathComponent) (\(s.images) ảnh)? Không lấy lại được.") {
+                        delete(s.url)
+                    }
                         .buttonStyle(.borderless)
                 }
             }
