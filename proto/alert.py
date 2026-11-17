@@ -15,8 +15,15 @@ class LawTable:
         self.rows = sorted(law_cfg["table"], key=lambda r: r["max_kmh"])
         if not self.rows:
             raise ValueError("Bảng luật rỗng")
+        # dưới mốc đầu (60 km/h) luật chỉ yêu cầu "khoảng cách phù hợp": quy tắc N giây (khớp LawTable trong Swift)
+        self.below_first_headway_s = law_cfg.get("below_first_headway_s")
+
+    HEADWAY_FLOOR_M = 5.0
 
     def d_min(self, speed_kmh: float) -> float:
+        hw = self.below_first_headway_s
+        if hw is not None and speed_kmh < self.rows[0]["max_kmh"]:
+            return min(float(self.rows[0]["d_min_m"]), max(self.HEADWAY_FLOOR_M, speed_kmh / 3.6 * hw))
         for r in self.rows:
             if speed_kmh <= r["max_kmh"]:
                 return float(r["d_min_m"])

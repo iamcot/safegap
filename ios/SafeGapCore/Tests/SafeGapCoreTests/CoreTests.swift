@@ -116,6 +116,16 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(back, cal)
     }
 
+    func testHeadwayBelowFirstRow() {
+        let law = LawConfig(table: [.init(maxKmh: 60, dMinM: 35), .init(maxKmh: 80, dMinM: 55)], belowFirstHeadwayS: 2)
+        let t = LawTable(law)
+        XCTAssertEqual(t.dMin(speedKmh: 30), 30 / 3.6 * 2, accuracy: 1e-9)   // ~16,7 m
+        XCTAssertEqual(t.dMin(speedKmh: 3), 5)
+        XCTAssertEqual(t.dMin(speedKmh: 60), 35)
+        XCTAssertEqual(t.dMin(speedKmh: 70), 55)
+        XCTAssertEqual(LawTable(LawConfig(table: law.table)).dMin(speedKmh: 30), 35)   // không cấu hình: như cũ
+    }
+
     func testFrameLogRow() {
         var r = FrameResult(frame: 3, t: 0.1, speedKmh: 92.5)
         r.cls = "car"; r.wPx = 68.85; r.dRaw = 40.0; r.d = 40.0; r.dMin = 70; r.level = .red; r.sound = true; r.trackId = 1

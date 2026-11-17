@@ -153,8 +153,13 @@ public struct LawConfig: Codable, Equatable, Sendable {
 
     public var source: String?
     public var table: [Row]
+    /// Dưới mốc đầu của bảng (60 km/h) luật không cho số, chỉ yêu cầu "giữ khoảng cách phù hợp": dùng quy tắc
+    /// N giây (quãng đường đi trong N s), không vượt d_min của mốc đầu. nil = dùng luôn d_min mốc đầu.
+    public var belowFirstHeadwayS: Double?
 
-    public init(source: String? = nil, table: [Row]) { self.source = source; self.table = table }
+    public init(source: String? = nil, table: [Row], belowFirstHeadwayS: Double? = nil) {
+        self.source = source; self.table = table; self.belowFirstHeadwayS = belowFirstHeadwayS
+    }
 
     public static func decode(_ data: Data) throws -> LawConfig {
         try ConfigJSON.decoder().decode(LawConfig.self, from: data)

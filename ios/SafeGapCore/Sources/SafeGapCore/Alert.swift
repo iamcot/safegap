@@ -10,14 +10,21 @@ public enum Level: String, Codable, Sendable {
 
 public struct LawTable: Sendable {
     public let rows: [LawConfig.Row]
+    public let belowFirstHeadwayS: Double?
+    /// Quy tắc N giây không xuống dưới mức này (m).
+    public static let headwayFloorM = 5.0
 
     public init(_ law: LawConfig) {
         rows = law.table.sorted { $0.maxKmh < $1.maxKmh }
+        belowFirstHeadwayS = law.belowFirstHeadwayS
         precondition(!rows.isEmpty, "Bảng luật rỗng")
     }
 
-    /// Tốc độ trên mốc cuối dùng d_min của mốc cuối.
+    /// Tốc độ trên mốc cuối dùng d_min của mốc cuối. Dưới mốc đầu: quy tắc N giây nếu có cấu hình.
     public func dMin(speedKmh: Double) -> Double {
+        if let hw = belowFirstHeadwayS, speedKmh < rows[0].maxKmh {
+            return min(rows[0].dMinM, max(Self.headwayFloorM, speedKmh / 3.6 * hw))
+        }
         for r in rows where speedKmh <= r.maxKmh { return r.dMinM }
         return rows[rows.count - 1].dMinM
     }
