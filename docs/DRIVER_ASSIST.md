@@ -152,6 +152,9 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
       "Tốc độ" hiện khi lớp / khung đang chọn là biển tốc độ, bấm mốc để đổi. Khi train vẫn gom về nhóm speed_limit;
       mốc giữ lại cho classifier số (B4). Kéo bên trong khung chưa chọn = vẽ khung mới (biển trong khung xe to),
       Shift+kéo luôn vẽ mới.
+- [x] B3g. Biển phụ (S.5xx) dưới biển cấm: khoanh **riêng** biển chính và biển phụ (hai khung). Nhóm mới `aux_plate`
+      (cuối `SIGN_GROUPS`), danh mục S.501 cự ly, S.502, S.503 hướng, S.505a loại xe, S.508 giờ, S.509 chữ. App chỉ hiện
+      "Biển phụ"; sau này: biển phụ nằm ngay dưới biển chính → đọc giờ / cự ly (OCR) để áp `window` / `distance`.
 - [x] Sửa sau chạy thử sáng 17/11 (ảnh chủ app gửi: kẹt xe, máy nóng 5 fps):
       - Làn vẽ sai mãi bên phải: (1) bỏ vệt sáng nằm trong khung xe frame trước (`LaneDetector.detect(exclude:)`,
         đèn phanh / biển số / kính xe trước giống vạch); (2) xe đứng yên thì không dò, `RoadLaneFilter.stationary()`

@@ -17,6 +17,8 @@ public enum SignGroup: String, CaseIterable, Codable, Sendable {
     case noPark = "no_park"
     /// Biển phân làn (R.411 hướng đi từng làn, R.412 làn riêng theo loại xe, R.415 gộp làn). Chỉ hiện, chưa áp luật.
     case laneSign = "lane_sign"
+    /// Biển phụ dưới biển chính (S.501 cự ly, S.503 hướng, S.505a loại xe, S.508 giờ). Chỉ hiện, chưa đọc chữ.
+    case auxPlate = "aux_plate"
 
     /// Chữ ngắn để vẽ trên khung.
     public var label: String {
@@ -25,6 +27,7 @@ public enum SignGroup: String, CaseIterable, Codable, Sendable {
         case .noStopPark: return "Cấm dừng đỗ"
         case .noPark: return "Cấm đỗ"
         case .laneSign: return "Phân làn"
+        case .auxPlate: return "Biển phụ"
         case .noTurn: return "Cấm rẽ"
         case .speedLimit: return "Tốc độ"
         case .prohibitOther: return "Biển cấm"

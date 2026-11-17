@@ -168,7 +168,7 @@ def reviewed_frames(sess: Path) -> set[str] | None:
 # ---- Bộ dò biển (B3): nhóm biển thô, train riêng ở <dataset>/signs ----
 # Ảnh Roboflow/Zalo chỉ khoanh biển (không khoanh xe) nên không gộp chung với model xe: xe sẽ thành "nền".
 SIGN_GROUPS = ["no_entry", "no_stop_park", "no_turn", "speed_limit", "prohibit_other", "mandatory", "warning",
-               "end_restriction", "sign_other", "no_park", "lane_sign"]
+               "end_restriction", "sign_other", "no_park", "lane_sign", "aux_plate"]
 # no_park (P.131a/b/c, cấm đỗ, vẫn được dừng) thêm ở cuối để chỉ số lớp cũ giữ nguyên. Ảnh Roboflow "Cam dung va do"
 # lẫn cả hai loại nên vẫn vào no_stop_park; model chỉ học no_park từ ảnh tự gán P.131*.
 # lane_sign (R.411 hướng đi từng làn, R.412 làn riêng theo loại xe, R.415 gộp làn): biển chữ nhật xanh treo trên
@@ -200,6 +200,8 @@ def sign_group(name: str) -> str | None:
         return "end_restriction"
     if name.startswith("P."):
         return "prohibit_other"
+    if name.startswith("S.5"):   # biển phụ dưới biển chính (giờ, cự ly, loại xe...), khoanh riêng
+        return "aux_plate"
     if name[:5] in ("R.411", "R.412", "R.415"):
         return "lane_sign"
     if name.startswith("R."):

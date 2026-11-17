@@ -42,7 +42,8 @@ GROUP_CODE = {"no_entry": "P.102", "no_stop_park": "P.130", "no_park": "P.131a",
               "sign_other": OTHER_SIGN}
 GROUP_NAMES = {"no_turn": "Nhóm cấm rẽ / quay đầu (chưa rõ mã)", "prohibit_other": "Nhóm biển cấm khác (chưa rõ mã)",
                "mandatory": "Nhóm biển hiệu lệnh (xanh tròn)", "warning": "Nhóm biển nguy hiểm (tam giác vàng)",
-               "end_restriction": "Nhóm biển hết cấm", "lane_sign": "Nhóm biển phân làn (chưa rõ mã)"}
+               "end_restriction": "Nhóm biển hết cấm", "lane_sign": "Nhóm biển phân làn (chưa rõ mã)",
+               "aux_plate": "Nhóm biển phụ dưới biển chính (chưa rõ mã)"}
 SUGGEST_CONF = 0.25
 # biển tốc độ theo mốc (cho classifier số sau này); sign_group gom "P.127_50" về speed_limit
 SPEEDS = [5, 30, 40, 50, 60, 70, 80, 90, 100, 120]

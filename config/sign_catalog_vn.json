@@ -22,6 +22,12 @@
     "W.224": "Đường người đi bộ cắt ngang",
     "W.225": "Trẻ em",
     "W.227": "Công trường",
-    "W.245": "Đi chậm"
+    "W.245": "Đi chậm",
+    "S.501": "Biển phụ: phạm vi tác dụng (… m)",
+    "S.502": "Biển phụ: khoảng cách đến đối tượng báo hiệu",
+    "S.503": "Biển phụ: hướng tác dụng (mũi tên)",
+    "S.505a": "Biển phụ: loại xe áp dụng",
+    "S.508": "Biển phụ: thời gian (giờ / ngày)",
+    "S.509": "Biển phụ: thuyết minh (chữ)"
   }
 }

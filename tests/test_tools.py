@@ -256,7 +256,8 @@ def test_labeler_slash_code_splits_no_stop_and_no_park():
     assert L.slash_code([(0.5, 0.5, 0.5, 0.5, 0.5)]) is None
     assert L.suggest_class("no_park", "signs") == "P.131a"
     assert D.sign_group("P.130") == "no_stop_park" and D.sign_group("P.131b") == "no_park"
-    assert D.SIGN_GROUPS[8:11] == ["sign_other", "no_park", "lane_sign"]
+    assert D.SIGN_GROUPS[8:12] == ["sign_other", "no_park", "lane_sign", "aux_plate"]
+    assert D.sign_group("S.508") == "aux_plate"
 
 
 def test_lane_signs_and_road_marks(tmp_path):
