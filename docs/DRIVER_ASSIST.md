@@ -101,6 +101,13 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
       bỏ biển nằm trong khung xe / thấp dưới 80% ảnh, mỗi nhóm báo lại sau ≥ 8 s. Nhóm → SignEngine: no_entry → P.102,
       no_stop_park → P.130, speed_limit → P.127 (chưa có số); nhóm khác chỉ hiện (khung trên camera + chip "đang thấy"
       dưới số tốc độ). Cài đặt: "Dò biển báo bằng model".
+- [x] B3b. Vị trí cắm biển (chủ app góp ý 17/11 sau khi thử clip): biển có hiệu lực cho phần đường **bên trái** nó
+      (theo hướng nhìn tài xế). `SignDetectionTracker.place`: từ chiều cao khung (biển 0,7 m) + f ra khoảng cách và
+      lệch ngang; < −1,5 m = bên trái làn mình (dải phân cách / giữa đường 2 chiều → chiều ngược lại), > số làn × 3,5 + 3,5 m
+      = đường ngang / nhánh, rộng/cao < 0,6 = biển quay xiên. `SignEngine.feed`: biển áp dụng có hiệu lực **từ chỗ cắm**
+      (`sightedAhead`, rẽ trước khi tới thì bỏ, biển sau ngã tư không bị ngã tư đó xoá); cấm đi ngược chiều ở giữa đường
+      chỉ nói khi rẽ trái / quay đầu gần đó, ở miệng đường nhánh bên phải chỉ nói khi rẽ phải (`sightedIfTurn`, ±30 m).
+      Biển không áp dụng vẽ xám trên hình camera, không lên chip. Biển tốc độ nhận kém (mAP50 0,58): cần thêm dữ liệu + B4.
 - [ ] B3. Train dò biển (YOLO11n, vùng cắt 640×360) trên Mac M5, export Core ML, chạy 4 lượt/giây xen kẽ 2 vùng cắt
       qua `InferenceScheduler` (task `signsLights`). Đo nhiệt.
 - [ ] B4. Classifier ~12–40 loại biển (64×64), bỏ phiếu ≥ 3 lần; tracker biển; lọc biển trên thân xe / mặt nghiêng.

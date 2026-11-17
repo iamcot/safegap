@@ -160,9 +160,19 @@ public struct DriveContext: Equatable, Sendable {
     }
 }
 
+/// Biển thấy từ xa: hiệu lực bắt đầu khi xe tới chỗ cắm biển (odometer `atOdo`), không phải lúc thấy.
+public struct PendingSign: Equatable, Sendable {
+    public var sighting: SignSighting
+    public var atOdo: Double
+    /// Biển của đường nhánh (cấm đi vào ở miệng đường bên phải, biển giữa dải phân cách bên trái): chỉ áp dụng
+    /// khi xe rẽ hướng này gần chỗ cắm biển; đi thẳng qua thì bỏ.
+    public var onlyIfTurn: TurnDirection?
+}
+
 public struct SignEngine: Equatable, Sendable {
     public var config: SignConfig
     public private(set) var active: [ActiveSign] = []
+    public private(set) var pending: [PendingSign] = []
     private var overSpeedSince: Double?
 
     public init(config: SignConfig) { self.config = config }
@@ -200,6 +210,34 @@ public struct SignEngine: Equatable, Sendable {
         return [VoiceMessage(kind: .signViolation, text: text, key: "sign.\(a.id)", t: t)]
     }
 
+    /// Biển thấy cách `aheadM` mét phía trước. Biển cấm đi vào nói ngay (để kịp dừng); biển khác chờ tới chỗ cắm biển
+    /// mới có hiệu lực (biển nằm sau ngã tư thì ngã tư đó không xoá nó). Rẽ trước khi tới biển thì bỏ.
+    public mutating func sightedAhead(_ s: SignSighting, aheadM: Double, odometer: Double, t: Double, minuteOfDay: Int,
+                                      dayOfMonth: Int, vehicle: String = "car") -> [VoiceMessage] {
+        guard let rule = config.signs[s.code] else { return [] }
+        if rule.scope == .entry || aheadM <= 5 {
+            return sighted(s, odometer: odometer, t: t, minuteOfDay: minuteOfDay, dayOfMonth: dayOfMonth, vehicle: vehicle)
+        }
+        let at = odometer + aheadM
+        let same = config.alerts.sameSignM
+        if pending.contains(where: { $0.sighting.code == s.code && abs($0.atOdo - at) < same }) { return [] }
+        pending.append(PendingSign(sighting: s, atOdo: at))
+        return []
+    }
+
+    /// Biển cấm đi vào của đường nhánh / chiều ngược lại: chỉ nói nếu xe rẽ `turn` (trái gồm cả quay đầu)
+    /// trong khoảng ±`turnWindowM` quanh chỗ cắm biển.
+    public mutating func sightedIfTurn(_ s: SignSighting, turn: TurnDirection, aheadM: Double, odometer: Double) {
+        guard config.signs[s.code] != nil else { return }
+        let at = odometer + aheadM
+        if pending.contains(where: { $0.sighting.code == s.code && $0.onlyIfTurn == turn && abs($0.atOdo - at) < config.alerts.sameSignM }) {
+            return
+        }
+        pending.append(PendingSign(sighting: s, atOdo: at, onlyIfTurn: turn))
+    }
+
+    public static let turnWindowM = 30.0
+
     static func applies(_ a: ActiveSign, minuteOfDay: Int, dayOfMonth: Int, vehicle: String) -> Bool {
         if let w = a.window, !w.contains(minuteOfDay: minuteOfDay) { return false }
         if let v = a.rule.vehicle, v != vehicle { return false }
@@ -213,6 +251,18 @@ public struct SignEngine: Equatable, Sendable {
     /// Gọi mỗi frame: hết hiệu lực + câu cảnh báo / nhắc.
     public mutating func update(_ c: DriveContext) -> [VoiceMessage] {
         let al = config.alerts
+        var out: [VoiceMessage] = []
+        // biển thấy từ xa: tới chỗ cắm thì bắt đầu hiệu lực; rẽ khỏi đường trước khi tới thì bỏ
+        if c.turn != nil {
+            pending.removeAll { $0.onlyIfTurn == nil }
+        } else {
+            let ready = pending.filter { $0.onlyIfTurn == nil && c.odometer >= $0.atOdo }
+            pending.removeAll { $0.onlyIfTurn == nil && c.odometer >= $0.atOdo }
+            for p in ready {
+                out += sighted(p.sighting, odometer: p.atOdo, t: c.t, minuteOfDay: c.minuteOfDay,
+                               dayOfMonth: c.dayOfMonth, vehicle: c.vehicle)
+            }
+        }
         // hết hiệu lực
         active.removeAll { a in
             if let u = a.untilOdo, c.odometer >= u { return true }
@@ -224,11 +274,26 @@ public struct SignEngine: Equatable, Sendable {
             let limit = c.junctionM == nil ? al.safetyExpireNoMapM : al.safetyExpireM
             return c.odometer - a.startOdo > limit
         }
+        // biển đường nhánh: xe đang rẽ / vừa rẽ đúng hướng gần chỗ cắm biển thì áp dụng (sau bước xoá vì rẽ)
+        let win = Self.turnWindowM
+        let dir = c.turning ?? c.turn?.direction
+        var fired: [PendingSign] = []
+        pending.removeAll { p in
+            guard let want = p.onlyIfTurn else { return false }
+            if let d = dir, abs(c.odometer - p.atOdo) <= win, d == want || (want == .left && d == .uturn) {
+                fired.append(p)
+                return true
+            }
+            return c.odometer > p.atOdo + win
+        }
+        for p in fired {
+            out += sighted(p.sighting, odometer: c.odometer, t: c.t, minuteOfDay: c.minuteOfDay,
+                           dayOfMonth: c.dayOfMonth, vehicle: c.vehicle)
+        }
         for i in active.indices {
             active[i].applies = Self.applies(active[i], minuteOfDay: c.minuteOfDay, dayOfMonth: c.dayOfMonth, vehicle: c.vehicle)
         }
 
-        var out: [VoiceMessage] = []
         var overSpeed = false
         for a in active where a.applies {
             let key = "sign.\(a.id)"
@@ -264,6 +329,7 @@ public struct SignEngine: Equatable, Sendable {
 
     public mutating func reset() {
         active.removeAll()
+        pending.removeAll()
         overSpeedSince = nil
     }
 }

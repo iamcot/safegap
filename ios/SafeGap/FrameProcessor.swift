@@ -488,8 +488,11 @@ final class FrameProcessor {
         var signMsgs: [VoiceMessage] = []
         if let sr = takeSignResult() {
             // biển từ model: đủ phiếu qua nhiều lượt mới tính là đã đi qua biển
-            for c in signTracker.update(t: sr.t, signs: sr.dets, vehicles: dets, frameWidth: w, frameHeight: h) {
-                if let sg = c.sighting { addSighting(sg) }
+            // biển chỉ có hiệu lực cho phần đường bên trái nó: biển xa bên phải là của đường ngang / nhánh
+            let lanes = Double(roadMatch?.match?.lanesSame ?? 2)
+            signTracker.maxLateralM = max(8, lanes * 3.5 + 3.5)
+            for c in signTracker.update(t: sr.t, signs: sr.dets, vehicles: dets, frameWidth: w, frameHeight: h, fPx: f) {
+                signMsgs += signs.feed(c, odometer: odo, t: t, minuteOfDay: minuteOfDay, dayOfMonth: day)
             }
         } else if !p.settings.signDetection {
             signTracker.reset()

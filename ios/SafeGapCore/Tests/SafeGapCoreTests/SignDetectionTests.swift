@@ -59,3 +59,93 @@ final class SignDetectionTests: XCTestCase {
                         "end_restriction", "sign_other"])
     }
 }
+
+/// Vị trí cắm biển (QCVN 41: biển có hiệu lực cho phần đường bên trái nó theo hướng nhìn tài xế).
+final class SignPlacementTests: XCTestCase {
+    let W = 1920.0, H = 1080.0, F = 1500.0
+
+    /// Biển cao 42 px ở f 1500 → cách 25 m; lệch ngang `x` mét.
+    func sign(_ g: SignGroup, lateral x: Double, width: Double = 42) -> Detection {
+        let cx = W / 2 + x * F / 25
+        return Detection(cx - width / 2, 300, cx + width / 2, 342, g.rawValue, 0.8)
+    }
+
+    func confirm(_ d: Detection) -> ConfirmedSign? {
+        var tr = SignDetectionTracker()
+        var out: [ConfirmedSign] = []
+        for t in [0.0, 0.3, 0.6] {
+            out += tr.update(t: t, signs: [d], vehicles: [], frameWidth: W, frameHeight: H, fPx: F)
+        }
+        return out.first
+    }
+
+    func testPlacementFromBox() throws {
+        let right = try XCTUnwrap(confirm(sign(.noStopPark, lateral: 4)))
+        XCTAssertEqual(right.placement, .applies)
+        XCTAssertEqual(right.distanceM ?? 0, 25, accuracy: 0.1)
+        XCTAssertEqual(right.lateralM ?? 0, 4, accuracy: 0.1)
+        XCTAssertEqual(confirm(sign(.noEntry, lateral: -3))?.placement, .leftOfUs)
+        XCTAssertEqual(confirm(sign(.noEntry, lateral: 14))?.placement, .farRight)
+        XCTAssertEqual(confirm(sign(.noEntry, lateral: 3, width: 20))?.placement, .turnedAway)
+        XCTAssertNil(confirm(sign(.noStopPark, lateral: -3))?.sighting)
+    }
+
+    func engine() throws -> SignEngine { SignEngine(config: try SignTests.repoConfig()) }
+
+    func confirmed(_ g: SignGroup, _ p: SignPlacement, lateral: Double, ahead: Double = 25) -> ConfirmedSign {
+        ConfirmedSign(group: g, box: Box(0, 0, 1, 1), conf: 0.8, t: 0, distanceM: ahead, lateralM: lateral, placement: p)
+    }
+
+    func testNoStopStartsAtSignNotWhenSeen() throws {
+        var e = try engine()
+        XCTAssertTrue(e.feed(confirmed(.noStopPark, .applies, lateral: 4), odometer: 100, t: 0, minuteOfDay: 600, dayOfMonth: 1).isEmpty)
+        XCTAssertTrue(e.active.isEmpty)
+        // ngã tư nằm giữa xe và biển (biển cắm sau ngã tư): không xoá biển
+        _ = e.update(DriveContext(t: 1, odometer: 110, junctionPassed: true))
+        _ = e.update(DriveContext(t: 2, odometer: 126))
+        XCTAssertEqual(e.active.map(\.code), ["P.130"])
+        XCTAssertEqual(e.active.first?.startOdo ?? 0, 125, accuracy: 0.01)
+    }
+
+    func testTurnBeforeReachingSignDropsIt() throws {
+        var e = try engine()
+        _ = e.feed(confirmed(.noStopPark, .applies, lateral: 4), odometer: 100, t: 0, minuteOfDay: 600, dayOfMonth: 1)
+        _ = e.update(DriveContext(t: 1, odometer: 110, turn: TurnEvent(direction: .right, angleDeg: 90, t: 1)))
+        _ = e.update(DriveContext(t: 3, odometer: 140))
+        XCTAssertTrue(e.active.isEmpty && e.pending.isEmpty)
+    }
+
+    func testNoEntryAheadOnOurSideSpeaksNow() throws {
+        var e = try engine()
+        let m = e.feed(confirmed(.noEntry, .applies, lateral: 3), odometer: 100, t: 0, minuteOfDay: 600, dayOfMonth: 1)
+        XCTAssertEqual(m.map(\.kind), [.signViolation])
+    }
+
+    func testNoEntryInMedianOnlyWhenTurningLeft() throws {
+        // đường 2 chiều, biển cấm ngược chiều cắm giữa: dành cho chiều bên trái, đi thẳng thì không nói
+        var e = try engine()
+        XCTAssertTrue(e.feed(confirmed(.noEntry, .leftOfUs, lateral: -3), odometer: 100, t: 0, minuteOfDay: 600, dayOfMonth: 1).isEmpty)
+        var said: [VoiceMessage] = []
+        for (i, odo) in stride(from: 105.0, through: 170, by: 5).enumerated() {
+            said += e.update(DriveContext(t: Double(i), odometer: odo))
+        }
+        XCTAssertTrue(said.isEmpty)
+        XCTAssertTrue(e.pending.isEmpty)
+        // lần khác: rẽ trái vào chiều ngược lại ngay chỗ biển → nói
+        var e2 = try engine()
+        _ = e2.feed(confirmed(.noEntry, .leftOfUs, lateral: -3), odometer: 100, t: 0, minuteOfDay: 600, dayOfMonth: 1)
+        XCTAssertTrue(e2.update(DriveContext(t: 1, odometer: 115)).isEmpty)
+        XCTAssertEqual(e2.update(DriveContext(t: 2, odometer: 122, turning: .left)).map(\.kind), [.signViolation])
+    }
+
+    func testNoEntryAtSideRoadOnlyWhenTurningRight() throws {
+        var e = try engine()
+        XCTAssertTrue(e.feed(confirmed(.noEntry, .applies, lateral: 7), odometer: 100, t: 0, minuteOfDay: 600, dayOfMonth: 1).isEmpty)
+        XCTAssertTrue(e.update(DriveContext(t: 1, odometer: 120, turning: .left)).isEmpty)   // rẽ hướng khác: không
+        XCTAssertEqual(e.update(DriveContext(t: 2, odometer: 124, turning: .right)).map(\.kind), [.signViolation])
+        // biển quay xiên: bỏ hẳn
+        var e2 = try engine()
+        _ = e2.feed(confirmed(.noEntry, .turnedAway, lateral: 3), odometer: 100, t: 0, minuteOfDay: 600, dayOfMonth: 1)
+        XCTAssertTrue(e2.pending.isEmpty && e2.active.isEmpty)
+    }
+}

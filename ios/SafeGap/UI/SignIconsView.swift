@@ -92,8 +92,9 @@ struct SeenSignsRow: View {
     let signs: [ConfirmedSign]
 
     var body: some View {
-        let groups = signs.map(\.group).reduce(into: [SignGroup]()) { if !$0.contains($1) { $0.append($1) } }
-        HStack(spacing: 6) {
+        // chỉ biển dành cho làn mình (biển bên trái / đường ngang vẫn vẽ xám trên hình camera)
+        let groups = signs.filter(\.applies).map(\.group).reduce(into: [SignGroup]()) { if !$0.contains($1) { $0.append($1) } }
+        if !groups.isEmpty { HStack(spacing: 6) {
             Image(systemName: "eye.fill").font(.caption2)
             ForEach(groups, id: \.self) { g in
                 Text(g.label)
@@ -103,6 +104,6 @@ struct SeenSignsRow: View {
                     .foregroundStyle(.white)
             }
         }
-        .transition(.opacity)
+        .transition(.opacity) }
     }
 }
