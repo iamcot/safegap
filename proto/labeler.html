@@ -314,6 +314,7 @@ function snap() { S.undo.push(JSON.stringify(S.boxes)); if (S.undo.length > 50) 
 let drag = null;
 cv.addEventListener('mousedown', e => {
   e.preventDefault();
+  document.activeElement?.blur?.();   // bấm lên ảnh: bỏ focus ô tìm / ô chọn để phím tắt chạy
   if (!S.img || S.hide) return;
   const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
   const h = e.shiftKey ? null : hit(x, y);
@@ -386,7 +387,10 @@ cv.addEventListener('mousemove', e => {
 })();
 
 document.addEventListener('keydown', e => {
-  if (e.target.tagName === 'INPUT') {
+  // chỉ ô gõ chữ mới giữ phím; ô tick (chưa duyệt, có biển/đèn, gợi ý khung) vừa bấm thì phím tắt vẫn chạy
+  const typing = (e.target.tagName === 'INPUT' && !['checkbox', 'radio', 'button'].includes(e.target.type))
+    || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT';
+  if (typing) {
     if (e.key === 'Escape') { e.target.blur(); }
     if (e.key === 'Enter' && e.target.id === 'search') { const first = $('classes').querySelector('div'); if (first) first.click(); e.target.blur(); }
     return;
