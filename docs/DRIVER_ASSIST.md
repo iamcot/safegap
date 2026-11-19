@@ -155,6 +155,16 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
 - [x] B3g. Biển phụ (S.5xx) dưới biển cấm: khoanh **riêng** biển chính và biển phụ (hai khung). Nhóm mới `aux_plate`
       (cuối `SIGN_GROUPS`), danh mục S.501 cự ly, S.502, S.503 hướng, S.505a loại xe, S.508 giờ, S.509 chữ. App chỉ hiện
       "Biển phụ"; sau này: biển phụ nằm ngay dưới biển chính → đọc giờ / cự ly (OCR) để áp `window` / `distance`.
+- [x] Log 18–19/11 (3 file: sáng 18/11 65 phút, tối 18/11 48 phút, 19/11 sáng + tối 129 phút):
+      - Quy tắc 1,5 s đã chạy: d_min trung vị ~16 m ở 37–39 km/h. RED còn 5–9% thời gian chạy, khoảng cách theo thời
+        gian lúc RED trung vị 0,9–1,2 s (thật sự bám gần theo ngưỡng 1,35 s = 0,9 × 1,5 s). Đợt RED trung vị 4–6 s,
+        p90 tới 40 s (bò theo xe trong phố). Mỗi đợt kêu 1 lần. Chưa đổi; hỏi chủ app có thấy phiền không.
+      - Máy nóng buổi sáng: "serious" 72–92% thời gian, ~7 fps (tối 10–11 fps).
+      - Làn: hai vạch 52–54%, không thấy 7–13%.
+      - Đèn: ban ngày một màu giữ trung vị 1,5–3 s; tối vẫn nhảy (0,5–1 s), vàng nhiều bất thường. Bộ lọc dưới chân
+        trời / trong khung xe chỉ bỏ ~2% khung, nên đèn nhầm không phải đèn hậu thấp. Phố sáng đèn nên đo độ sáng chỉ
+        ra "đêm" 1/3 thời gian lúc 20h. Sửa: chế độ đèn ban đêm theo cả giờ đồng hồ (18h–6h); đang đỏ thấy vàng → giữ
+        đỏ (đèn VN đỏ → xanh, không có đỏ → vàng; quầng đỏ ban đêm hay ra vàng). Cần ảnh đèn ban đêm để sửa tiếp.
 - [x] Biển cấm đi ngược chiều ở lề phải vẫn báo loạn (chủ app tối 17/11): biển của đường nhánh đứng ngay góc lề phải,
       tới gần thì lệch chỉ 2–4 m nên lọt ngưỡng 5 m. Có OSM: biển cấm đi vào lệch phải > 1,5 m mà cách ngã rẽ phía trước
       ≤ 20 m → biển đường nhánh (`SignEngine.isSideRoadEntry`), chỉ nói khi rẽ phải vào đó, không nhớ vào bản đồ biển.

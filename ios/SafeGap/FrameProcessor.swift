@@ -541,8 +541,11 @@ final class FrameProcessor {
         var lightDebug = ""
         if p.settings.trafficLights {
             // ban đêm đèn đường / đèn xe dễ thành "đèn giao thông": cần khung to hơn, đổi màu chậm hơn
-            lightTracker.fastSwitch = night ? 3 : 2
-            lightTracker.minHeightPx = night ? 20 : 14
+            // log 18/11 20h: phố sáng đèn nên đo độ sáng chỉ ra "đêm" 1/3 thời gian; thêm giờ đồng hồ (18h–6h)
+            let hour = Calendar.current.component(.hour, from: Date())
+            let darkForLights = night || hour >= 18 || hour < 6
+            lightTracker.fastSwitch = darkForLights ? 3 : 2
+            lightTracker.minHeightPx = darkForLights ? 20 : 14
             let picked = lightTracker.pick(lightDets, frameWidth: w, frameHeight: h)
             // qua ngã tư / vừa rẽ: đèn cũ không còn áp dụng
             if junction.passed || turn != nil { lightTracker.reset() }
@@ -552,7 +555,7 @@ final class FrameProcessor {
             }
             lightState = lightTracker.update(t: t, light: picked, color: color, speedKmh: v)
             lightDebug = String(format: "%d/%d lights raw %@ state %@ h %.0f%@", lightDets.count, lightsRaw, color?.rawValue ?? "-",
-                                lightState?.color.rawValue ?? "-", picked.map { $0.y2 - $0.y1 } ?? 0, night ? " N" : "")
+                                lightState?.color.rawValue ?? "-", picked.map { $0.y2 - $0.y1 } ?? 0, darkForLights ? " N" : "")
             if p.settings.voiceOn, let m = lightRules.check(state: lightState, t: t, speedKmh: v,
                                                             junctionM: junction.nextM, stoppedS: stoppedS) {
                 voice.offer(m)

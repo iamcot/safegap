@@ -239,6 +239,18 @@ final class TrafficLightTests: XCTestCase {
         XCTAssertEqual(LightColorClassifier.classify(vertical(lit: amber, rows: 2..<6), aspect: 1), .yellow)
     }
 
+    func testRedNeverTurnsYellow() {
+        var tr = TrafficLightTracker()
+        let d = Detection(1100, 80, 1130, 160, "traffic light")
+        for i in 0..<5 { tr.update(t: Double(i) * 0.25, light: d, color: .red) }
+        for i in 5..<9 { tr.update(t: Double(i) * 0.25, light: d, color: .yellow) }   // quầng đỏ ban đêm ra vàng
+        XCTAssertEqual(tr.state?.color, .red)
+        for i in 9..<11 { tr.update(t: Double(i) * 0.25, light: d, color: .green) }
+        XCTAssertEqual(tr.state?.color, .green)
+        for i in 11..<13 { tr.update(t: Double(i) * 0.25, light: d, color: .yellow) }   // xanh → vàng vẫn được
+        XCTAssertEqual(tr.state?.color, .yellow)
+    }
+
     func testUnknownMajorityClearsColor() {
         var tr = TrafficLightTracker()
         let d = Detection(1100, 80, 1130, 160, "traffic light")

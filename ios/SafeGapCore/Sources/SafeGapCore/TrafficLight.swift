@@ -164,7 +164,7 @@ public struct TrafficLightTracker: Equatable, Sendable {
     /// Cập nhật với màu của đèn được chọn ở frame này (nil = không thấy đèn).
     @discardableResult
     public mutating func update(t: Double, light: Detection?, color: LightColor?, speedKmh: Double? = nil) -> TrafficLightState? {
-        guard let light, let color else {
+        guard let light, var color else {
             let hold = (speedKmh ?? 0) >= movingKmh ? holdMovingS : holdS
             if let s = state, t - s.lastSeen > hold {
                 state = nil
@@ -175,6 +175,8 @@ public struct TrafficLightTracker: Equatable, Sendable {
             }
             return state
         }
+        // đèn VN đỏ → xanh, không có đỏ → vàng: đang đỏ mà thấy vàng là quầng đỏ / đèn đường (log tối 18–19/11)
+        if color == .yellow, state?.color == .red { color = .red }
         history.append(color)
         if history.count > votes { history.removeFirst(history.count - votes) }
         // bỏ phiếu cả "không rõ": phần lớn frame không rõ màu thì về không rõ (không giữ mãi màu cũ)
