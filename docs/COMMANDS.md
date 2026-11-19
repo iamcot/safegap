@@ -59,7 +59,7 @@ Hoặc trên trang `/label`, cột trái "Train trên Mac": chọn Model rồi b
 dự kiến và điểm mAP50 theo epoch (log gốc ở "Log chi tiết"). Train chạy tách riêng và tự giữ máy thức: refresh trang hay
 tắt / mở lại viewer đều không ảnh hưởng.
 
-Kết quả nằm ở `~/safegap-dataset/runs/<tên>/` (xe), `~/safegap-dataset/signs/runs/<tên>/` (biển) hoặc `~/safegap-dataset/marks/runs/<tên>/` (vạch mặt đường).
+Kết quả nằm ở `~/safegap-dataset/drive/runs/<tên>/` (xe + đèn, chỉ lớp app), `~/safegap-dataset/signs/runs/<tên>/` (biển) hoặc `~/safegap-dataset/marks/runs/<tên>/` (vạch mặt đường).
 Xem `results.png` (mAP50 càng cao càng tốt) và `val_batch0_pred.jpg` (ảnh model đoán thử).
 
 ## Đưa model vào app

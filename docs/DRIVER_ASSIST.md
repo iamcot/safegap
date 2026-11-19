@@ -155,6 +155,11 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
 - [x] B3g. Biển phụ (S.5xx) dưới biển cấm: khoanh **riêng** biển chính và biển phụ (hai khung). Nhóm mới `aux_plate`
       (cuối `SIGN_GROUPS`), danh mục S.501 cự ly, S.502, S.503 hướng, S.505a loại xe, S.508 giờ, S.509 chữ. App chỉ hiện
       "Biển phụ"; sau này: biển phụ nằm ngay dưới biển chính → đọc giờ / cự ly (OCR) để áp `window` / `distance`.
+- [x] Gán màu đèn (chủ app 19/11): lớp `light_red`, `light_yellow`, `light_green`, `light_off` trên trang nhãn
+      (khung đèn đang chọn → thanh "Màu đèn"; `traffic light` = chưa rõ màu). Model xe vẫn chỉ học "traffic light":
+      train model xe giờ dựng `<ds>/drive` chỉ lớp app (`sync_own_drive`; trước đây lớp biển / vạch trong classes.txt
+      chung cũng lọt vào model xe), kết quả ở `<ds>/drive/runs`. Màu đã gán dùng để đo và chỉnh bộ đoán màu
+      (`LightColorClassifier`), nhất là ban đêm.
 - [x] Log 18–19/11 (3 file: sáng 18/11 65 phút, tối 18/11 48 phút, 19/11 sáng + tối 129 phút):
       - Quy tắc 1,5 s đã chạy: d_min trung vị ~16 m ở 37–39 km/h. RED còn 5–9% thời gian chạy, khoảng cách theo thời
         gian lúc RED trung vị 0,9–1,2 s (thật sự bám gần theo ngưỡng 1,35 s = 0,9 × 1,5 s). Đợt RED trung vị 4–6 s,

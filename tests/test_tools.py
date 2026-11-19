@@ -288,3 +288,21 @@ def test_speed_value_classes(tmp_path):
     from proto import labeler as L
 
     assert "P.127_50" in L.class_list(tmp_path) and D.sign_group("P.127_120") == "speed_limit"
+
+
+def test_drive_set_keeps_app_classes_and_folds_light_colors(tmp_path):
+    from proto import dataset as D
+    from proto import labeler as L
+
+    assert "light_red" in L.class_list(tmp_path)
+    ds = tmp_path / "ds"
+    (ds / "images").mkdir(parents=True)
+    (ds / "labels").mkdir()
+    (ds / "classes.txt").write_text("car\nP.130\nlight_red\ntraffic light\n")
+    (ds / "images" / "s__0000001_00.jpg").write_bytes(b"x")
+    (ds / "labels" / "s__0000001_00.txt").write_text("0 .5 .5 .1 .1\n1 .2 .2 .02 .02\n2 .3 .1 .01 .03\n3 .4 .1 .01 .03\n")
+    (ds / "images" / "s__0000002_00.jpg").write_bytes(b"x")
+    assert D.sync_own_drive(ds) == 2
+    lines = (ds / "drive" / "labels" / "s__0000001_00.txt").read_text().split("\n")
+    assert [D.DRIVE_CLASSES[int(x.split()[0])] for x in lines if x] == ["car", "traffic light", "traffic light"]
+    assert (ds / "drive" / "labels" / "s__0000002_00.txt").read_text() == ""

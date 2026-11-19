@@ -34,7 +34,7 @@ from . import dataset as D
 
 ROOT = Path(__file__).resolve().parent.parent
 HTML = Path(__file__).with_name("labeler.html")
-APP_CLASSES = ["car", "truck", "bus", "motorcycle", "traffic light"]   # = YOLOLabel.classes trong app
+APP_CLASSES = D.DRIVE_CLASSES   # = YOLOLabel.classes trong app
 OTHER_SIGN = "sign_other"
 # Model biển chỉ biết nhóm biển: nhóm có một mã QCVN chính thì gợi ý mã đó, nhóm còn lại giữ tên nhóm
 # (proto.dataset.sign_group hiểu cả hai; người gán đổi sang mã cụ thể nếu muốn).
@@ -69,7 +69,7 @@ def sign_names() -> dict[str, str]:
 def class_list(ds: Path) -> list[str]:
     """Lớp chung: những gì bộ dữ liệu đã có (giữ chỉ số), thêm lớp app + biển còn thiếu ở cuối."""
     return D.merge_classes(D.read_classes(ds / "classes.txt"),
-                           APP_CLASSES + list(sign_names()) + SPEED_CLASSES + [OTHER_SIGN] + list(GROUP_NAMES)
+                           APP_CLASSES + list(D.LIGHT_COLORS) + list(sign_names()) + SPEED_CLASSES + [OTHER_SIGN] + list(GROUP_NAMES)
                            + D.MARK_CLASSES)
 
 
@@ -141,7 +141,7 @@ def _iou(a: dict, b: dict) -> float:
 def new_suggestions(existing: list[dict], proposed: list[dict], iou: float = 0.4) -> list[dict]:
     """Khung gợi ý chưa trùng khung đã có (cùng loại biển / xe), khung tin cậy cao trước."""
     def kind(c: str) -> str:
-        return "vehicle" if c in APP_CLASSES else ("mark" if c in D.MARKS else "sign")
+        return "vehicle" if c in APP_CLASSES or c in D.LIGHT_COLORS else ("mark" if c in D.MARKS else "sign")
     out: list[dict] = []
     for p in sorted(proposed, key=lambda b: -b.get("conf", 0)):
         if any(kind(e["cls"]) == kind(p["cls"]) and _iou(e, p) > iou for e in existing + out):
@@ -160,7 +160,8 @@ class Suggester:
 
     def weights(self) -> dict[str, Optional[Path]]:
         # model xe COCO gốc giống hệt model trên app (nhãn máy đã có): chỉ gợi ý xe khi đã tự train
-        return {"signs": latest_weights(self.ds / "signs" / "runs"), "drive": latest_weights(self.ds / "runs"),
+        return {"signs": latest_weights(self.ds / "signs" / "runs"),
+                "drive": latest_weights(self.ds / "drive" / "runs") or latest_weights(self.ds / "runs"),
                 "marks": latest_weights(self.ds / "marks" / "runs")}
 
     def _model(self, task: str, w: Path):
@@ -288,7 +289,7 @@ def make_router(ds_dir: Optional[Path] = None, suggester=None) -> APIRouter:
             out.append({"name": d.name, "images": n, "reviewed": len(reviewed(d))})
         names = sign_names()
         return {"sessions": out, "classes": class_list(ds()), "inbox": str(box),
-                "names": {**names, OTHER_SIGN: "Biển khác (chưa có trong danh sách)",
+                "names": {**names, **D.LIGHT_COLORS, OTHER_SIGN: "Biển khác (chưa có trong danh sách)",
                           **{c: f"Tốc độ tối đa {c[6:]} km/h" for c in SPEED_CLASSES}, **GROUP_NAMES, **D.MARKS}}
 
     @r.post("/api/label/upload")

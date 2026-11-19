@@ -2,7 +2,7 @@
 # Export YOLO sang CoreML cho app iOS và chép vào ios/SafeGap/Models/.
 #   ./scripts/export_coreml.sh            # yolo11n
 #   ./scripts/export_coreml.sh yolov8n    # model khác
-#   ./scripts/export_coreml.sh ~/safegap-dataset/runs/safegap/weights/best.pt [tên]   # model tự train
+#   ./scripts/export_coreml.sh ~/safegap-dataset/drive/runs/<tên>/weights/best.pt [tên]   # model tự train
 #                                          (tên mặc định safegap_drive → safegap_drive.mlpackage)
 #   ./scripts/export_coreml.sh ~/safegap-dataset/signs/runs/<lần train>/weights/best.pt signs 736,1280   # model dò biển
 #                                          (tên phải bắt đầu bằng "signs"; ảnh 16:9 to vì biển rất nhỏ)

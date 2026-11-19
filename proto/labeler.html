@@ -112,9 +112,14 @@ const APP = ['car', 'truck', 'bus', 'motorcycle', 'traffic light'];
 const HOT = ['car', 'truck', 'motorcycle', 'traffic light', 'P.130', 'P.131a', 'R.411', 'R.412', 'P.127', 'bus'];
 const SPEEDS = [5, 30, 40, 50, 60, 70, 80, 90, 100, 120];
 const isSpeed = c => c === 'P.127' || c.startsWith('P.127_');
+// đèn: chọn màu sau khi khoanh (traffic light = chưa rõ màu; khi train model xe gom hết về traffic light)
+const LIGHTS = [['light_red', 'Đỏ'], ['light_yellow', 'Vàng'], ['light_green', 'Xanh'], ['light_off', 'Tắt'], ['traffic light', 'Chưa rõ']];
+const isLight = c => LIGHTS.some(([k]) => k === c);
 let S = { classes: [], names: {}, sessions: [], session: null, frames: [], idx: -1, boxes: [], sel: -1, cls: 'car', hide: false, img: null, undo: [], dirty: false };
 
+const LIGHT_HUE = { light_red: '#ff4d4d', light_yellow: '#ffd23f', light_green: '#3ddc84', light_off: '#9aa0a6' };
 function color(name) {
+  if (LIGHT_HUE[name]) return LIGHT_HUE[name];
   let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 360;
   if (name.startsWith('P.') || name.startsWith('DP.')) return `hsl(${h % 40 + 340},85%,60%)`;   // biển: tông đỏ/hồng
   return `hsl(${h},70%,60%)`;
@@ -148,12 +153,13 @@ function renderSpeeds() {
   const el = $('speeds'), cur = S.sel >= 0 && S.boxes[S.sel] ? S.boxes[S.sel].cls : S.cls;
   if (speedKey === cur) return;
   speedKey = cur;
-  el.hidden = !isSpeed(cur);
-  if (el.hidden) return;
-  el.innerHTML = '<span class="hint">Tốc độ:</span>';
-  SPEEDS.forEach(v => {
-    const b = document.createElement('button'), c = `P.127_${v}`;
-    b.textContent = v; if (cur === c) b.className = 'on';
+  const opts = isSpeed(cur) ? SPEEDS.map(v => [`P.127_${v}`, String(v)]) : isLight(cur) ? LIGHTS : null;
+  el.hidden = !opts;
+  if (!opts) return;
+  el.innerHTML = `<span class="hint">${isSpeed(cur) ? 'Tốc độ' : 'Màu đèn'}:</span>`;
+  opts.forEach(([c, label]) => {
+    const b = document.createElement('button');
+    b.textContent = label; if (cur === c) b.className = 'on';
     b.onclick = () => pickClass(c);
     el.appendChild(b);
   });

@@ -9,7 +9,7 @@ Luồng mỗi tối:
      duyệt từng ảnh (ghi review.json), có nút Gộp + Train luôn.
   3. Gộp:   uv run python -m proto.dataset merge ~/Downloads/capture_*.zip ~/Downloads/capture_2026*/
   4. Train: uv run python -m proto.dataset train --epochs 80          (mặc định --device mps, từ yolo11n.pt)
-  5. Export Core ML: ./scripts/export_coreml.sh ~/safegap-dataset/runs/<tên>/weights/best.pt
+  5. Export Core ML: ./scripts/export_coreml.sh ~/safegap-dataset/drive/runs/<tên>/weights/best.pt
 
 Bộ dò biển (B3), train riêng, lớp = nhóm biển (SIGN_GROUPS):
   uv run python -m proto.dataset import-roboflow ~/datasets/vn-signs     # bộ Zalo trên Roboflow, YOLOv11
@@ -267,6 +267,54 @@ def sync_own_marks(ds: Path) -> int:
     return n
 
 
+# ---- Model xe + đèn (lớp app, YOLOLabel.classes): train ở <ds>/drive, chỉ giữ lớp app ----
+DRIVE_CLASSES = ["car", "truck", "bus", "motorcycle", "traffic light"]
+# đèn gán theo màu (để đo / train bộ đoán màu); model xe vẫn chỉ học "traffic light"
+LIGHT_COLORS = {"light_red": "Đèn đỏ", "light_yellow": "Đèn vàng", "light_green": "Đèn xanh",
+                "light_off": "Đèn tắt / không rõ màu"}
+
+
+def drive_class(name: str) -> str | None:
+    if name in DRIVE_CLASSES:
+        return name
+    return "traffic light" if name in LIGHT_COLORS else None
+
+
+def to_drive_labels(text: str, src: list[str]) -> str:
+    out = []
+    for ln in text.splitlines():
+        parts = ln.split()
+        if len(parts) != 5 or not parts[0].isdigit():
+            continue
+        i = int(parts[0])
+        c = drive_class(src[i]) if i < len(src) else None
+        if c is not None:
+            out.append(" ".join([str(DRIVE_CLASSES.index(c)), *parts[1:]]))
+    return "".join(ln + "\n" for ln in out)
+
+
+def sync_own_drive(ds: Path) -> int:
+    """Dựng <ds>/drive từ ảnh tự thu đã gộp: chỉ lớp app (biển, vạch bỏ; đèn theo màu → traffic light)."""
+    dd = ds / "drive"
+    shutil.rmtree(dd / "images", ignore_errors=True)
+    shutil.rmtree(dd / "labels", ignore_errors=True)
+    (dd / "images").mkdir(parents=True)
+    (dd / "labels").mkdir(parents=True)
+    (dd / "classes.txt").write_text("\n".join(DRIVE_CLASSES) + "\n", encoding="utf-8")
+    src = read_classes(ds / "classes.txt")
+    n = 0
+    for img in _images(ds / "images"):
+        lbl = ds / "labels" / f"{img.stem}.txt"
+        text = to_drive_labels(lbl.read_text(encoding="utf-8"), src) if lbl.exists() else ""
+        try:
+            os.link(img, dd / "images" / img.name)
+        except OSError:
+            shutil.copy2(img, dd / "images" / img.name)
+        (dd / "labels" / f"{img.stem}.txt").write_text(text, encoding="utf-8")
+        n += 1
+    return n
+
+
 def to_sign_labels(text: str, src: list[str]) -> str:
     """Giữ các khung biển của một file nhãn, đổi lớp sang nhóm biển (SIGN_GROUPS)."""
     out = []
@@ -394,6 +442,10 @@ def train(ds: Path, *, model: str, epochs: int, imgsz: int, batch: int, device: 
     if task == "signs":
         print(f"Ảnh tự thu chép sang bộ biển: {sync_own_signs(ds)}")
         ds = ds / "signs"
+    elif task == "drive":
+        # chỉ lớp app: lớp biển / vạch trong classes.txt chung không lọt vào model xe
+        print(f"Ảnh cho model xe: {sync_own_drive(ds)}")
+        ds = ds / "drive"
     elif task == "marks":
         n = sync_own_marks(ds)
         print(f"Ảnh có vạch mặt đường: {n}")
