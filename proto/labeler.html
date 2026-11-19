@@ -8,7 +8,10 @@
   :root { --bg:#111418; --panel:#1a1e24; --line:#2a3038; --text:#e6e8eb; --muted:#8a929c; --accent:#4aa8ff; --ok:#2ecc40; }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif; }
-  .app { display:grid; grid-template-columns:260px 1fr 260px; height:100vh; }
+  .app { display:grid; grid-template-columns:var(--lw,260px) 6px 1fr 6px var(--rw,260px); height:100vh; }
+  .grip { cursor:col-resize; background:var(--line); opacity:.4; } .grip:hover, .grip.drag { background:var(--accent); opacity:.8; }
+  .filters { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:4px; } .filters label { display:flex; gap:4px; align-items:center; }
+  .filters input { width:auto; }
   aside { background:var(--panel); border-right:1px solid var(--line); padding:10px 12px; overflow-y:auto; }
   aside.right { border-right:0; border-left:1px solid var(--line); }
   main { display:flex; flex-direction:column; min-width:0; padding:10px 12px; gap:8px; }
@@ -44,7 +47,7 @@
   .drop { border:1px dashed var(--line); border-radius:6px; padding:10px; text-align:center; color:var(--muted); font-size:12px; }
   .drop.over { border-color:var(--accent); color:var(--text); }
   kbd { font:11px ui-monospace,monospace; background:#252b33; border:1px solid var(--line); border-radius:3px; padding:0 4px; }
-  @media (max-width: 900px) { .app { grid-template-columns:1fr; height:auto; } .stage { height:60vw; flex:none; } }
+  @media (max-width: 900px) { .app { grid-template-columns:1fr; height:auto; } .grip { display:none; } .stage { height:60vw; flex:none; } }
 </style>
 </head>
 <body>
@@ -54,7 +57,9 @@
     <div class="drop" id="drop">Kéo thả file <b>.zip</b> phiên thu từ app vào đây<br>hoặc chép vào <span id="inbox"></span></div>
     <h2>Phiên</h2>
     <div class="list" id="sessions"></div>
-    <h2>Ảnh <label class="hint" style="float:right;text-transform:none;letter-spacing:0"><input type="checkbox" id="onlyTodo" style="width:auto"> chưa duyệt</label><label class="hint" style="float:right;text-transform:none;letter-spacing:0;margin-right:8px" title="Chỉ ảnh app thấy biển hoặc đèn lúc thu"><input type="checkbox" id="onlySigns" style="width:auto"> có biển/đèn</label></h2>
+    <h2>Ảnh</h2>
+    <div class="filters hint"><label><input type="checkbox" id="onlyTodo"> chưa duyệt</label>
+      <label title="Chỉ ảnh app thấy biển hoặc đèn lúc thu"><input type="checkbox" id="onlySigns"> có biển/đèn</label></div>
     <div class="list" id="frames" style="max-height:40vh;overflow-y:auto"></div>
     <h2>Train trên Mac</h2>
     <div class="bar"><label class="hint" style="flex:1">Epoch <input type="number" id="epochs" value="80" min="1"></label>
@@ -70,6 +75,7 @@
       <details><summary class="hint">Log chi tiết</summary><pre id="log"></pre></details>
     </div>
   </aside>
+  <div class="grip" id="gripL" title="Kéo để đổi độ rộng"></div>
   <main>
     <div class="bar">
       <button id="prev">← Trước</button><button id="next">Sau →</button>
@@ -88,6 +94,7 @@
       <kbd>←</kbd><kbd>→</kbd> chuyển ảnh · <kbd>Ctrl/⌘Z</kbd> hoàn tác · <kbd>M</kbd> model khoanh lại ·
       Khung nét đứt là model gợi ý: sai thì xoá / sửa, đúng thì cứ duyệt. Chỉ ảnh đã duyệt mới vào bộ train.</div>
   </main>
+  <div class="grip" id="gripR" title="Kéo để đổi độ rộng"></div>
   <aside class="right">
     <h2 style="margin-top:0">Lớp</h2>
     <input id="search" placeholder="Tìm theo tên, gõ không dấu được: cam do, nguoc chieu… (phím /)">
@@ -123,6 +130,7 @@ function renderClasses() {
     if (q && !fold(c).includes(q) && !fold(nm).includes(q)) return;
     const d = document.createElement('div');
     if (c === S.cls) d.className = 'on';
+    d.title = nm ? `${c} · ${nm}` : c;
     d.innerHTML = `<i style="background:${color(c)}"></i><span>${c}</span><small>${nm}</small>${i < 10 ? `<kbd>${(i + 1) % 10}</kbd>` : ''}`;
     d.onclick = () => pickClass(c);
     el.appendChild(d);
@@ -351,6 +359,31 @@ window.addEventListener('mouseup', () => {
   drag = null; updateStatus(); draw();
 });
 window.addEventListener('resize', draw);
+// rê chuột lên khung trên ảnh: hiện tên biển đầy đủ (nhãn vẽ trên ảnh bị cắt ngắn)
+cv.addEventListener('mousemove', e => {
+  if (drag) return;
+  const r = cv.getBoundingClientRect(), h = hit(e.clientX - r.left, e.clientY - r.top);
+  const b = h ? S.boxes[h.i] : null;
+  cv.title = b ? (S.names[b.cls] ? `${b.cls} · ${S.names[b.cls]}` : b.cls) : '';
+});
+// kéo dãn cột trái / phải, nhớ độ rộng
+(function grips() {
+  const app = document.querySelector('.app');
+  const set = (k, v) => { app.style.setProperty(k, v + 'px'); try { localStorage.setItem(k, v); } catch {} };
+  for (const k of ['--lw', '--rw']) { try { const v = +localStorage.getItem(k); if (v) app.style.setProperty(k, v + 'px'); } catch {} }
+  for (const [id, k, sign] of [['gripL', '--lw', 1], ['gripR', '--rw', -1]]) {
+    const g = $(id);
+    g.addEventListener('mousedown', e => {
+      e.preventDefault();
+      const x0 = e.clientX, w0 = (id === 'gripL' ? app.children[0] : app.children[4]).getBoundingClientRect().width;
+      g.classList.add('drag');
+      const mv = ev => { set(k, Math.max(180, Math.min(window.innerWidth * 0.45, w0 + sign * (ev.clientX - x0)))); draw(); };
+      const up = () => { g.classList.remove('drag'); window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); };
+      window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up);
+    });
+    g.addEventListener('dblclick', () => { app.style.removeProperty(k); try { localStorage.removeItem(k); } catch {} draw(); });
+  }
+})();
 
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') {
