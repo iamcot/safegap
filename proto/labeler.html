@@ -84,12 +84,13 @@
       <button id="sugBtn" title="M">Khoanh lại (M)</button>
       <span id="sugInfo" class="hint"></span>
       <span id="status" class="pill"></span>
+      <span id="zoomInfo" class="hint"></span>
       <button id="toggle" title="H">Ẩn khung</button>
       <button class="primary" id="approve" title="Enter / Space">Duyệt ✓ (Enter)</button>
     </div>
     <div class="bar" id="speeds" hidden></div>
     <div class="stage"><canvas id="cv"></canvas></div>
-    <div class="hint">Kéo trên ảnh (kể cả bên trong khung khác): vẽ khung lớp đang chọn · Bấm khung: chọn; khung đang chọn: kéo để dời, kéo góc để đổi cỡ · <kbd>Shift</kbd>+kéo: luôn vẽ mới · <kbd>Del</kbd> xoá ·
+    <div class="hint">Kéo trên ảnh (kể cả bên trong khung khác): vẽ khung lớp đang chọn · Bấm khung: chọn; khung đang chọn: kéo để dời, kéo góc để đổi cỡ · <kbd>Shift</kbd>+kéo: luôn vẽ mới · <kbd>⌘</kbd>+cuộn: zoom, cuộn: dời ảnh, <kbd>F</kbd>: vừa khung · <kbd>Del</kbd> xoá ·
       <kbd>1</kbd>–<kbd>9</kbd>, <kbd>0</kbd> lớp hay dùng (đổi lớp khung đang chọn) · biển tốc độ: bấm mốc trên thanh "Tốc độ" · <kbd>/</kbd> tìm lớp · <kbd>Enter</kbd> duyệt + ảnh sau ·
       <kbd>←</kbd><kbd>→</kbd> chuyển ảnh · <kbd>Ctrl/⌘Z</kbd> hoàn tác · <kbd>M</kbd> model khoanh lại ·
       Khung nét đứt là model gợi ý: sai thì xoá / sửa, đúng thì cứ duyệt. Chỉ ảnh đã duyệt mới vào bộ train.</div>
@@ -264,13 +265,32 @@ async function approveNext() {
 // ---- vẽ + chỉnh khung ----
 const cv = $('cv'), ctx = cv.getContext('2d');
 let view = { s: 1, ox: 0, oy: 0 };
+// zoom: k = độ phóng so với vừa khung, px/py = dời ảnh (px CSS). ⌘/Ctrl + cuộn (hoặc chụm 2 ngón) để zoom
+// quanh con trỏ, cuộn thường để dời khi đang zoom, phím F về vừa khung. Giữ nguyên khi chuyển ảnh.
+let Z = { k: 1, px: 0, py: 0 };
 function layout() {
   const r = cv.getBoundingClientRect(), dpr = devicePixelRatio || 1;
   cv.width = r.width * dpr; cv.height = r.height * dpr;
   if (!S.img) return;
-  const s = Math.min(r.width / S.img.width, r.height / S.img.height);
-  view = { s, ox: (r.width - S.img.width * s) / 2, oy: (r.height - S.img.height * s) / 2, w: S.img.width * s, h: S.img.height * s, dpr };
+  const s = Math.min(r.width / S.img.width, r.height / S.img.height) * Z.k;
+  const w = S.img.width * s, h = S.img.height * s;
+  // không cho dời ảnh ra khỏi khung quá nửa
+  Z.px = Math.max(-(w / 2), Math.min(w / 2, Z.px)); Z.py = Math.max(-(h / 2), Math.min(h / 2, Z.py));
+  if (Z.k === 1) { Z.px = 0; Z.py = 0; }
+  view = { s, ox: (r.width - w) / 2 + Z.px, oy: (r.height - h) / 2 + Z.py, w, h, dpr };
 }
+function zoomAt(mx, my, f) {
+  if (!S.img) return;
+  const r = cv.getBoundingClientRect();
+  const u = (mx - view.ox) / view.w, v = (my - view.oy) / view.h;
+  const k = Math.max(1, Math.min(8, Z.k * f));
+  const fit = Math.min(r.width / S.img.width, r.height / S.img.height) * k;
+  const w = S.img.width * fit, h = S.img.height * fit;
+  Z = { k, px: mx - u * w - (r.width - w) / 2, py: my - v * h - (r.height - h) / 2 };
+  draw(); showZoom();
+}
+function showZoom() { $('zoomInfo').textContent = Z.k > 1.01 ? `zoom ${Math.round(Z.k * 100)}% (F: vừa khung)` : ''; }
+function resetZoom() { Z = { k: 1, px: 0, py: 0 }; draw(); showZoom(); }
 function toPx(b) { return { x1: view.ox + (b.cx - b.w / 2) * view.w, y1: view.oy + (b.cy - b.h / 2) * view.h, x2: view.ox + (b.cx + b.w / 2) * view.w, y2: view.oy + (b.cy + b.h / 2) * view.h }; }
 function fromPx(x1, y1, x2, y2, cls) {
   [x1, x2] = [Math.min(x1, x2), Math.max(x1, x2)]; [y1, y2] = [Math.min(y1, y2), Math.max(y1, y2)];
@@ -360,6 +380,18 @@ window.addEventListener('mouseup', () => {
   drag = null; updateStatus(); draw();
 });
 window.addEventListener('resize', draw);
+cv.addEventListener('wheel', e => {
+  if (!S.img) return;
+  const r = cv.getBoundingClientRect();
+  if (e.metaKey || e.ctrlKey) {   // ⌘ + cuộn chuột; chụm 2 ngón trên trackpad cũng ra ctrlKey
+    e.preventDefault();
+    const dy = Math.max(-50, Math.min(50, e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY));   // 1 nấc ≈ ×1,35
+    zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-dy * 0.006));
+  } else if (Z.k > 1) {
+    e.preventDefault();
+    Z.px -= e.deltaX; Z.py -= e.deltaY; draw();
+  }
+}, { passive: false });
 // rê chuột lên khung trên ảnh: hiện tên biển đầy đủ (nhãn vẽ trên ảnh bị cắt ngắn)
 cv.addEventListener('mousemove', e => {
   if (drag) return;
@@ -405,6 +437,7 @@ document.addEventListener('keydown', e => {
   else if (k === 'h' || k === 'H') toggleHide();
   else if (k === 'm' || k === 'M') suggest(S.idx);
   else if (k === 'Escape') { S.sel = -1; draw(); }
+  else if (k === 'f' || k === 'F') resetZoom();
   else if (/^[0-9]$/.test(k)) { const c = ordered()[(+k + 9) % 10]; if (c) pickClass(c); }
 });
 function toggleHide() { S.hide = !S.hide; $('toggle').textContent = S.hide ? 'Hiện khung' : 'Ẩn khung'; draw(); }
