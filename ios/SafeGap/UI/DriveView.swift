@@ -390,31 +390,32 @@ private struct Car {
 /// dịch dọc để điểm `topZ` (mũi xe) nằm đúng mép trên.
 private struct NearCamera {
     let size: CGSize
-    let height = 8.0
-    let back = 25.0
-    let pitch = 28.0 * Double.pi / 180
+    static let height = 8.0
+    static let back = 25.0
+    static let pitch = 28.0 * Double.pi / 180
     let focal: Double
     let cy: Double
 
     init(size: CGSize, topZ: Double) {
         self.size = size
-        func ratio(_ z: Double) -> Double { let (d, v) = Self.view(0, z, height, back, pitch); return v / d }
-        let byWidth = Double(size.width) / 16 * Self.view(0, 0, height, back, pitch).d
+        func ratio(_ z: Double) -> Double { let (d, v) = Self.view(0, z); return v / d }
+        let byWidth = Double(size.width) / 16 * Self.view(0, 0).d
         let byHeight = Double(size.height) / max(ratio(-11) - ratio(topZ), 1e-3)
-        focal = max(min(byWidth, byHeight), 1)
-        cy = -focal * ratio(topZ)
+        let f = max(min(byWidth, byHeight), 1)
+        focal = f
+        cy = -f * ratio(topZ)
     }
 
-    private static func view(_ y: Double, _ z: Double, _ h: Double, _ back: Double, _ pitch: Double) -> (d: Double, v: Double) {
-        let dz = z + back, dy = h - y
+    private static func view(_ y: Double, _ z: Double) -> (d: Double, v: Double) {
+        let dz = z + back, dy = height - y
         return (max(dz * cos(pitch) + dy * sin(pitch), 0.3), dy * cos(pitch) - dz * sin(pitch))
     }
 
     /// Số điểm màn hình cho 1 m bề ngang ở mặt đường, cách z phía trước.
-    func scale(_ z: Double) -> Double { focal / Self.view(0, z, height, back, pitch).d }
+    func scale(_ z: Double) -> Double { focal / Self.view(0, z).d }
 
     func point3(_ x: Double, _ y: Double, _ z: Double) -> CGPoint {
-        let (d, v) = Self.view(y, z, height, back, pitch)
+        let (d, v) = Self.view(y, z)
         return CGPoint(x: size.width / 2 + CGFloat(focal * x / d), y: CGFloat(cy + focal * v / d))
     }
 
