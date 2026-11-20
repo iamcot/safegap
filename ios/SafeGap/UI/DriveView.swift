@@ -1,4 +1,4 @@
-// Màn hình lái khi ẩn camera: vẽ lại con đường theo mét, full màn hình, kiểu màn lái xe điện.
+// Màn hình lái chính: 2 cột (số liệu + dải camera thật + con đường vẽ lại | bản đồ OSM). Con đường vẽ lại theo mét, kiểu màn lái xe điện.
 // Vạch làn và các xe được chiếu ngược từ ảnh xuống mặt đường (X ngang, Z phía trước, mét),
 // rồi vẽ lại bằng một "camera ảo" đặt sau và cao hơn xe mình. Xe là ảnh vẽ sẵn (Assets: car_own, car_rear, truck_rear) đặt đúng vị trí và cỡ theo mét;
 // dải màu từ đầu xe mình tới xe phía trước báo mức an toàn. Sáng/tối theo giao diện máy.
@@ -14,36 +14,90 @@ struct DriveView: View {
         let s = model.snapshot
         let r = s.result
         let pal = Palette.of(scheme)
-        ZStack {
-            let road = RoadCanvas(snapshot: s, calibration: model.calibration, config: model.config, pal: pal)
-            road.ignoresSafeArea()
-            AlertGlow(level: r.level).ignoresSafeArea()
-            VStack(spacing: 0) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        SpeedBlock(snapshot: s, pal: pal)
-                        if !s.activeSigns.isEmpty { SignIconsRow(signs: s.activeSigns) }
-                        if !s.seenSigns.isEmpty { SeenSignsRow(signs: s.seenSigns) }
+        GeometryReader { geo in
+            // chủ app 20/11: 2 cột. Trái 2/3: số liệu chính + biển cấm / camera thật (chỉ dải từ capo trở lên) /
+            // con đường vẽ lại. Phải 1/3: bản đồ OpenStreetMap.
+            let mapW = (geo.size.width / 3).rounded()
+            let h = geo.size.height
+            let topH = min(max(h * 0.22, 74), 110)
+            let camH = (h * 0.38).rounded()
+            HStack(spacing: 0) {
+                VStack(spacing: 0) {
+                    topBar(s, pal)
+                        .padding(.horizontal, 14)
+                        .frame(height: topH)
+                    CameraStrip(snapshot: s, calibration: model.calibration, session: model.camera.session)
+                        .frame(height: camH)
+                        .clipped()
+                    ZStack(alignment: .bottomLeading) {
+                        RoadCanvas(snapshot: s, calibration: model.calibration, config: model.config, pal: pal)
+                        statusLine(s, pal).padding(.horizontal, 12).padding(.bottom, 8)
                     }
-                    Spacer()
-                    controls(pal)
+                    .clipped()
                 }
-                Spacer()
-                HStack(alignment: .bottom) {
-                    statusLine(s, pal)
-                    Spacer()
-                    DistanceBlock(result: r, pal: pal)
+                .frame(width: geo.size.width - mapW)
+                ZStack(alignment: .top) {
+                    OSMMapView(dark: pal.dark)
+                    controls(pal).padding(.top, 8)
                 }
+                .frame(width: mapW)
+                .clipped()
             }
-            .padding(.horizontal, 22)
-            .padding(.vertical, 14)
         }
-        .background(pal.bgTop)
+        .background(pal.bgTop.ignoresSafeArea())
+        .overlay(AlertGlow(level: r.level).ignoresSafeArea())
         .animation(.easeInOut(duration: 0.25), value: r.level)
     }
 
+    /// Dòng trên: tốc độ, khoảng cách tới xe trước + mức cảnh báo, biển cấm đang có hiệu lực.
+    private func topBar(_ s: FrameSnapshot, _ pal: Palette) -> some View {
+        let r = s.result
+        return HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: -4) {
+                Text(r.speedKmh.map { String(format: "%.0f", $0) } ?? "--")
+                    .font(.system(size: 44, weight: .medium, design: .rounded)).monospacedDigit()
+                    .contentTransition(.numericText())
+                HStack(spacing: 4) {
+                    Text("km/h").font(.system(size: 12, weight: .semibold))
+                    if s.speedSimulated { Chip(text: "giả lập", pal: pal) } else if !s.gpsOK { Chip(text: "chưa GPS", pal: pal) }
+                }
+                .foregroundStyle(pal.textDim)
+            }
+            .foregroundStyle(pal.text)
+            if let lim = s.road?.maxspeed {
+                Text("\(lim)")
+                    .font(.system(size: 17, weight: .bold, design: .rounded)).foregroundStyle(.black)
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(.white))
+                    .overlay(Circle().stroke(Color.red, lineWidth: 4.5))
+            }
+            if !s.activeSigns.isEmpty {
+                SignIconsRow(signs: s.activeSigns, size: 40)
+            }
+            Spacer(minLength: 4)
+            VStack(alignment: .trailing, spacing: 1) {
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text(r.d.map { String(format: "%.0f", $0) } ?? "--")
+                        .font(.system(size: 44, weight: .medium, design: .rounded)).monospacedDigit()
+                        .contentTransition(.numericText())
+                    Text("m").font(.system(size: 17, weight: .semibold)).foregroundStyle(pal.textDim)
+                }
+                HStack(spacing: 6) {
+                    Text("giữ ≥ " + (r.dMin.map { String(format: "%.0f m", $0) } ?? "--"))
+                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(pal.textDim)
+                    Text(r.level.label)
+                        .font(.system(size: 11, weight: .heavy)).tracking(1)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(r.level == .none ? pal.textDim.opacity(0.25) : pal.path(r.level), in: Capsule())
+                        .foregroundStyle(r.level == .yellow ? .black : .white)
+                }
+            }
+            .foregroundStyle(pal.text)
+        }
+    }
+
     private func controls(_ pal: Palette) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 6) {
             GlassButton(pal: pal) { model.toggleZoom() } label: {
                 Text(model.settings.zoom2x ? "2x" : "1x").font(.system(size: 16, weight: .bold, design: .rounded))
             }
@@ -122,65 +176,6 @@ struct Palette {
 
 // MARK: - Khối chữ
 
-private struct SpeedBlock: View {
-    let snapshot: FrameSnapshot
-    let pal: Palette
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: -6) {
-            Text(snapshot.result.speedKmh.map { String(format: "%.0f", $0) } ?? "--")
-                .font(.system(size: 68, weight: .medium, design: .rounded))
-                .monospacedDigit()
-                .contentTransition(.numericText())
-            HStack(spacing: 6) {
-                if let lim = snapshot.road?.maxspeed {
-                    Text("\(lim)")
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .foregroundStyle(.black)
-                        .frame(width: 34, height: 34)
-                        .background(Circle().fill(.white))
-                        .overlay(Circle().stroke(Color.red, lineWidth: 4))
-                }
-                Text("km/h").font(.system(size: 15, weight: .semibold))
-                if snapshot.speedSimulated {
-                    Chip(text: "giả lập", pal: pal)
-                } else if !snapshot.gpsOK {
-                    Chip(text: "chưa có GPS", pal: pal)
-                }
-            }
-            .foregroundStyle(pal.textDim)
-        }
-        .foregroundStyle(pal.text)
-    }
-}
-
-private struct DistanceBlock: View {
-    let result: FrameResult
-    let pal: Palette
-
-    var body: some View {
-        VStack(alignment: .trailing, spacing: 2) {
-            Text(result.level.label)
-                .font(.system(size: 13, weight: .heavy))
-                .tracking(1.5)
-                .padding(.horizontal, 12).padding(.vertical, 5)
-                .background(result.level == .none ? pal.textDim.opacity(0.25) : pal.path(result.level), in: Capsule())
-                .foregroundStyle(result.level == .yellow ? .black : .white)
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(result.d.map { String(format: "%.0f", $0) } ?? "--")
-                    .font(.system(size: 60, weight: .medium, design: .rounded))
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                Text("m").font(.system(size: 22, weight: .semibold)).foregroundStyle(pal.textDim)
-            }
-            Text("Cần giữ ≥ " + (result.dMin.map { String(format: "%.0f m", $0) } ?? "--"))
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(pal.textDim)
-        }
-        .foregroundStyle(pal.text)
-    }
-}
-
 private struct Chip: View {
     let text: String
     let pal: Palette
@@ -201,7 +196,7 @@ private struct GlassButton<L: View>: View {
             label()
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(pal.text)
-                .frame(width: 46, height: 40)
+                .frame(width: 40, height: 36)
                 .background(pal.button, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(pal.textDim.opacity(0.2)))
                 .shadow(color: .black.opacity(pal.dark ? 0 : 0.08), radius: 6, y: 2)

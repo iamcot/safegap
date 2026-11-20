@@ -88,7 +88,7 @@ struct SettingsView: View {
                 }
                 Section {
                     Toggle("Chạy mát (15 fps)", isOn: $model.settings.coolMode)
-                    Toggle("Ẩn hình camera trên màn hình chính", isOn: $model.settings.hidePreview)
+                    Toggle("Màn hình chính 2 cột (dải camera + bản đồ), tắt = camera lớn", isOn: $model.settings.hidePreview)
                 } header: {
                     Text("Nhiệt độ máy")
                 } footer: {

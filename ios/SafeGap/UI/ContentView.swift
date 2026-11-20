@@ -1,4 +1,4 @@
-// Màn hình ngang. Ẩn camera: full màn hình DriveView. Hiện camera: trái là camera + box, phải là HUD (hoặc bảng hiệu chỉnh).
+// Màn hình ngang. Mặc định: DriveView 2 cột (số liệu + dải camera + con đường vẽ lại | bản đồ OSM). Hiện camera: trái là camera + box, phải là HUD (hoặc bảng hiệu chỉnh).
 import SafeGapCore
 import SwiftUI
 
@@ -9,7 +9,7 @@ struct ContentView: View {
     var body: some View {
         Group {
             if model.settings.hidePreview && model.screen != .calibration {
-                // chạy mát: không hiện camera, full màn hình là con đường vẽ lại + số liệu
+                // màn chính 2 cột: dải camera nhỏ từ capo trở lên, con đường vẽ lại, bản đồ
                 ZStack {
                     OrientationReader { model.camera.setRotation($0) }
                     DriveView(showSettings: $showSettings)

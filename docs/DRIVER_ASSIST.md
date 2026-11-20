@@ -260,6 +260,12 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
 
 ## Giai đoạn E – Mở rộng
 
+- [x] Màn hình chính 2 cột (chủ app 20/11, `UI/DriveView.swift`): cột trái 2/3 chia 3 dòng: (1) tốc độ, biển tốc độ OSM,
+  biển cấm đang có hiệu lực, khoảng cách tới xe trước + "giữ ≥ d_min" + mức cảnh báo; (2) dải camera thật
+  (`UI/CameraStrip.swift`): chỉ cắt từ vạch capo (`maxBottomRatio`) trở lên, cao 38% màn hình, có box xe / biển vẽ đè;
+  (3) con đường vẽ lại + dòng trạng thái. Cột phải 1/3: bản đồ OSM (`UI/OSMMapView.swift`, ô tile.openstreetmap.org
+  với User-Agent riêng, cache đĩa 200 MB, xoay theo hướng xe, kéo tay thì 8 s sau tự bám lại, ban đêm làm tối 35%).
+  Cài đặt "Màn hình chính 2 cột" tắt thì về màn camera lớn + HUD như cũ.
 - [ ] Tốc độ GPS (để làm sau, 17/11): GPS thấp hơn đồng hồ xe 2–5 km/h. Phần lớn do đồng hồ chỉ dư theo luật (~5–8%),
   nên cảnh báo vẫn tính theo GPS (gần tốc độ thật, máy bắn tốc độ đo tốc độ thật). Việc cần làm: (1) ô "Bù đồng hồ (%)"
   trong Cài đặt, chỉ đổi số hiển thị; (2) chỗ bị che (hẻm, nhà cao, hầm) GPS trễ/tụt: trộn gia tốc kế (CoreMotion) với
