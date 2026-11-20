@@ -267,8 +267,8 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
   với User-Agent riêng, cache đĩa 200 MB, xoay theo hướng xe, kéo tay thì 8 s sau tự bám lại, ban đêm làm tối 35%).
   Vị trí lấy từ GPS của app (FrameSnapshot.gpsLat/Lon/Course), không dùng vị trí MapKit; góc dưới hiện "Đang chờ GPS…"
   hoặc "Không tải được bản đồ: HTTP xxx / lỗi mạng" khi chưa có ô ảnh nào. Ô ảnh bản đồ khác "ô dữ liệu đường" trong Cài đặt.
-  20/11 tối: máy chủ tile.openstreetmap.org "không thể kết nối" trên máy chủ app → thử lần lượt CARTO Voyager
-  (basemaps.cartocdn.com) rồi OSM France, nhớ máy chủ chạy được; 6 ô lỗi hết mà chưa tải được ô nào thì bỏ lớp ô, dùng nền Apple Maps.
+  20/11 tối: máy chủ tile.openstreetmap.org "không thể kết nối" trên máy chủ app → thử lần lượt
+  OSM France / OSM HOT (CARTO đòi API key, bỏ), nhớ máy chủ chạy được; 6 ô lỗi hết mà chưa tải được ô nào thì bỏ lớp ô, dùng nền Apple Maps.
   Con đường vẽ lại không còn vẽ dải ngã tư cắt ngang (đã có bản đồ).
 - [x] Dòng dưới vẽ cận cảnh quanh xe mình (chủ app 20/11): thay cho capo, xe mình to, mũi xe sát mép trên (ngay dưới
   dải camera; khoảng cách tới xe trước xem trên camera + số ở dòng trên). Camera ảo `NearCamera` (cao 8 m, lùi 25 m,
