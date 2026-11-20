@@ -136,7 +136,8 @@ final class OSMTileOverlay: MKTileOverlay {
         ("© OpenStreetMap France", "https://a.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png"),
         ("© OpenStreetMap HOT", "https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png"),
     ]
-    private static var preferred = 0
+    /// Máy chủ chạy được lần trước (lưu lại, lần mở app sau dùng luôn, khỏi chờ máy chủ bị chặn).
+    private static var preferred = min(max(UserDefaults.standard.integer(forKey: "osmTileSource"), 0), sources.count - 1)
     private static let lock = NSLock()
     weak var status: OSMTileStatus?
 
@@ -165,7 +166,9 @@ final class OSMTileOverlay: MKTileOverlay {
             let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
             let ok = error == nil && code == 200 && data != nil
             if ok {
-                Self.lock.lock(); Self.preferred = i; Self.lock.unlock()
+                Self.lock.lock()
+                if Self.preferred != i { Self.preferred = i; UserDefaults.standard.set(i, forKey: "osmTileSource") }
+                Self.lock.unlock()
                 DispatchQueue.main.async {
                     guard let st = self?.status else { return }
                     st.loaded += 1
