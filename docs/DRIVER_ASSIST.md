@@ -155,6 +155,13 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
 - [x] B3g. Biển phụ (S.5xx) dưới biển cấm: khoanh **riêng** biển chính và biển phụ (hai khung). Nhóm mới `aux_plate`
       (cuối `SIGN_GROUPS`), danh mục S.501 cự ly, S.502, S.503 hướng, S.505a loại xe, S.508 giờ, S.509 chữ. App chỉ hiện
       "Biển phụ"; sau này: biển phụ nằm ngay dưới biển chính → đọc giờ / cự ly (OCR) để áp `window` / `distance`.
+- [x] Đoán làn đang chạy bằng xe hai bên (chủ app 20/11, không dựa hẳn vào GPS): `LanePositionEstimator`
+      (SafeGapCore/LanePosition.swift). Ô tô / tải / buýt cùng chiều < 40 m (xe máy không tính) → làn lệch so với làn
+      mình theo mô hình làn; nhớ 6 s mỗi bên, xe mình đổi làn (`RoadLaneFilter.laneChange`) thì dời theo.
+      Có xe cả hai bên → làn thứ (số làn có xe bên trái + 1); chỉ bên phải → làn ngoài cùng trái; chỉ bên trái → làn
+      ngoài cùng phải; xe ngược chiều cách n làn (đường hai chiều) → làn thứ n từ vạch giữa; không thấy gì → GPS
+      (trừ sai số) rồi mới mặc định sát vạch giữa. Số làn = max(OSM, số làn camera thấy có xe). Dùng cho: vẽ làn ở
+      màn chính, miễn nhắc cấm dừng khi không ở làn sát lề (thay cho GPS `rightEdgeGapM`). Log: lane_debug "pos 2/3 vehicles".
 - [x] Hiệu lực biển cấm đi vào làm đơn giản (chủ app 20/11, thay các quy tắc B3b / sửa 17/11 cho nhóm này): biển
       cấm đi vào (P.102, P.103a, P.106a...) chỉ có hiệu lực khi **cả biển nằm bên phải vạch làn phải** của làn mình:
       mép trái biển (m, từ khung + khoảng cách, `ConfirmedSign.leftEdgeM`) > vạch phải của mô hình làn

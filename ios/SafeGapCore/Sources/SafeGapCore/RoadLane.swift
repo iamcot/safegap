@@ -71,6 +71,8 @@ public final class RoadLaneFilter {
     private var oneSide = 0
     /// Lý do frame vừa rồi bỏ vạch đo được (ghi log): "", "implausible", "width", "heading".
     public private(set) var lastReject = ""
+    /// Lần update vừa rồi xe vừa đổi làn: −1 sang trái, +1 sang phải, 0 không.
+    public private(set) var laneChange = 0
     /// Đang bám một bên quá lâu: không nên dò theo cổng của mô hình nữa.
     public var needsReacquire: Bool { oneSide > config.oneSideMaxFrames }
 
@@ -170,6 +172,7 @@ public final class RoadLaneFilter {
         }
 
         oneSide = (fl == nil) != (fr == nil) ? oneSide + 1 : 0
+        laneChange = 0
         if let m = meas {
             if !hasModel {
                 lane = m
@@ -187,7 +190,12 @@ public final class RoadLaneFilter {
                 lane.width += c.alphaWidth * (min(max(m.width, c.minWidth), c.maxWidth) - lane.width)
             }
             // xe đã sang làn bên cạnh (tâm làn lệch quá nửa làn): vạch vừa vượt qua thành vạch kia của làn mới
-            if lane.offset > lane.width / 2 { lane.offset -= lane.width } else if lane.offset < -lane.width / 2 { lane.offset += lane.width }
+            // tâm làn cũ ở bên phải hơn nửa làn = xe đã sang làn trái
+            if lane.offset > lane.width / 2 {
+                lane.offset -= lane.width; laneChange = -1
+            } else if lane.offset < -lane.width / 2 {
+                lane.offset += lane.width; laneChange = 1
+            }
             missed = 0
             lane.tracked = true
         } else {

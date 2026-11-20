@@ -467,13 +467,14 @@ private struct RoadCanvas: View {
 
     /// Bố cục làn theo chỉ số (0 = làn mình, âm = bên trái). Vạch giữa (chia hai chiều) nằm ở mép trái làn `center`.
     /// Số làn mỗi chiều lấy từ OpenStreetMap nếu có; không có thì 2 + 2 (đường nhỏ 1 + 1).
-    /// Mặc định làn mình sát vạch giữa; thấy xe ngược chiều cách n làn thì làn mình là làn thứ n tính từ vạch giữa.
+    /// Làn mình theo `LanePosition` (xe cùng chiều hai bên, xe ngược chiều, GPS); chưa có thì sát vạch giữa.
     var layout: (lo: Int, hi: Int, center: Int) {
         let road = snapshot.road
         let small = (road?.cls ?? 0) == 5
-        let same = min(max(road?.lanesSame ?? (small ? 1 : 2), 1), 4)
+        let osmSame = min(max(road?.lanesSame ?? (small ? 1 : 2), 1), 4)
+        let same = min(max(snapshot.lanePosition?.lanes ?? osmSame, osmSame), 4)
         let opp = road?.oneway == true ? 0 : min(max(road?.lanesOpposite ?? (small ? 1 : 2), 1), 3)
-        let n = min(max(snapshot.oncomingLane ?? 1, 1), same)
+        let n = min(max((snapshot.lanePosition?.fromLeft).map { $0 + 1 } ?? snapshot.oncomingLane ?? 1, 1), same)
         let center = -(n - 1)
         return (center - opp, same - n, center)
     }
