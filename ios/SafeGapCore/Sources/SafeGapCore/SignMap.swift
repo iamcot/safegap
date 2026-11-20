@@ -172,8 +172,8 @@ public struct SignRecall: Equatable, Sendable {
 public extension SignEngine {
     /// Biển camera xác nhận có đáng nhớ vào bản đồ không: chỉ biển dành cho làn mình và đi thẳng qua là có hiệu lực
     /// (không nhớ biển đường nhánh / chiều ngược lại, chúng chỉ áp dụng khi rẽ).
-    func isOwnRoadSign(_ c: ConfirmedSign, junctionsAheadM: [Double]? = nil) -> Bool {
-        guard c.applies, let code = c.lawCode, let rule = config.signs[code] else { return false }
-        return rule.scope != .entry || !Self.isSideRoadEntry(c, junctionsAheadM: junctionsAheadM)
+    func isOwnRoadSign(_ c: ConfirmedSign, rightLaneLineM: ((Double) -> Double)? = nil) -> Bool {
+        guard let code = c.lawCode, let rule = config.signs[code] else { return false }
+        return rule.scope == .entry ? Self.entryApplies(c, rightLaneLineM: rightLaneLineM) : c.applies
     }
 }

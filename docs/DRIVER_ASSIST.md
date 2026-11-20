@@ -155,6 +155,12 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
 - [x] B3g. Biển phụ (S.5xx) dưới biển cấm: khoanh **riêng** biển chính và biển phụ (hai khung). Nhóm mới `aux_plate`
       (cuối `SIGN_GROUPS`), danh mục S.501 cự ly, S.502, S.503 hướng, S.505a loại xe, S.508 giờ, S.509 chữ. App chỉ hiện
       "Biển phụ"; sau này: biển phụ nằm ngay dưới biển chính → đọc giờ / cự ly (OCR) để áp `window` / `distance`.
+- [x] Hiệu lực biển cấm đi vào làm đơn giản (chủ app 20/11, thay các quy tắc B3b / sửa 17/11 cho nhóm này): biển
+      cấm đi vào (P.102, P.103a, P.106a...) chỉ có hiệu lực khi **cả biển nằm bên phải vạch làn phải** của làn mình:
+      mép trái biển (m, từ khung + khoảng cách, `ConfirmedSign.leftEdgeM`) > vạch phải của mô hình làn
+      (`RoadLane.right(z)`, z kẹp 4–45 m; chưa dò được làn thì 1,75 m). Có hiệu lực thì nhắc ngay. Biển chạm / lấn
+      làn mình, ở giữa đường hay bên trái: bỏ hẳn (không còn nhắc khi rẽ trái / rẽ phải, không còn xét ngã rẽ OSM).
+      Bản đồ biển chỉ nhớ biển có hiệu lực theo cùng quy tắc. Biển khác giữ quy tắc cũ.
 - [x] Gán màu đèn (chủ app 19/11): lớp `light_red`, `light_yellow`, `light_green`, `light_off` trên trang nhãn
       (khung đèn đang chọn → thanh "Màu đèn"; `traffic light` = chưa rõ màu). Model xe vẫn chỉ học "traffic light":
       train model xe giờ dựng `<ds>/drive` chỉ lớp app (`sync_own_drive`; trước đây lớp biển / vạch trong classes.txt

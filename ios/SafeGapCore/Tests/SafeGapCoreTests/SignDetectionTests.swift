@@ -157,8 +157,10 @@ final class SignPlacementTests: XCTestCase {
 
     func engine() throws -> SignEngine { SignEngine(config: try SignTests.repoConfig()) }
 
+    /// Biển rộng 0,7 m: mép trái = tâm − 0,35 m.
     func confirmed(_ g: SignGroup, _ p: SignPlacement, lateral: Double, ahead: Double = 25) -> ConfirmedSign {
-        ConfirmedSign(group: g, box: Box(0, 0, 1, 1), conf: 0.8, t: 0, distanceM: ahead, lateralM: lateral, placement: p)
+        ConfirmedSign(group: g, box: Box(0, 0, 1, 1), conf: 0.8, t: 0, distanceM: ahead, lateralM: lateral, placement: p,
+                      leftEdgeM: lateral - 0.35)
     }
 
     func testNoStopStartsAtSignNotWhenSeen() throws {
@@ -180,56 +182,41 @@ final class SignPlacementTests: XCTestCase {
         XCTAssertTrue(e.active.isEmpty && e.pending.isEmpty)
     }
 
-    func testNoEntryAheadOnOurSideSpeaksNow() throws {
+    func testNoEntryRightOfRightLaneLineSpeaksNow() throws {
+        // vạch phải 1,75 m (không dò được làn); biển lề phải tâm 3 m, mép trái 2,65 m: có hiệu lực, nhắc ngay
         var e = try engine()
         let m = e.feed(confirmed(.noEntry, .applies, lateral: 3), odometer: 100, t: 0, minuteOfDay: 600, dayOfMonth: 1)
         XCTAssertEqual(m.map(\.kind), [.signViolation])
-        // có bản đồ, không có ngã rẽ gần biển: vẫn là biển của đường mình
+        // biển xa bên phải (đường nhánh / đường ngang) vẫn nằm bên phải vạch: theo quy tắc đơn giản là có hiệu lực
         var e2 = try engine()
-        let m2 = e2.feed(confirmed(.noEntry, .applies, lateral: 3), odometer: 100, t: 0, minuteOfDay: 600, dayOfMonth: 1,
-                         junctionsAheadM: [80])
-        XCTAssertEqual(m2.map(\.kind), [.signViolation])
+        XCTAssertEqual(e2.feed(confirmed(.noEntry, .farRight, lateral: 12), odometer: 100, t: 0, minuteOfDay: 600,
+                               dayOfMonth: 1).map(\.kind), [.signViolation])
     }
 
-    func testNoEntryAtCurbNearJunctionIsSideRoad() throws {
-        // biển lề phải (3 m) cách ngã rẽ OSM 5 m: biển của đường nhánh, đi thẳng không nói
+    func testNoEntryTouchingOrLeftOfOurLaneIgnored() throws {
         var e = try engine()
-        let c = confirmed(.noEntry, .applies, lateral: 3)
-        XCTAssertTrue(e.feed(c, odometer: 100, t: 0, minuteOfDay: 600, dayOfMonth: 1, junctionsAheadM: [30]).isEmpty)
-        XCTAssertFalse(e.isOwnRoadSign(c, junctionsAheadM: [30]))
-        var said: [VoiceMessage] = []
-        for (i, odo) in stride(from: 105.0, through: 170, by: 5).enumerated() {
-            said += e.update(DriveContext(t: Double(i), odometer: odo))
-        }
-        XCTAssertTrue(said.isEmpty)
-        XCTAssertEqual(e.update(DriveContext(t: 20, odometer: 172, turning: .right)).count, 0)   // đã qua chỗ rẽ
+        // tâm 1,9 m nhưng mép trái 1,55 m < vạch phải 1,75 m: lấn vào làn mình (biển treo trên / cột sát làn) → bỏ
+        XCTAssertTrue(e.feed(confirmed(.noEntry, .applies, lateral: 1.9), odometer: 100, t: 0, minuteOfDay: 600,
+                             dayOfMonth: 1).isEmpty)
+        // giữa đường / bên trái: bỏ, rẽ trái cũng không nói
+        XCTAssertTrue(e.feed(confirmed(.noEntry, .leftOfUs, lateral: -3), odometer: 100, t: 0, minuteOfDay: 600,
+                             dayOfMonth: 1).isEmpty)
+        XCTAssertTrue(e.update(DriveContext(t: 2, odometer: 122, turning: .left)).isEmpty)
+        XCTAssertTrue(e.pending.isEmpty && e.active.isEmpty)
+        // biển quay xiên: bỏ
+        XCTAssertTrue(e.feed(confirmed(.noEntry, .turnedAway, lateral: 3), odometer: 100, t: 0, minuteOfDay: 600,
+                             dayOfMonth: 1).isEmpty)
+        XCTAssertFalse(e.isOwnRoadSign(confirmed(.noEntry, .applies, lateral: 1.9)))
     }
 
-    func testNoEntryInMedianOnlyWhenTurningLeft() throws {
-        // đường 2 chiều, biển cấm ngược chiều cắm giữa: dành cho chiều bên trái, đi thẳng thì không nói
+    func testNoEntryUsesDetectedRightLaneLine() throws {
+        // xe đang sát vạch trái, vạch phải cách 3 m: biển mép trái 2,65 m vẫn lấn làn → bỏ; 3,5 m → có hiệu lực
         var e = try engine()
-        XCTAssertTrue(e.feed(confirmed(.noEntry, .leftOfUs, lateral: -3), odometer: 100, t: 0, minuteOfDay: 600, dayOfMonth: 1).isEmpty)
-        var said: [VoiceMessage] = []
-        for (i, odo) in stride(from: 105.0, through: 170, by: 5).enumerated() {
-            said += e.update(DriveContext(t: Double(i), odometer: odo))
-        }
-        XCTAssertTrue(said.isEmpty)
-        XCTAssertTrue(e.pending.isEmpty)
-        // lần khác: rẽ trái vào chiều ngược lại ngay chỗ biển → nói
-        var e2 = try engine()
-        _ = e2.feed(confirmed(.noEntry, .leftOfUs, lateral: -3), odometer: 100, t: 0, minuteOfDay: 600, dayOfMonth: 1)
-        XCTAssertTrue(e2.update(DriveContext(t: 1, odometer: 115)).isEmpty)
-        XCTAssertEqual(e2.update(DriveContext(t: 2, odometer: 122, turning: .left)).map(\.kind), [.signViolation])
-    }
-
-    func testNoEntryAtSideRoadOnlyWhenTurningRight() throws {
-        var e = try engine()
-        XCTAssertTrue(e.feed(confirmed(.noEntry, .applies, lateral: 7), odometer: 100, t: 0, minuteOfDay: 600, dayOfMonth: 1).isEmpty)
-        XCTAssertTrue(e.update(DriveContext(t: 1, odometer: 120, turning: .left)).isEmpty)   // rẽ hướng khác: không
-        XCTAssertEqual(e.update(DriveContext(t: 2, odometer: 124, turning: .right)).map(\.kind), [.signViolation])
-        // biển quay xiên: bỏ hẳn
-        var e2 = try engine()
-        _ = e2.feed(confirmed(.noEntry, .turnedAway, lateral: 3), odometer: 100, t: 0, minuteOfDay: 600, dayOfMonth: 1)
-        XCTAssertTrue(e2.pending.isEmpty && e2.active.isEmpty)
+        let line: (Double) -> Double = { _ in 3.0 }
+        XCTAssertTrue(e.feed(confirmed(.noEntry, .applies, lateral: 3), odometer: 100, t: 0, minuteOfDay: 600,
+                             dayOfMonth: 1, rightLaneLineM: line).isEmpty)
+        XCTAssertEqual(e.feed(confirmed(.noEntry, .applies, lateral: 3.9), odometer: 100, t: 20, minuteOfDay: 600,
+                              dayOfMonth: 1, rightLaneLineM: line).map(\.kind), [.signViolation])
+        XCTAssertTrue(e.isOwnRoadSign(confirmed(.noEntry, .applies, lateral: 3.9), rightLaneLineM: line))
     }
 }

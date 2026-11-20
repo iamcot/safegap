@@ -106,6 +106,8 @@ public struct ConfirmedSign: Equatable, Sendable {
     public var distanceM: Double?
     public var lateralM: Double?
     public var placement: SignPlacement = .applies
+    /// Mép trái của biển lệch bao nhiêu mét so với tâm camera (+ = phải), chưa trừ độ cong đường.
+    public var leftEdgeM: Double? = nil
     /// Mã cụ thể đọc được từ ảnh (vd P.131a trong nhóm cấm dừng/đỗ); nil = theo nhóm.
     public var code: String? = nil
 
@@ -151,6 +153,7 @@ public struct SignDetectionTracker: Equatable, Sendable {
         var placement: SignPlacement = .applies
         var distanceM: Double?
         var lateralM: Double?
+        var leftEdgeM: Double?
         var lastT: Double
         var reported: Bool
         var totalHits = 0
@@ -167,7 +170,7 @@ public struct SignDetectionTracker: Equatable, Sendable {
     public var visible: [ConfirmedSign] {
         tracks.filter { $0.hits.count >= minHits }.map {
             ConfirmedSign(group: $0.group, box: $0.box, conf: $0.conf, t: $0.lastT, distanceM: $0.distanceM,
-                          lateralM: $0.lateralM, placement: $0.placement, code: $0.code)
+                          lateralM: $0.lateralM, placement: $0.placement, leftEdgeM: $0.leftEdgeM, code: $0.code)
         }
     }
 
@@ -212,12 +215,14 @@ public struct SignDetectionTracker: Equatable, Sendable {
                 continue
             }
             let (pl, z, x) = place(d.box, frameWidth: w, fPx: fPx, roadBend: roadBend)
+            let edge: Double? = z.flatMap { z in fPx.map { f in (d.x1 - w / 2) * z / f } }
             if let j = bestTrack(for: d, group: g) {
                 tracks[j].box = d.box
                 // khung mới nhất (gần nhất, to nhất) quyết định vị trí
                 tracks[j].placement = pl
                 tracks[j].distanceM = z
                 tracks[j].lateralM = x
+                tracks[j].leftEdgeM = edge
                 tracks[j].hits.append(t)
                 tracks[j].totalHits += 1
                 if let rc = readCode { tracks[j].codeVotes[rc, default: 0] += 1 }
@@ -225,7 +230,7 @@ public struct SignDetectionTracker: Equatable, Sendable {
                 tracks[j].lastT = t
             } else {
                 tracks.append(Track(group: g, box: d.box, hits: [t], conf: d.conf, placement: pl, distanceM: z, lateralM: x,
-                                    lastT: t, reported: false, totalHits: 1,
+                                    leftEdgeM: edge, lastT: t, reported: false, totalHits: 1,
                                     codeVotes: readCode.map { [$0: 1] } ?? [:]))
             }
         }
@@ -240,7 +245,7 @@ public struct SignDetectionTracker: Equatable, Sendable {
 
     private mutating func confirm(_ tr: Track, t: Double) -> ConfirmedSign? {
         let c = ConfirmedSign(group: tr.group, box: tr.box, conf: tr.conf, t: t, distanceM: tr.distanceM,
-                              lateralM: tr.lateralM, placement: tr.placement, code: tr.code)
+                              lateralM: tr.lateralM, placement: tr.placement, leftEdgeM: tr.leftEdgeM, code: tr.code)
         // biển không dành cho làn mình: vẫn trả về (để vẽ mờ) nhưng không chiếm lượt cooldown
         if c.applies {
             if let last = lastReported[tr.group], t - last < cooldownS { return nil }
@@ -277,50 +282,33 @@ public extension ConfirmedSign {
 }
 
 public extension SignEngine {
-    /// Biển ở miệng đường nhánh bên phải: lệch phải hơn mức này (m) thì coi là biển của đường nhánh.
-    static let sideRoadLateralM = 5.0
-    /// Có bản đồ: biển cấm đi vào ở lề phải (lệch > 1,5 m) mà cách ngã rẽ OSM ≤ 20 m là biển của đường nhánh
-    /// (chủ app 17/11: biển cấm ngược chiều phía trên bên phải đầu xe vẫn báo loạn).
-    static let sideRoadCurbM = 1.5
-    static let sideRoadJunctionM = 20.0
+    /// Không dò được vạch làn: coi xe giữa làn rộng 3,5 m, vạch phải cách tâm xe 1,75 m.
+    static let defaultRightLaneLineM = 1.75
 
-    /// Biển cấm đi vào bên phải là của đường nhánh (chỉ áp khi rẽ phải vào đó)?
-    /// `junctionsAheadM`: khoảng cách tới các ngã rẽ phía trước theo OSM (nil = không có bản đồ).
-    static func isSideRoadEntry(_ c: ConfirmedSign, junctionsAheadM: [Double]?) -> Bool {
-        if c.placement == .farRight { return true }
-        guard c.placement == .applies else { return false }
-        let lateral = c.lateralM ?? 0
-        if lateral > sideRoadLateralM { return true }
-        guard let js = junctionsAheadM, lateral > sideRoadCurbM, let z = c.distanceM else { return false }
-        return js.contains { abs($0 - z) <= sideRoadJunctionM }
+    /// Biển cấm đi vào (P.102, cấm ô tô, cấm xe tải...) chỉ có hiệu lực khi **cả biển** nằm bên phải vạch làn phải
+    /// của làn mình (chủ app 20/11: làm đơn giản). Biển chạm / lấn vào làn mình hoặc nằm bên trái: không tính.
+    /// `rightLaneLineM(z)`: vạch làn phải lệch bao nhiêu mét so với tâm camera ở khoảng cách z (nil = chưa có).
+    static func entryApplies(_ c: ConfirmedSign, rightLaneLineM: ((Double) -> Double)?) -> Bool {
+        guard c.placement != .turnedAway else { return false }
+        guard let edge = c.leftEdgeM, let z = c.distanceM else { return c.placement == .applies }
+        return edge > (rightLaneLineM?(z) ?? defaultRightLaneLineM)
     }
 
-    /// Đưa biển model vừa xác nhận vào luật, theo chỗ cắm biển (QCVN 41: biển có hiệu lực cho phần đường bên trái nó):
-    /// - biển bên phải / trên làn mình: có hiệu lực từ chỗ cắm biển (chờ xe tới đó);
-    /// - biển cấm đi vào bên trái (dải phân cách, giữa đường 2 chiều): chỉ khi xe rẽ trái / quay đầu vào chiều ngược lại;
-    /// - biển cấm đi vào xa bên phải (miệng đường nhánh): chỉ khi xe rẽ phải vào đó;
-    /// - biển khác không dành cho làn mình, biển quay xiên: bỏ.
+    /// Đưa biển model vừa xác nhận vào luật:
+    /// - biển cấm đi vào: chỉ khi cả biển nằm bên phải vạch làn phải (`entryApplies`), nhắc ngay;
+    /// - biển khác: biển dành cho làn mình có hiệu lực từ chỗ cắm biển (chờ xe tới đó); biển không dành cho làn mình,
+    ///   biển quay xiên: bỏ.
     mutating func feed(_ c: ConfirmedSign, odometer: Double, t: Double, minuteOfDay: Int, dayOfMonth: Int,
-                       vehicle: String = "car", junctionsAheadM: [Double]? = nil) -> [VoiceMessage] {
+                       vehicle: String = "car", rightLaneLineM: ((Double) -> Double)? = nil) -> [VoiceMessage] {
         guard let code = c.lawCode, let rule = config.signs[code] else { return [] }
         let s = SignSighting(code: code)
         let ahead = max(0, c.distanceM ?? 0)
-        if rule.scope == .entry, Self.isSideRoadEntry(c, junctionsAheadM: junctionsAheadM) {
-            sightedIfTurn(s, turn: .right, aheadM: ahead, odometer: odometer)
+        if rule.scope == .entry {
+            guard Self.entryApplies(c, rightLaneLineM: rightLaneLineM) else { return [] }
+        } else if c.placement != .applies {
             return []
         }
-        switch c.placement {
-        case .farRight where rule.scope == .entry:
-            sightedIfTurn(s, turn: .right, aheadM: ahead, odometer: odometer)
-            return []
-        case .leftOfUs where rule.scope == .entry:
-            sightedIfTurn(s, turn: .left, aheadM: ahead, odometer: odometer)
-            return []
-        case .applies:
-            return sightedAhead(s, aheadM: ahead, odometer: odometer, t: t, minuteOfDay: minuteOfDay,
-                                dayOfMonth: dayOfMonth, vehicle: vehicle)
-        default:
-            return []
-        }
+        return sightedAhead(s, aheadM: ahead, odometer: odometer, t: t, minuteOfDay: minuteOfDay,
+                            dayOfMonth: dayOfMonth, vehicle: vehicle)
     }
 }

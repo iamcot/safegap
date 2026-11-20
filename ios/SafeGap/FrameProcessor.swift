@@ -592,15 +592,16 @@ final class FrameProcessor {
             let bend: ((Double) -> Double?)? = ahead.map { a in { z in a.x(at: z).map { $0 - (a.x(at: 0) ?? 0) } } }
             for c in signTracker.update(t: sr.t, signs: sr.dets, vehicles: dets, frameWidth: w, frameHeight: h, fPx: f,
                                         roadBend: bend, codes: sr.codes) {
-                // ngã rẽ OSM phía trước: biển cấm đi vào ở lề phải gần ngã rẽ là của đường nhánh
-                let js = ahead?.junctions
-                if let fx = fix, signs.isOwnRoadSign(c, junctionsAheadM: js), let code = c.lawCode {
+                // biển cấm đi vào: chỉ tính khi cả biển nằm bên phải vạch làn phải (mô hình làn, ngoài 45 m giữ số ở 45 m)
+                let lane = road
+                let rightLine: (Double) -> Double = { z in lane.right(min(max(z, 4), 45)) }
+                if let fx = fix, signs.isOwnRoadSign(c, rightLaneLineM: rightLine), let code = c.lawCode {
                     signRecall.cameraSaw(code: code, group: c.group.rawValue, carLat: fx.lat, carLon: fx.lon,
                                          courseDeg: fx.course, aheadM: c.distanceM ?? 0, lateralM: c.lateralM ?? 0,
                                          odometer: odo, time: Date().timeIntervalSince1970)
                     signMapDirty = true
                 }
-                signMsgs += signs.feed(c, odometer: odo, t: t, minuteOfDay: minuteOfDay, dayOfMonth: day, junctionsAheadM: js)
+                signMsgs += signs.feed(c, odometer: odo, t: t, minuteOfDay: minuteOfDay, dayOfMonth: day, rightLaneLineM: rightLine)
             }
         } else if !p.settings.signDetection {
             signTracker.reset()
