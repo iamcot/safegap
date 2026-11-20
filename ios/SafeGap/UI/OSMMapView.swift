@@ -133,7 +133,7 @@ private struct OSMMap: UIViewRepresentable {
 final class OSMTileOverlay: MKTileOverlay {
     static let sources: [(name: String, url: String)] = [
         ("© OpenStreetMap", "https://tile.openstreetmap.org/{z}/{x}/{y}.png"),
-        ("© OpenStreetMap © CARTO", "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"),
+        ("© OpenStreetMap © CARTO", "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"),
         ("© OpenStreetMap France", "https://a.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png"),
     ]
     private static var preferred = 0
