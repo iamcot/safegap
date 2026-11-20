@@ -38,7 +38,7 @@ struct DriveView: View {
                 }
                 .frame(width: geo.size.width - mapW)
                 ZStack(alignment: .top) {
-                    OSMMapView(dark: pal.dark)
+                    OSMMapView(dark: pal.dark, lat: s.gpsLat, lon: s.gpsLon, course: s.gpsCourse)
                     controls(pal).padding(.top, 8)
                 }
                 .frame(width: mapW)

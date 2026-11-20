@@ -265,6 +265,8 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
   (`UI/CameraStrip.swift`): chỉ cắt từ vạch capo (`maxBottomRatio`) trở lên, cao 38% màn hình, có box xe / biển vẽ đè;
   (3) con đường vẽ lại + dòng trạng thái. Cột phải 1/3: bản đồ OSM (`UI/OSMMapView.swift`, ô tile.openstreetmap.org
   với User-Agent riêng, cache đĩa 200 MB, xoay theo hướng xe, kéo tay thì 8 s sau tự bám lại, ban đêm làm tối 35%).
+  Vị trí lấy từ GPS của app (FrameSnapshot.gpsLat/Lon/Course), không dùng vị trí MapKit; góc dưới hiện "Đang chờ GPS…"
+  hoặc "Không tải được bản đồ: HTTP xxx / lỗi mạng" khi chưa có ô ảnh nào. Ô ảnh bản đồ khác "ô dữ liệu đường" trong Cài đặt.
   Con đường vẽ lại không còn vẽ dải ngã tư cắt ngang (đã có bản đồ).
 - [x] Dòng dưới vẽ cận cảnh quanh xe mình (chủ app 20/11): thay cho capo, xe mình to, mũi xe sát mép trên (ngay dưới
   dải camera; khoảng cách tới xe trước xem trên camera + số ở dòng trên). Camera ảo `NearCamera` (cao 8 m, lùi 25 m,

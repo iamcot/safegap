@@ -89,6 +89,10 @@ struct FrameSnapshot {
     var inferMs: Double = 0
     var speedSimulated = false
     var gpsOK = false
+    /// Vị trí GPS (vẽ bản đồ ở cột phải): lat, lon, hướng đi (độ, nil khi đứng yên).
+    var gpsLat: Double?
+    var gpsLon: Double?
+    var gpsCourse: Double?
     var detectorError: String?
     var thermal: ThermalLevel = .nominal
     var targetFps: Double = 30
@@ -714,6 +718,7 @@ final class FrameProcessor {
         s.inferMs = (t1 - t0) * 1000
         s.speedSimulated = p.settings.simulatedSpeedKmh != nil
         s.gpsOK = gps != nil
+        if let g = gps, g.lat != 0 || g.lon != 0 { s.gpsLat = g.lat; s.gpsLon = g.lon; s.gpsCourse = g.courseDeg }
         s.detectorError = detectorError
         s.thermal = thermal
         s.targetFps = targetFps
