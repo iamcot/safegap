@@ -4,6 +4,7 @@
 // dải màu từ đầu xe mình tới xe phía trước báo mức an toàn. Sáng/tối theo giao diện máy.
 import SafeGapCore
 import SwiftUI
+import UIKit
 
 struct DriveView: View {
     @EnvironmentObject var model: AppModel
@@ -251,7 +252,10 @@ private struct RoadCanvas: View {
 
     var body: some View {
         Canvas { ctx, size in
-            let cam = NearCamera(size: size, topZ: Self.topZ)
+            // xe mình phải hiện đủ cả chiếc (chủ app 20/11): nóc ảnh xe nhô quá mép trên thì dịch cả cảnh xuống
+            let cam0 = NearCamera(size: size, topZ: Self.topZ)
+            let ownTop = carRect(cam0, Car.own)?.minY ?? 0
+            let cam = ownTop < 6 ? NearCamera(size: size, topZ: Self.topZ, shiftY: 6 - ownTop) : cam0
             ctx.fill(Path(CGRect(origin: .zero, size: size)),
                      with: .linearGradient(Gradient(colors: [pal.bgTop, pal.bgBottom]),
                                            startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
@@ -321,20 +325,26 @@ private struct RoadCanvas: View {
         default: name = car.isTall ? "truck_rear" : "car_rear"
         }
         let img = ctx.resolve(Image(name))
-        let sz = img.size
-        guard sz.width > 0 else { return }
+        guard let rect = carRect(cam, car, imageSize: img.size) else { return }
+        let w = rect.width
+        var g = ctx
+        g.addFilter(.shadow(color: .black.opacity(pal.dark ? 0.5 : 0.18), radius: w * 0.06, y: w * 0.03))
+        g.draw(img, in: rect)
+    }
+
+    /// Khung ảnh xe trên canvas. Xe mình: giữ nguyên tỉ lệ ảnh (vẽ đủ cả chiếc, không nén).
+    private func carRect(_ cam: NearCamera, _ car: Car, imageSize: CGSize? = nil) -> CGRect? {
+        let sz = imageSize ?? UIImage(named: car.isOwn ? "car_own" : (car.isTall ? "truck_rear" : "car_rear"))?.size ?? .zero
+        guard sz.width > 0 else { return nil }
         let k = cam.scale(car.pos.z)
         let w = CGFloat(car.widthM * k * 1.22)   // ảnh có cả gương hai bên
-        guard w > 4 else { return }
+        guard w > 4 else { return nil }
         let rear = cam.point(car.pos)
         let front = cam.point(Ground(x: car.pos.x, z: car.pos.z + car.lengthM))
         let projected = rear.y - front.y + CGFloat(car.heightM * k) * 0.3
         let natural = w * sz.height / sz.width
-        let h = min(natural, max(natural * 0.5, projected))
-        let rect = CGRect(x: rear.x - w / 2, y: rear.y - h + w * 0.04, width: w, height: h)
-        var g = ctx
-        g.addFilter(.shadow(color: .black.opacity(pal.dark ? 0.5 : 0.18), radius: w * 0.06, y: w * 0.03))
-        g.draw(img, in: rect)
+        let h = car.isOwn ? natural : min(natural, max(natural * 0.5, projected))
+        return CGRect(x: rear.x - w / 2, y: rear.y - h + w * 0.04, width: w, height: h)
     }
 
     /// Tim làn mình tại z. Gần: theo làn camera. Xa (camera không thấy rõ): có bản đồ thì nối tiếp theo độ cong
@@ -382,6 +392,7 @@ private struct Car {
     var kind: Kind
 
     var isTall: Bool { heightM > 2 }
+    var isOwn: Bool { kind == .own }
     static let own = Car(pos: Ground(x: 0, z: -3.2), widthM: 1.85, heightM: 1.45, lengthM: 4.6, kind: .own)
 }
 
@@ -396,14 +407,14 @@ private struct NearCamera {
     let focal: Double
     let cy: Double
 
-    init(size: CGSize, topZ: Double) {
+    init(size: CGSize, topZ: Double, shiftY: CGFloat = 0) {
         self.size = size
         func ratio(_ z: Double) -> Double { let (d, v) = Self.view(0, z); return v / d }
         let byWidth = Double(size.width) / 16 * Self.view(0, 0).d
         let byHeight = Double(size.height) / max(ratio(-11) - ratio(topZ), 1e-3)
         let f = max(min(byWidth, byHeight), 1)
         focal = f
-        cy = -f * ratio(topZ)
+        cy = -f * ratio(topZ) + Double(shiftY)
     }
 
     private static func view(_ y: Double, _ z: Double) -> (d: Double, v: Double) {
