@@ -104,6 +104,8 @@ struct FrameSnapshot {
     var oncomingLane: Int?
     /// Xe đang ở làn thứ mấy (đếm xe cùng chiều hai bên + số làn OSM), nil = chưa tính.
     var lanePosition: LanePosition?
+    /// Xe cùng chiều ở làn bên cạnh đang khuất (ngang / sau xe mình), để vẽ quanh xe mình.
+    var sideVehicles: [SideVehicle] = []
     /// Con đường đang chạy theo OpenStreetMap (số làn mỗi chiều), nil = chưa có dữ liệu / chưa khớp.
     var road: RoadMatch?
     /// Hình dạng đường phía trước và ngã tư (OSM), đã dịch theo quãng đường đi từ lúc tra.
@@ -243,6 +245,8 @@ final class FrameProcessor {
     /// Khoảng cách tới mép phải đường theo GPS + OSM lúc còn chạy, và sai số GPS (m).
     private var lanePosEstimator = LanePositionEstimator()
     private var lanePos: LanePosition?
+    private var sideMemory = SideVehicleMemory()
+    private var sideHidden: [SideVehicle] = []
     /// Ghi log làn (vì sao vẽ sai): vạch thô frame này, có dùng cổng không, lý do bỏ.
     private var laneDebug = ""
     private let roadLane = RoadLaneFilter()
@@ -430,6 +434,7 @@ final class FrameProcessor {
         let road = laneFrozen ? roadLane.stationary()
                               : roadLane.update(left: ground(laneTracker.left), right: ground(laneTracker.right))
         lanePosEstimator.laneChanged(roadLane.laneChange)
+        sideMemory.laneChanged(roadLane.laneChange)
         func c3(_ c: LaneCurve?) -> String { c.map { String(format: "%.3f/%.2f", $0.c0, $0.c1) } ?? "-" }
         laneDebug = laneFrozen ? "frozen" : String(format: "raw %@ %@ g%d m%d rej %@ | off %.2f hd %.3f w %.2f %@ hz %@",
                                                    c3(rawL), c3(rawR), gated ? 1 : 0, masked, roadLane.lastReject,
@@ -627,15 +632,19 @@ final class FrameProcessor {
         // Làn đang chạy (chủ app 20/11): đếm ô tô cùng chiều ở làn trái / phải (< 40 m) + số làn OSM; GPS chỉ khi
         // camera không thấy gì (trừ sai số GPS cho chắc). Xe máy không tính: đi lẫn giữa các làn.
         var sameDirOffsets: [Int] = []
-        for (i, d) in dets.enumerated() where d.cls != "motorcycle" {
+        var sideSeen: [SideVehicle] = []
+        for (i, d) in dets.enumerated() {
             guard i < r.trackIds.count, let id = r.trackIds[i], !oncomingIds.contains(id),
                   let wReal = p.config.vehicleWidthM[d.cls], d.width > 0, f > 0 else { continue }
             let z = f * wReal / d.width
             guard z > 2, z < 40 else { continue }
             let x = ((d.x1 + d.x2) / 2 - w / 2) * z / f - road.center(z)
             let k = Int((x / road.width).rounded())
-            if k != 0, abs(k) <= 3 { sameDirOffsets.append(k) }
+            if k != 0, abs(k) <= 2 { sideSeen.append(SideVehicle(id: id, lane: k, z: z, cls: d.cls)) }
+            if d.cls != "motorcycle", k != 0, abs(k) <= 3 { sameDirOffsets.append(k) }
         }
+        // xe làn bên cạnh vừa ra khỏi khung hình khi đang ở gần: đoán tiếp vị trí để vẽ ngang / sau xe mình
+        sideHidden = sideMemory.update(t: t, seen: sideSeen)
         let gpsFromRight: Int? = {
             guard let m = roadMatch?.match, let gap = m.rightEdgeGapM, let g = gps, g.courseDeg != nil,
                   g.horizontalAccuracyM > 0 else { return nil }
@@ -715,6 +724,7 @@ final class FrameProcessor {
         s.oncoming = r.trackIds.map { $0.map(oncomingIds.contains) ?? false }
         s.oncomingLane = oncomingLane?.index
         s.lanePosition = lanePos
+        s.sideVehicles = sideHidden
         s.road = roadMatch?.match
         s.roadAhead = roadAhead.map { $0.ahead.advanced(by: $0.travelled) }
         s.yHorizon = yHorizon

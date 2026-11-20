@@ -266,6 +266,13 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
   (3) con đường vẽ lại + dòng trạng thái. Cột phải 1/3: bản đồ OSM (`UI/OSMMapView.swift`, ô tile.openstreetmap.org
   với User-Agent riêng, cache đĩa 200 MB, xoay theo hướng xe, kéo tay thì 8 s sau tự bám lại, ban đêm làm tối 35%).
   Con đường vẽ lại không còn vẽ dải ngã tư cắt ngang (đã có bản đồ).
+- [x] Dòng dưới vẽ cận cảnh quanh xe mình (chủ app 20/11): thay cho capo, xe mình to, mũi xe sát mép trên (ngay dưới
+  dải camera; khoảng cách tới xe trước xem trên camera + số ở dòng trên). Camera ảo `NearCamera` (cao 8 m, lùi 25 m,
+  chúc 28°, ngang ~16 m, thấy tới ~11 m sau camera). Không vẽ xe phía trước nữa; chỉ vẽ xe làn bên cạnh đang khuất:
+  `SideVehicleMemory` (SafeGapCore/SideVehicles.swift) nhớ xe cùng chiều làn ±1/±2 (kể cả xe máy), mất dấu khi đang
+  < 12 m thì đoán tiếp z theo tốc độ tương đối lúc cuối (chỉ khi đang lùi về phía mình), bỏ sau 4 s hoặc khi tụt quá
+  11 m sau camera; xe mình đổi làn thì dời làn theo. Mép trên dòng dưới có vạch màu mức cảnh báo.
+- [x] Bỏ mục "Giả lập biển báo" trong Cài đặt (chủ app 20/11).
   Cài đặt "Màn hình chính 2 cột" tắt thì về màn camera lớn + HUD như cũ.
 - [ ] Tốc độ GPS (để làm sau, 17/11): GPS thấp hơn đồng hồ xe 2–5 km/h. Phần lớn do đồng hồ chỉ dư theo luật (~5–8%),
   nên cảnh báo vẫn tính theo GPS (gần tốc độ thật, máy bắn tốc độ đo tốc độ thật). Việc cần làm: (1) ô "Bù đồng hồ (%)"

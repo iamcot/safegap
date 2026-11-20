@@ -232,131 +232,88 @@ extension Level {
     }
 }
 
-// MARK: - Con đường
+// MARK: - Con đường quanh xe mình
 
 /// Điểm trên mặt đường, mét: x sang phải, z về phía trước tính từ camera.
 private struct Ground { var x: Double; var z: Double }
 
+/// Dòng dưới của màn chính (chủ app 20/11): thay cho capo, vẽ xe mình to, mũi xe sát mép trên (ngay dưới dải camera
+/// thật, khoảng cách tới xe trước đã xem trên camera). Chỉ vẽ làn quanh xe và xe bên hông mà camera không còn thấy
+/// (`SideVehicleMemory`: xe làn bên cạnh vừa ra khỏi khung khi đang ở gần, đoán tiếp vị trí ngang / sau xe mình).
 private struct RoadCanvas: View {
     let snapshot: FrameSnapshot
     let calibration: DeviceCalibration
     let config: AppConfig
     let pal: Palette
 
-    static let laneWidth = 3.5
-    static let farZ = 80.0
+    /// Mũi xe mình (Car.own: đuôi −3,2 m, dài 4,6 m) + chút lề: điểm này nằm ở mép trên.
+    static let topZ = 1.6
 
     var body: some View {
         Canvas { ctx, size in
-            let cam = ChaseCamera(size: size)
-            // nền: một dải chuyển nhẹ từ trên xuống
+            let cam = NearCamera(size: size, topZ: Self.topZ)
             ctx.fill(Path(CGRect(origin: .zero, size: size)),
                      with: .linearGradient(Gradient(colors: [pal.bgTop, pal.bgBottom]),
                                            startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
-
             let (left, right) = laneEdges()
-            let r = snapshot.result
-            let cars = vehicles()
-            // mặt đường: 2 làn cùng chiều (làn mình + 1 làn bên) và 2 làn ngược chiều bên trái vạch giữa
             let lw = snapshot.roadLane.width
             let lay = layout
             func edge(_ k: Int) -> [Ground] { left.map { Ground(x: $0.x + Double(k) * lw, z: $0.z) } }  // mép trái của làn k
             ctx.fill(cam.path(edge(lay.lo) + edge(lay.hi + 1).reversed(), closed: true), with: .color(pal.road))
-            // làn mình tô xanh dương nhạt trong suốt
+            // làn mình: xanh dương nhạt; mép trên tô màu mức cảnh báo (nối với dải camera phía trên)
             ctx.fill(cam.path(left + right.reversed(), closed: true),
                      with: .color(Color(red: 0.45, green: 0.68, blue: 1.0).opacity(pal.dark ? 0.35 : 0.5)))
             let real = snapshot.roadLane.tracked
             for k in lay.lo...(lay.hi + 1) {
                 let e = cam.path(edge(k))
                 if k == lay.lo || k == lay.hi + 1 {
-                    ctx.stroke(e, with: .color(pal.roadEdge), lineWidth: 2)   // mép đường
+                    ctx.stroke(e, with: .color(pal.roadEdge), lineWidth: 3)   // mép đường
                 } else if k == lay.center && snapshot.oncomingLane != nil {
-                    // có xe ngược chiều: vạch phân cách hai chiều là nét liền vàng
-                    ctx.stroke(e, with: .color(Color(red: 1.0, green: 0.76, blue: 0.0)), style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
+                    ctx.stroke(e, with: .color(Color(red: 1.0, green: 0.76, blue: 0.0)), style: StrokeStyle(lineWidth: 5, lineCap: .round))
                 } else if k == 0 || k == 1 {
                     ctx.stroke(e, with: .color(real ? pal.lane : pal.laneFaint),
-                               style: StrokeStyle(lineWidth: real ? 2.5 : 1.5, lineCap: .round, dash: [14, 16]))
+                               style: StrokeStyle(lineWidth: real ? 4 : 2.5, lineCap: .round, dash: [24, 26]))
                 } else {
-                    ctx.stroke(e, with: .color(pal.laneFaint), style: StrokeStyle(lineWidth: 1.5, dash: [14, 16]))
+                    ctx.stroke(e, with: .color(pal.laneFaint), style: StrokeStyle(lineWidth: 2.5, dash: [24, 26]))
                 }
             }
-
-            // ngã tư: không vẽ nữa, đã có bản đồ OSM ở cột phải (chủ app 20/11)
-
-            // dải đường đi giữa làn: từ đầu xe mình tới xe phía trước (không có xe thì dài bằng d_min, mờ dần)
-            let target = cars.first { $0.isTarget }
-            let pathEnd = target.map { $0.pos.z - 0.6 } ?? min(r.dMin ?? 25, Self.farZ)
-            if pathEnd > 1 {
-                let color = pal.path(r.level)
-                let half = 0.75
-                var lp: [Ground] = [], rp: [Ground] = []
-                for i in 0...24 {
-                    let z = 0.8 + (pathEnd - 0.8) * Double(i) / 24
-                    let c = (interp(left, z) + interp(right, z)) / 2
-                    lp.append(Ground(x: c - half, z: z))
-                    rp.append(Ground(x: c + half, z: z))
-                }
-                let band = cam.path(lp + rp.reversed(), closed: true)
-                var g = ctx
-                g.addFilter(.shadow(color: color.opacity(0.5), radius: 8))
-                g.fill(band, with: .linearGradient(
-                    Gradient(colors: [color.opacity(0.95), color.opacity(target == nil ? 0.0 : 0.85)]),
-                    startPoint: cam.point(Ground(x: 0, z: 0.8)), endPoint: cam.point(Ground(x: 0, z: pathEnd))))
-                // vạch d_min ngang làn khi có xe phía trước
-                if target != nil, let dMin = r.dMin, dMin < Self.farZ {
-                    var m = Path()
-                    m.move(to: cam.point(Ground(x: interp(left, dMin), z: dMin)))
-                    m.addLine(to: cam.point(Ground(x: interp(right, dMin), z: dMin)))
-                    ctx.stroke(m, with: .color(color.opacity(0.7)), style: StrokeStyle(lineWidth: 2, lineCap: .round, dash: [6, 5]))
-                }
+            let level = snapshot.result.level
+            if level != .none {
+                let c = pal.path(level)
+                ctx.fill(Path(CGRect(x: 0, y: 0, width: size.width, height: 4)), with: .color(c.opacity(0.9)))
             }
-
-            // đường tan dần ở xa (vẽ trước xe để xe không bị mờ)
-            let fadeStart = max(0, cam.horizonY)
-            let fadeEnd = fadeStart + size.height * 0.13
-            ctx.fill(Path(CGRect(x: 0, y: 0, width: size.width, height: fadeEnd)),
-                     with: .linearGradient(Gradient(stops: [.init(color: pal.bgTop, location: 0),
-                                                             .init(color: pal.bgTop, location: fadeStart / fadeEnd),
-                                                             .init(color: pal.bgTop.opacity(0), location: 1)]),
-                                           startPoint: .zero, endPoint: CGPoint(x: 0, y: fadeEnd)))
-
-            // xe: xa vẽ trước, xe mình cuối cùng
-            for car in cars.sorted(by: { $0.pos.z > $1.pos.z }) + [Car.own] {
+            // xe: xa (phía trước) vẽ trước, xe mình cuối cùng
+            for car in sideCars().sorted(by: { $0.pos.z > $1.pos.z }) + [Car.own] {
                 drawCar(ctx, cam, car)
             }
-            // tên đường đang chạy (OpenStreetMap), ngay dưới xe mình
             if let name = snapshot.road?.name {
-                let rear = cam.point3(0, 0, Car.own.pos.z - 0.3)   // pos.z là đuôi xe
-                let t = ctx.resolve(Text(name).font(.system(size: 15, weight: .semibold, design: .rounded))
+                let t = ctx.resolve(Text(name).font(.system(size: 13, weight: .semibold, design: .rounded))
                     .foregroundColor(pal.text.opacity(0.85)))
-                let sz = t.measure(in: CGSize(width: size.width * 0.45, height: 40))
-                let y = min(rear.y + 4, size.height - sz.height - 10)
-                let rect = CGRect(x: size.width / 2 - sz.width / 2 - 10, y: y, width: sz.width + 20, height: sz.height + 6)
+                let sz = t.measure(in: CGSize(width: size.width * 0.4, height: 30))
+                let rect = CGRect(x: size.width - sz.width - 28, y: size.height - sz.height - 12, width: sz.width + 18, height: sz.height + 6)
                 ctx.fill(Path(roundedRect: rect, cornerRadius: rect.height / 2), with: .color(pal.bgBottom.opacity(0.75)))
-                ctx.draw(t, in: rect.insetBy(dx: 10, dy: 3))
+                ctx.draw(t, in: rect.insetBy(dx: 9, dy: 3))
             }
-            // số khoảng cách tới xe trước: to, nằm giữa dải màu (dải quá ngắn thì đặt trên nóc xe trước)
-            if let t = target, let d = r.d {
-                if pathEnd > 4 {
-                    let zm = 0.8 + (pathEnd - 0.8) * 0.45
-                    let p = cam.point(Ground(x: (interp(left, zm) + interp(right, zm)) / 2, z: zm))
-                    var g = ctx
-                    g.addFilter(.shadow(color: .black.opacity(0.45), radius: 3, y: 1))
-                    let label = Text(String(format: "%.0f m", d)).font(.system(size: 30, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                    g.draw(label, at: p, anchor: .center)
-                } else {
-                    let label = Text(String(format: "%.0f m", d)).font(.system(size: 22, weight: .bold, design: .rounded))
-                        .foregroundColor(pal.text)
-                    ctx.draw(label, at: cam.point3(t.pos.x, t.heightM + 0.4, t.pos.z), anchor: .bottom)
-                }
-            }
+        }
+    }
+
+    /// Xe bên hông đang khuất, đặt vào giữa làn của nó.
+    private func sideCars() -> [Car] {
+        let lw = snapshot.roadLane.width
+        let lay = layout
+        return snapshot.sideVehicles.compactMap { v in
+            guard v.lane >= lay.lo, v.lane <= lay.hi, v.z < Self.topZ + 2 else { return nil }
+            let tall = v.cls == "truck" || v.cls == "bus"
+            let moto = v.cls == "motorcycle"
+            return Car(pos: Ground(x: centerX(v.z) + Double(v.lane) * lw, z: v.z),
+                       widthM: config.vehicleWidthM[v.cls] ?? 1.8, heightM: tall ? 3.0 : (moto ? 1.2 : 1.45),
+                       lengthM: tall ? 9.0 : (moto ? 2.0 : 4.5), kind: .other)
         }
     }
 
     /// Xe là ảnh nhìn từ sau-trên. Bề rộng theo mét × tỉ lệ camera; chiều cao ảnh nén theo độ dài xe
     /// nhìn từ camera ảo (xe xa trông dẹt hơn), đuôi xe đặt đúng vị trí trên mặt đường.
-    private func drawCar(_ ctx: GraphicsContext, _ cam: ChaseCamera, _ car: Car) {
+    private func drawCar(_ ctx: GraphicsContext, _ cam: NearCamera, _ car: Car) {
         let name: String
         switch car.kind {
         case .own: name = "car_own"
@@ -380,21 +337,6 @@ private struct RoadCanvas: View {
         g.draw(img, in: rect)
     }
 
-    // MARK: ảnh → mặt đường
-
-    private var horizonPx: Double {
-        snapshot.yHorizon ?? config.distance.yHorizonNorm * snapshot.frameHeight
-    }
-
-    private func toGround(xPx: Double, yPx: Double) -> Ground? {
-        let f = snapshot.fPx, dy = yPx - horizonPx
-        guard f > 0, dy > 1 else { return nil }
-        let z = f * calibration.hCamM / dy
-        return Ground(x: (xPx - snapshot.frameWidth / 2) * z / f, z: z)
-    }
-
-    /// Hai mép làn mình theo mét, lấy từ mô hình làn đã lọc (RoadLaneFilter): thẳng hoặc cong nhẹ, đổi chậm.
-    /// Xa hơn 60 m thì kéo thẳng theo hướng tại 60 m để đường cong không văng ra ngoài.
     /// Tim làn mình tại z. Gần: theo làn camera. Xa (camera không thấy rõ): có bản đồ thì nối tiếp theo độ cong
     /// thật của con đường trên OSM (liền mạch tại điểm nối), không có thì kéo thẳng theo hướng cuối.
     private func centerX(_ z: Double) -> Double {
@@ -409,19 +351,10 @@ private struct RoadCanvas: View {
     static let mapJoinZ = 40.0
 
     private func laneEdges() -> ([Ground], [Ground]) {
-        // từ dưới gầm xe mình (mặt đường chạm đáy màn hình) tới thật xa (đường tan vào chân trời, không bị cụt)
-        let zs = Array(stride(from: -14.0, through: Self.farZ, by: 2.5)) + Array(stride(from: Self.farZ + 20, through: 300, by: 20))
+        // hai mép làn mình theo mô hình làn đã lọc (RoadLaneFilter), từ sau đuôi xe tới quá mép trên một chút
+        let zs = Array(stride(from: -16.0, through: 12.0, by: 1.0))
         let half = snapshot.roadLane.width / 2
         return (zs.map { Ground(x: centerX($0) - half, z: $0) }, zs.map { Ground(x: centerX($0) + half, z: $0) })
-    }
-
-    /// x tại z trên đường gấp khúc (sắp theo z); ngoài khoảng thì kéo thẳng theo hai điểm đầu/cuối.
-    private func interp(_ pts: [Ground], _ z: Double) -> Double {
-        guard pts.count > 1 else { return pts.first?.x ?? 0 }
-        func lerp(_ a: Ground, _ b: Ground) -> Double { b.z == a.z ? a.x : a.x + (z - a.z) * (b.x - a.x) / (b.z - a.z) }
-        if z <= pts[0].z { return lerp(pts[0], pts[1]) }
-        for i in 1..<pts.count where pts[i].z >= z { return lerp(pts[i - 1], pts[i]) }
-        return lerp(pts[pts.count - 2], pts[pts.count - 1])
     }
 
     /// Bố cục làn theo chỉ số (0 = làn mình, âm = bên trái). Vạch giữa (chia hai chiều) nằm ở mép trái làn `center`.
@@ -438,39 +371,6 @@ private struct RoadCanvas: View {
         return (center - opp, same - n, center)
     }
 
-    /// Xe để vẽ. Khoảng cách: bề rộng box kết hợp vị trí đáy xe trên mặt đường (xe bên cạnh nhìn chéo thì box rộng ra
-    /// vì thấy cả hông xe → đo theo bề rộng bị gần quá). Vị trí ngang: tính độ lệch so với tâm làn mình rồi
-    /// "bắt" vào giữa làn gần nhất của con đường đang vẽ, nên xe luôn nằm trong làn, không trôi ra ngoài đường.
-    func vehicles() -> [Car] {
-        let s = snapshot
-        let lane = s.roadLane
-        var out: [Car] = []
-        for (i, d) in s.detections.enumerated() {
-            let kept = i < s.kept.count ? s.kept[i] : true
-            guard kept, let wReal = config.vehicleWidthM[d.cls], d.width > 0, s.fPx > 0 else { continue }
-            let isEgo = d.box == s.result.egoBox
-            var z = s.fPx * wReal / d.width
-            if let g = Distance.fromGround(fPx: s.fPx, hCamM: calibration.hCamM, yBottomPx: d.y2, yHorizonPx: horizonPx) {
-                z = Distance.fuse(dWidth: z, dGround: g)
-            }
-            if isEgo, let dd = s.result.d { z = dd }
-            guard z > 1.0, z < Self.farZ + 20 else { continue }  // gần hơn 1 m là capo xe mình
-            let x = ((d.x1 + d.x2) / 2 - s.frameWidth / 2) * z / s.fPx
-            let laneIdx = isEgo ? 0 : Int(((x - centerX(z)) / lane.width).rounded())
-            guard laneIdx >= layout.lo, laneIdx <= layout.hi else { continue }  // ngoài 4 làn đang vẽ (lề, xe đỗ bên đường)
-            let xDraw = centerX(z) + Double(laneIdx) * lane.width
-            let isCar = d.cls == "car"
-            out.append(Car(pos: Ground(x: xDraw, z: z), widthM: wReal, heightM: isCar ? 1.45 : 3.0, lengthM: isCar ? 4.5 : 9.0,
-                           kind: isEgo ? .target : (i < s.oncoming.count && s.oncoming[i] ? .oncoming : .other)))
-        }
-        // model lỡ mất xe trước vài frame nhưng app vẫn đang giữ (D dự đoán): vẫn vẽ xe ở giữa làn, khỏi nhấp nháy
-        if !out.contains(where: { $0.kind == .target }), let d = s.result.d, d > 1, let cls = s.result.cls {
-            let isCar = cls == "car"
-            out.append(Car(pos: Ground(x: centerX(d), z: d), widthM: config.vehicleWidthM[cls] ?? 1.8,
-                           heightM: isCar ? 1.45 : 3.0, lengthM: isCar ? 4.5 : 9.0, kind: .target))
-        }
-        return out
-    }
 }
 
 private struct Car {
@@ -481,38 +381,40 @@ private struct Car {
     var lengthM: Double
     var kind: Kind
 
-    var isTarget: Bool { kind == .target }
     var isTall: Bool { heightM > 2 }
     static let own = Car(pos: Ground(x: 0, z: -3.2), widthM: 1.85, heightM: 1.45, lengthM: 4.6, kind: .own)
-    var isOwn: Bool { kind == .own }
 }
 
-/// Camera ảo: cao 8 m, lùi sau camera thật 10 m, chúc xuống 28° (cùng góc nhìn với ảnh xe vẽ sẵn).
-/// Chiều sâu được nén lại (depth < 1) để thấy tới ~60 m; số mét hiển thị vẫn là số thật.
-private struct ChaseCamera {
+/// Camera ảo nhìn xe mình từ sau-trên: cao 8 m, lùi 25 m sau camera thật, chúc 28° (cùng góc với ảnh xe vẽ sẵn).
+/// Tiêu cự chọn để bề ngang thấy ~16 m (xe mình to), nhưng vẫn thấy tới ~8 m sau đuôi xe trong chiều cao canvas;
+/// dịch dọc để điểm `topZ` (mũi xe) nằm đúng mép trên.
+private struct NearCamera {
     let size: CGSize
     let height = 8.0
-    let back = 10.0
-    let depth = 0.5
+    let back = 25.0
     let pitch = 28.0 * Double.pi / 180
+    let focal: Double
+    let cy: Double
 
-    var focal: Double { Double(size.height) * 1.2 }
-    var cy: Double { Double(size.height) * 0.5 }
-    /// Đường chân trời (thường nằm trên mép màn hình vì camera chúc xuống).
-    var horizonY: CGFloat { CGFloat(cy - focal * tan(pitch)) }
+    init(size: CGSize, topZ: Double) {
+        self.size = size
+        func ratio(_ z: Double) -> Double { let (d, v) = Self.view(0, z, height, back, pitch); return v / d }
+        let byWidth = Double(size.width) / 16 * Self.view(0, 0, height, back, pitch).d
+        let byHeight = Double(size.height) / max(ratio(-11) - ratio(topZ), 1e-3)
+        focal = max(min(byWidth, byHeight), 1)
+        cy = -focal * ratio(topZ)
+    }
 
-    /// Độ sâu theo trục nhìn và độ lệch dọc (xuống là dương) của điểm cao y, cách z phía trước.
-    private func view(_ y: Double, _ z: Double) -> (d: Double, v: Double) {
-        let dz = z * depth + back, dy = height - y
+    private static func view(_ y: Double, _ z: Double, _ h: Double, _ back: Double, _ pitch: Double) -> (d: Double, v: Double) {
+        let dz = z + back, dy = h - y
         return (max(dz * cos(pitch) + dy * sin(pitch), 0.3), dy * cos(pitch) - dz * sin(pitch))
     }
 
     /// Số điểm màn hình cho 1 m bề ngang ở mặt đường, cách z phía trước.
-    func scale(_ z: Double) -> Double { focal / view(0, z).d }
+    func scale(_ z: Double) -> Double { focal / Self.view(0, z, height, back, pitch).d }
 
-    /// Điểm 3D: x ngang, y cao so với mặt đường, z phía trước (mét).
     func point3(_ x: Double, _ y: Double, _ z: Double) -> CGPoint {
-        let (d, v) = view(y, z)
+        let (d, v) = Self.view(y, z, height, back, pitch)
         return CGPoint(x: size.width / 2 + CGFloat(focal * x / d), y: CGFloat(cy + focal * v / d))
     }
 

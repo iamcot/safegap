@@ -48,13 +48,6 @@ struct SettingsView: View {
                     Text("Bản thử: nhận đèn bằng model hiện có, màu theo điểm sáng trong khung đèn. Nhắc \"Đèn đỏ phía trước\" khi còn chạy nhanh gần ngã tư, \"Đèn xanh rồi\" khi đèn đã xanh mà xe vẫn đứng. Biển camera thấy (dành cho làn mình) được nhớ theo GPS: lần sau đi qua app nhắc trước, kể cả khi camera không thấy; biển nhiều lần không thấy nữa thì tự xoá. Giọng đọc dùng giọng tiếng Việt có sẵn trên máy (Cài đặt iPhone > Trợ năng > Nội dung được đọc > Giọng nói để tải giọng tốt hơn).")
                 }
                 Section {
-                    SignSimulator()
-                } header: {
-                    Text("Giả lập biển báo")
-                } footer: {
-                    Text("Bấm = coi như xe vừa đi qua biển đó, để thử luật hiệu lực khi chưa có model nhận biển. Cấm dừng đỗ: để tốc độ giả lập 0 trên 3 giây. Cấm rẽ: cần bản đồ (ngã tư phía trước) hoặc xoay máy như đang rẽ. Hết hiệu lực khi qua ngã tư, rẽ, gặp biển hết cấm, hoặc sau 1,5 km nếu không có bản đồ.")
-                }
-                Section {
                     Toggle("Thu dữ liệu (ảnh + nhãn gán sẵn)", isOn: $model.settings.dataCapture)
                     CaptureSessionsList()
                 } header: {
@@ -286,27 +279,5 @@ private struct CaptureSessionsList: View {
         try? FileManager.default.removeItem(at: dir)
         zips[dir] = nil
         reload()
-    }
-}
-
-
-/// Nút giả lập "vừa đi qua biển" cho các biển hay gặp.
-private struct SignSimulator: View {
-    @EnvironmentObject var model: AppModel
-
-    private static let items: [(label: String, sighting: SignSighting)] = [
-        ("P.130 Cấm dừng đỗ", SignSighting(code: "P.130")),
-        ("P.131a Cấm đỗ", SignSighting(code: "P.131a")),
-        ("P.123a Cấm rẽ trái", SignSighting(code: "P.123a")),
-        ("P.124a Cấm quay đầu", SignSighting(code: "P.124a")),
-        ("P.127 Tối đa 50", SignSighting(code: "P.127", value: 50)),
-        ("P.103a Cấm ô tô 6h–22h", SignSighting(code: "P.103a", window: TimeWindow(fromHour: 6, toHour: 22))),
-        ("DP.135 Hết mọi lệnh cấm", SignSighting(code: "DP.135")),
-    ]
-
-    var body: some View {
-        ForEach(Self.items, id: \.label) { item in
-            Button(item.label) { model.simulateSign(item.sighting) }
-        }
     }
 }

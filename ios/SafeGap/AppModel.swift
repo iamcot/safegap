@@ -171,7 +171,6 @@ final class AppModel: ObservableObject {
     func toggleZoom() { settings.zoom2x.toggle() }
 
     /// Giả lập "xe vừa đi qua biển" để thử luật biển báo khi chưa có model nhận biển.
-    func simulateSign(_ s: SignSighting) { processor.addSighting(s) }
     func clearSignMap() { processor.clearSignMap() }
 
     // MARK: hiệu chỉnh
