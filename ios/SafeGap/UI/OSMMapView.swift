@@ -11,6 +11,11 @@ final class OSMTileStatus: ObservableObject {
     @Published var loaded = 0
     @Published var failed = 0
     @Published var lastError: String?
+    /// Nguồn ô đang dùng (ghi bản quyền đúng nguồn).
+    @Published var source = OSMTileOverlay.sources[0].name
+    /// Không máy chủ ô nào kết nối được (20/11: tile.openstreetmap.org báo "không thể kết nối máy chủ" ở VN):
+    /// bỏ lớp ô, dùng nền Apple Maps.
+    @Published var useApple = false
 }
 
 struct OSMMapView: View {
@@ -28,10 +33,10 @@ struct OSMMapView: View {
             VStack(alignment: .trailing, spacing: 3) {
                 if lat == nil {
                     tag("Đang chờ GPS…")
-                } else if status.loaded == 0, let e = status.lastError {
+                } else if status.loaded == 0, !status.useApple, let e = status.lastError {
                     tag("Không tải được bản đồ: \(e)")
                 }
-                tag("© OpenStreetMap")
+                tag(status.useApple ? "Apple Maps (không tải được ô OSM)" : status.source)
             }
             .padding(4)
         }
@@ -80,6 +85,7 @@ private struct OSMMap: UIViewRepresentable {
     }
 
     func updateUIView(_ map: MKMapView, context: Context) {
+        if status.useApple, !map.overlays.isEmpty { map.removeOverlays(map.overlays) }
         guard let lat, let lon else { return }
         let c = context.coordinator
         let p = CLLocationCoordinate2D(latitude: lat, longitude: lon)
@@ -122,7 +128,16 @@ private struct OSMMap: UIViewRepresentable {
 }
 
 /// Tải ô bản đồ với User-Agent riêng của app (chính sách tile.openstreetmap.org) và cache trên đĩa.
-private final class OSMTileOverlay: MKTileOverlay {
+/// Máy chủ chính không kết nối được thì thử máy chủ dự phòng (cùng dữ liệu OSM) và nhớ máy chủ chạy được;
+/// tất cả đều lỗi (chưa tải được ô nào sau nhiều lần) thì chuyển nền Apple Maps.
+final class OSMTileOverlay: MKTileOverlay {
+    static let sources: [(name: String, url: String)] = [
+        ("© OpenStreetMap", "https://tile.openstreetmap.org/{z}/{x}/{y}.png"),
+        ("© OpenStreetMap © CARTO", "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"),
+        ("© OpenStreetMap France", "https://a.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png"),
+    ]
+    private static var preferred = 0
+    private static let lock = NSLock()
     weak var status: OSMTileStatus?
 
     private static let session: URLSession = {
@@ -133,16 +148,43 @@ private final class OSMTileOverlay: MKTileOverlay {
         return URLSession(configuration: c)
     }()
 
+    private static func tileURL(_ i: Int, _ p: MKTileOverlayPath) -> URL? {
+        URL(string: sources[i].url.replacingOccurrences(of: "{z}", with: "\(p.z)")
+            .replacingOccurrences(of: "{x}", with: "\(p.x)").replacingOccurrences(of: "{y}", with: "\(p.y)"))
+    }
+
     override func loadTile(at path: MKTileOverlayPath, result: @escaping (Data?, Error?) -> Void) {
-        Self.session.dataTask(with: url(forTilePath: path)) { [weak self] data, resp, error in
+        Self.lock.lock(); let start = Self.preferred; Self.lock.unlock()
+        attempt(start, tried: 0, path, result)
+    }
+
+    private func attempt(_ i: Int, tried: Int, _ path: MKTileOverlayPath, _ result: @escaping (Data?, Error?) -> Void) {
+        let n = Self.sources.count
+        guard let url = Self.tileURL(i, path) else { result(nil, URLError(.badURL)); return }
+        Self.session.dataTask(with: url) { [weak self] data, resp, error in
             let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
             let ok = error == nil && code == 200 && data != nil
-            let msg = error.map { $0.localizedDescription } ?? (code != 200 ? "HTTP \(code)" : nil)
+            if ok {
+                Self.lock.lock(); Self.preferred = i; Self.lock.unlock()
+                DispatchQueue.main.async {
+                    guard let st = self?.status else { return }
+                    st.loaded += 1
+                    if st.source != Self.sources[i].name { st.source = Self.sources[i].name }
+                }
+                result(data, nil)
+                return
+            }
+            if tried + 1 < n {
+                self?.attempt((i + 1) % n, tried: tried + 1, path, result)
+                return
+            }
+            let msg = error.map { $0.localizedDescription } ?? "HTTP \(code)"
             DispatchQueue.main.async {
                 guard let st = self?.status else { return }
-                if ok { st.loaded += 1 } else { st.failed += 1; st.lastError = msg }
+                st.failed += 1; st.lastError = msg
+                if st.loaded == 0 && st.failed >= 6 { st.useApple = true }
             }
-            result(ok ? data : nil, ok ? nil : (error ?? URLError(.badServerResponse)))
+            result(nil, error ?? URLError(.badServerResponse))
         }.resume()
     }
 }
