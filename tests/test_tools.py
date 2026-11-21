@@ -341,6 +341,6 @@ def test_labeler_hood_box_detected():
 
 def test_light_types_fold_to_traffic_light():
     from proto import dataset as D
-    assert "light_green_left" in D.LIGHT_COLORS and "light_off_moto" in D.LIGHT_COLORS
+    assert "light_green_left" in D.LIGHT_COLORS and "light_off_moto" in D.LIGHT_COLORS and "light_red_timer" in D.LIGHT_COLORS
     assert D.drive_class("light_red_straight") == "traffic light"
     assert "mũi tên rẽ trái" in D.LIGHT_COLORS["light_green_left"]

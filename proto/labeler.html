@@ -115,7 +115,7 @@ const isSpeed = c => c === 'P.127' || c.startsWith('P.127_');
 // đèn: chọn màu sau khi khoanh (traffic light = chưa rõ màu; khi train model xe gom hết về traffic light)
 const LIGHTS = [['light_red', 'Đỏ'], ['light_yellow', 'Vàng'], ['light_green', 'Xanh'], ['light_off', 'Tắt'], ['traffic light', 'Chưa rõ']];
 // loại đèn: tròn (mọi hướng) / mũi tên / đèn thấp riêng xe máy → lớp light_<màu>[_<loại>]
-const LIGHT_TYPES = [['', 'Tròn'], ['left', '← Trái'], ['straight', '↑ Thẳng'], ['right', '→ Phải'], ['moto', 'Xe máy']];
+const LIGHT_TYPES = [['', 'Tròn'], ['left', '← Trái'], ['straight', '↑ Thẳng'], ['right', '→ Phải'], ['moto', 'Xe máy'], ['timer', 'Đếm giờ']];
 const isLight = c => c === 'traffic light' || c.startsWith('light_');
 function lightParts(c) {
   if (c === 'traffic light') return { col: c, typ: '' };

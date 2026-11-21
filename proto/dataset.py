@@ -275,7 +275,7 @@ _LIGHT_BASE = {"light_red": "Đèn đỏ", "light_yellow": "Đèn vàng", "light
 # loại đèn (chủ app 21/11): không hậu tố = đèn tròn (mọi hướng / đi thẳng); mũi tên trái / phải / thẳng; đèn thấp riêng
 # xe máy. Lớp = light_<màu>[_<loại>], vd light_green_left. Để sau train bộ đoán màu + loại từ ảnh cắt đèn.
 LIGHT_TYPES = {"left": "mũi tên rẽ trái", "right": "mũi tên rẽ phải", "straight": "mũi tên đi thẳng",
-               "moto": "đèn riêng xe máy"}
+               "moto": "đèn riêng xe máy", "timer": "đồng hồ đếm ngược"}
 LIGHT_COLORS = {**_LIGHT_BASE, **{f"{k}_{t}": f"{v}, {tn}" for k, v in _LIGHT_BASE.items() for t, tn in LIGHT_TYPES.items()}}
 
 
