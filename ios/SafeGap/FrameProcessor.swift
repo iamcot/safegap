@@ -645,7 +645,8 @@ final class FrameProcessor {
             let x = ((d.x1 + d.x2) / 2 - w / 2) * z / f - road.center(z)
             let k = Int((x / road.width).rounded())
             if k != 0, abs(k) <= 2 { sideSeen.append(SideVehicle(id: id, lane: k, z: z, cls: d.cls)) }
-            if d.cls != "motorcycle", k != 0, abs(k) <= 3 { sameDirOffsets.append(k) }
+            // đoán làn: chỉ ô tô trong 25 m (xa hơn thì lệch hướng làn làm sai cả làn)
+            if d.cls != "motorcycle", z < 25, k != 0, abs(k) <= 2 { sameDirOffsets.append(k) }
         }
         // xe làn bên cạnh vừa ra khỏi khung hình khi đang ở gần: đoán tiếp vị trí để vẽ ngang / sau xe mình
         sideHidden = sideMemory.update(t: t, seen: sideSeen)

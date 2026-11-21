@@ -162,6 +162,9 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
       ngoài cùng phải; xe ngược chiều cách n làn (đường hai chiều) → làn thứ n từ vạch giữa; không thấy gì → GPS
       (trừ sai số) rồi mới mặc định sát vạch giữa. Số làn = max(OSM, số làn camera thấy có xe). Dùng cho: vẽ làn ở
       màn chính, miễn nhắc cấm dừng khi không ở làn sát lề (thay cho GPS `rightEdgeGapM`). Log: lane_debug "pos 2/3 vehicles".
+      Log 20/11 tối: số làn bị thổi lên 7–11 (hay gặp "4/7", "5/8", "7/10") vì xe ở ±3 làn, xa tới 40 m, một frame
+      cũng tính. Sửa: chỉ ô tô < 25 m, |k| ≤ 2; mỗi làn bên cạnh phải thấy ≥ 3 frame trong 6 s; số làn ≤ OSM + 1
+      (không có OSM ≤ 4).
 - [x] Hiệu lực biển cấm đi vào làm đơn giản (chủ app 20/11, thay các quy tắc B3b / sửa 17/11 cho nhóm này): biển
       cấm đi vào (P.102, P.103a, P.106a...) chỉ có hiệu lực khi **cả biển nằm bên phải vạch làn phải** của làn mình:
       mép trái biển (m, từ khung + khoảng cách, `ConfirmedSign.leftEdgeM`) > vạch phải của mô hình làn
@@ -286,6 +289,11 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
 
 ## Ghi chú đo đạc / học được
 
+- Log 20/11 (sáng 68 phút, tối 72 phút chạy, bản 2 cột): khoảng cách ổn (d_min trung vị 15–16 m ở ~23 km/h, RED
+  4–7% thời gian chạy, time gap lúc RED ~1,1–1,2 s). Nhiệt "serious" 65–80% thời gian → 6,5 fps; nominal 14–15 fps;
+  màn 2 cột (camera + bản đồ) không làm tụt fps thêm so với cùng mức nhiệt. Đèn tối: vẫn nhảy (nhiều đoạn < 1,5 s),
+  có chuyển thẳng xanh → đỏ (82 lần) và vàng kéo dài tới 61 s (đèn vàng nhấp nháy / đèn đường) → chờ model đèn có màu
+  từ nhãn đang gán. Đoán làn: số làn thổi lên 7–11, đã sửa (xem mục đoán làn).
 - (chưa có số đo trên xe cho giai đoạn A)
 - Thử bằng clip (16/11): đèn đỏ bị giữ mãi khi chui hầm, đèn vàng bị kẹt. Nguyên nhân: frame "không rõ màu" không được
   bỏ phiếu nên màu cũ sống mãi; đỏ LED qua camera ngả cam (hue 15–25) bị đọc thành vàng. Sửa: bỏ phiếu cả "không rõ",
