@@ -329,3 +329,11 @@ def test_compare_drops_small_vehicles_keeps_lights():
     assert [b[0] for b in drop_small(boxes, 0.05)] == ["car", "traffic light"]
     preds = [("a", "truck", 0.9, (0.5, 0.5, 0.1, 0.04))]
     assert drop_small(preds, 0.05, cls_of=lambda p: p[1], box_of=lambda p: p[3]) == []
+
+
+def test_labeler_hood_box_detected():
+    pytest.importorskip("fastapi")
+    from proto.labeler import is_hood
+    assert is_hood({"cls": "car", "cx": 0.5, "cy": 0.88, "w": 0.97, "h": 0.2})
+    assert not is_hood({"cls": "car", "cx": 0.5, "cy": 0.6, "w": 0.3, "h": 0.2})
+    assert not is_hood({"cls": "P.130", "cx": 0.5, "cy": 0.9, "w": 0.9, "h": 0.2})

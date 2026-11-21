@@ -685,7 +685,9 @@ final class FrameProcessor {
         // Thu dữ liệu (A6): ảnh + nhãn gán sẵn từ model hiện tại (xe + đèn).
         if p.settings.dataCapture {
             capture.start()
-            capture.offer(pb, t: t, frameWidth: w, frameHeight: h, detections: dets + lightDets, speed: gps, speedKmh: v,
+            // bỏ capo xe mình (box xe quá rộng / chạm đáy, như pipeline bỏ) khỏi nhãn gán sẵn; xe máy giữ nguyên
+            let capDets = dets.filter { p.config.vehicleWidthM[$0.cls] == nil || pipeline.keeps($0) }
+            capture.offer(pb, t: t, frameWidth: w, frameHeight: h, detections: capDets + lightDets, speed: gps, speedKmh: v,
                           light: lightState?.box != nil ? lightState?.color : nil, thermal: thermal,
                           signCount: lastSignSeen.flatMap { t - $0.t < 0.8 ? $0.n : nil } ?? 0,
                           laneDebug: laneDebug, lightDebug: lightDebug)

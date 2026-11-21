@@ -138,6 +138,14 @@ def _iou(a: dict, b: dict) -> float:
     return inter / union if union > 0 else 0.0
 
 
+VEHICLES = {"car", "truck", "bus", "motorcycle"}
+
+
+def is_hood(b: dict) -> bool:
+    """Khung xe chạm đáy ảnh và rộng quá nửa ảnh: capo xe mình (model trên app gán nhầm lúc chụp)."""
+    return b["cls"] in VEHICLES and b["cy"] + b["h"] / 2 >= 0.96 and b["w"] >= 0.5
+
+
 def new_suggestions(existing: list[dict], proposed: list[dict], iou: float = 0.4) -> list[dict]:
     """Khung gợi ý chưa trùng khung đã có (cùng loại biển / xe), khung tin cậy cao trước."""
     def kind(c: str) -> str:
@@ -194,7 +202,7 @@ class Suggester:
                             cls = slash_code(crop_pixels(pil, cx, cy, bw, bh)) or cls
                         except (OSError, ImportError):
                             pass
-                    if cls:
+                    if cls and not is_hood({"cls": cls, "cy": cy, "h": bh, "w": bw}):
                         out.append({"cls": cls, "cx": cx, "cy": cy, "w": bw, "h": bh, "conf": round(c, 3)})
         return out
 
@@ -368,6 +376,10 @@ def make_router(ds_dir: Optional[Path] = None, suggester=None) -> APIRouter:
                     continue
                 if 0 <= i < len(classes) and len(vals) == 4:
                     out.append({"cls": classes[i], "cx": vals[0], "cy": vals[1], "w": vals[2], "h": vals[3]})
+        # ảnh chưa duyệt: bỏ khung capo xe mình trong nhãn gán sẵn lúc chụp
+        rv = D.reviewed_frames(d)
+        if rv is not None and frame not in rv:
+            out = [b for b in out if not is_hood(b)]
         return {"boxes": out}
 
     @r.post("/api/label/save")
