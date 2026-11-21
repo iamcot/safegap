@@ -270,8 +270,13 @@ def sync_own_marks(ds: Path) -> int:
 # ---- Model xe + đèn (lớp app, YOLOLabel.classes): train ở <ds>/drive, chỉ giữ lớp app ----
 DRIVE_CLASSES = ["car", "truck", "bus", "motorcycle", "traffic light"]
 # đèn gán theo màu (để đo / train bộ đoán màu); model xe vẫn chỉ học "traffic light"
-LIGHT_COLORS = {"light_red": "Đèn đỏ", "light_yellow": "Đèn vàng", "light_green": "Đèn xanh",
-                "light_off": "Đèn tắt / không rõ màu"}
+_LIGHT_BASE = {"light_red": "Đèn đỏ", "light_yellow": "Đèn vàng", "light_green": "Đèn xanh",
+               "light_off": "Đèn tắt / không rõ màu"}
+# loại đèn (chủ app 21/11): không hậu tố = đèn tròn (mọi hướng / đi thẳng); mũi tên trái / phải / thẳng; đèn thấp riêng
+# xe máy. Lớp = light_<màu>[_<loại>], vd light_green_left. Để sau train bộ đoán màu + loại từ ảnh cắt đèn.
+LIGHT_TYPES = {"left": "mũi tên rẽ trái", "right": "mũi tên rẽ phải", "straight": "mũi tên đi thẳng",
+               "moto": "đèn riêng xe máy"}
+LIGHT_COLORS = {**_LIGHT_BASE, **{f"{k}_{t}": f"{v}, {tn}" for k, v in _LIGHT_BASE.items() for t, tn in LIGHT_TYPES.items()}}
 
 
 def drive_class(name: str) -> str | None:

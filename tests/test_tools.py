@@ -337,3 +337,10 @@ def test_labeler_hood_box_detected():
     assert is_hood({"cls": "car", "cx": 0.5, "cy": 0.88, "w": 0.97, "h": 0.2})
     assert not is_hood({"cls": "car", "cx": 0.5, "cy": 0.6, "w": 0.3, "h": 0.2})
     assert not is_hood({"cls": "P.130", "cx": 0.5, "cy": 0.9, "w": 0.9, "h": 0.2})
+
+
+def test_light_types_fold_to_traffic_light():
+    from proto import dataset as D
+    assert "light_green_left" in D.LIGHT_COLORS and "light_off_moto" in D.LIGHT_COLORS
+    assert D.drive_class("light_red_straight") == "traffic light"
+    assert "mũi tên rẽ trái" in D.LIGHT_COLORS["light_green_left"]

@@ -253,6 +253,10 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
       `LightGroup` (TrafficLight.swift): bỏ đèn nằm hẳn dưới đèn khác cùng cột (đèn xe máy); đọc màu mọi đèn, các đèn
       ngang hàng quanh đèn đang theo mà khác màu (dãy mũi tên) → coi là chưa rõ, tracker giữ trạng thái cũ. Log tối
       20/11 có 82 lần nhảy thẳng xanh → đỏ, nghi do chọn nhầm giữa đèn mũi tên và đèn thẳng.
+- [x] Gán nhãn loại đèn (chủ app chọn 21/11): lớp `light_<màu>[_<loại>]`, loại = left / right / straight / moto
+      (không hậu tố = tròn). Thanh dưới ảnh có 2 hàng Màu + Loại. Model xe + đèn gom về "traffic light".
+- [ ] Bộ đoán màu + loại đèn từ ảnh cắt (classifier nhỏ) thay HSV, khi đủ nhãn (~500 đèn); app biết đèn nào là mũi tên
+      để chỉ xét đèn cho hướng mình đi (đi thẳng: đèn tròn / mũi tên thẳng; đang rẽ: mũi tên tương ứng).
 - [ ] C1. Classifier trạng thái (đỏ/vàng/xanh/mũi tên trái-thẳng-phải/tắt) thay HSV.
 - [ ] C2. Đọc đồng hồ đếm ngược (classifier chữ số LED 7 đoạn, kiểm tra giảm 1/giây).
 - [ ] C3. Giữ trạng thái + đếm ngược khi đèn ra khỏi khung; thử camera 0,5x khi đứng yên.

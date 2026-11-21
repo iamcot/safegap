@@ -114,12 +114,23 @@ const SPEEDS = [5, 30, 40, 50, 60, 70, 80, 90, 100, 120];
 const isSpeed = c => c === 'P.127' || c.startsWith('P.127_');
 // đèn: chọn màu sau khi khoanh (traffic light = chưa rõ màu; khi train model xe gom hết về traffic light)
 const LIGHTS = [['light_red', 'Đỏ'], ['light_yellow', 'Vàng'], ['light_green', 'Xanh'], ['light_off', 'Tắt'], ['traffic light', 'Chưa rõ']];
-const isLight = c => LIGHTS.some(([k]) => k === c);
+// loại đèn: tròn (mọi hướng) / mũi tên / đèn thấp riêng xe máy → lớp light_<màu>[_<loại>]
+const LIGHT_TYPES = [['', 'Tròn'], ['left', '← Trái'], ['straight', '↑ Thẳng'], ['right', '→ Phải'], ['moto', 'Xe máy']];
+const isLight = c => c === 'traffic light' || c.startsWith('light_');
+function lightParts(c) {
+  if (c === 'traffic light') return { col: c, typ: '' };
+  const p = c.split('_');
+  return { col: `light_${p[1]}`, typ: p[2] || '' };
+}
+function lightClass(col, typ) {
+  if (!typ) return col;
+  return `${col === 'traffic light' ? 'light_off' : col}_${typ}`;
+}
 let S = { classes: [], names: {}, sessions: [], session: null, frames: [], idx: -1, boxes: [], sel: -1, cls: 'car', hide: false, img: null, undo: [], dirty: false };
 
 const LIGHT_HUE = { light_red: '#ff4d4d', light_yellow: '#ffd23f', light_green: '#3ddc84', light_off: '#9aa0a6' };
 function color(name) {
-  if (LIGHT_HUE[name]) return LIGHT_HUE[name];
+  if (name.startsWith('light_') && LIGHT_HUE[lightParts(name).col]) return LIGHT_HUE[lightParts(name).col];
   let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 360;
   if (name.startsWith('P.') || name.startsWith('DP.')) return `hsl(${h % 40 + 340},85%,60%)`;   // biển: tông đỏ/hồng
   return `hsl(${h},70%,60%)`;
@@ -153,16 +164,23 @@ function renderSpeeds() {
   const el = $('speeds'), cur = S.sel >= 0 && S.boxes[S.sel] ? S.boxes[S.sel].cls : S.cls;
   if (speedKey === cur) return;
   speedKey = cur;
-  const opts = isSpeed(cur) ? SPEEDS.map(v => [`P.127_${v}`, String(v)]) : isLight(cur) ? LIGHTS : null;
-  el.hidden = !opts;
-  if (!opts) return;
-  el.innerHTML = `<span class="hint">${isSpeed(cur) ? 'Tốc độ' : 'Màu đèn'}:</span>`;
-  opts.forEach(([c, label]) => {
-    const b = document.createElement('button');
-    b.textContent = label; if (cur === c) b.className = 'on';
-    b.onclick = () => pickClass(c);
-    el.appendChild(b);
-  });
+  el.hidden = !(isSpeed(cur) || isLight(cur));
+  if (el.hidden) return;
+  el.innerHTML = '';
+  const row = (hint, opts, isOn) => {
+    const h = document.createElement('span'); h.className = 'hint'; h.textContent = hint; el.appendChild(h);
+    opts.forEach(([c, label]) => {
+      const b = document.createElement('button');
+      b.textContent = label; if (isOn(c)) b.className = 'on';
+      b.onclick = () => pickClass(c);
+      el.appendChild(b);
+    });
+  };
+  if (isSpeed(cur)) { row('Tốc độ:', SPEEDS.map(v => [`P.127_${v}`, String(v)]), c => c === cur); return; }
+  const { col, typ } = lightParts(cur);
+  row('Màu đèn:', LIGHTS.map(([k, l]) => [lightClass(k, typ), l]), c => c === cur);
+  const br = document.createElement('div'); br.style.flexBasis = '100%'; el.appendChild(br);
+  row('Loại:', LIGHT_TYPES.map(([t, l]) => [lightClass(col, t), l]), c => c === cur);
 }
 
 async function loadSessions() {

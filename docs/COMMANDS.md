@@ -32,6 +32,8 @@ uv run python -m proto.viewer              # rồi mở http://127.0.0.1:8501/la
 5. Ảnh chưa duyệt được model mới nhất đã train (biển + xe) khoanh sẵn bằng **khung nét đứt**: sai thì xoá / sửa, đúng
    thì cứ Enter. Lần đầu mở trang chờ vài giây để nạp model. Tắt bằng ô "Gợi ý khung".
    Ảnh model trên xe thấy biển có ghi "· biển" trong danh sách.
+   Đèn giao thông: khoanh rồi chọn **Màu** (Đỏ / Vàng / Xanh / Tắt) và **Loại** (Tròn / ← Trái / ↑ Thẳng / → Phải / Xe máy)
+   trên thanh dưới ảnh → lớp `light_<màu>[_<loại>]` (vd `light_green_left`). Model xe + đèn vẫn gom hết về "traffic light".
    Khung capo xe mình (xe chạm đáy ảnh, rộng > nửa ảnh) trong nhãn gán sẵn lúc chụp tự bị bỏ ở ảnh chưa duyệt; app bản
    mới cũng không ghi khung capo vào nhãn lúc thu nữa.
 
