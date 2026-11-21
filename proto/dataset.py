@@ -526,7 +526,12 @@ def _read_gts(images: list[Path], classes: list[str]) -> dict:
     return gts
 
 
-def compare(ds: Path, models: list[str], imgsz: int = 640, device: str = "mps") -> dict:
+def drop_small(boxes: list, min_h: float, cls_of=lambda b: b[0], box_of=lambda b: b[1]) -> list:
+    """Bỏ xe (không bỏ đèn) có khung thấp hơn `min_h` (tỉ lệ chiều cao ảnh): chủ app chỉ gán xe rõ, gần."""
+    return [b for b in boxes if cls_of(b) == "traffic light" or box_of(b)[3] >= min_h]
+
+
+def compare(ds: Path, models: list[str], imgsz: int = 640, device: str = "mps", min_h: float = 0.05) -> dict:
     """Chấm các model trên tập val của model xe (<ds>/drive/val.txt). Lớp khớp theo tên (COCO có sẵn car, truck,
     bus, motorcycle, traffic light), nên model gốc yolo11n.pt so được trực tiếp với model đã train."""
     from ultralytics import YOLO
@@ -536,7 +541,7 @@ def compare(ds: Path, models: list[str], imgsz: int = 640, device: str = "mps") 
         sync_own_drive(ds)
         split(dd)
     images = [Path(ln) for ln in (dd / "val.txt").read_text(encoding="utf-8").split()]
-    gts = _read_gts(images, read_classes(dd / "classes.txt"))
+    gts = {k: drop_small(v, min_h) for k, v in _read_gts(images, read_classes(dd / "classes.txt")).items()}
     res = {}
     for m in models:
         model = YOLO(m)
@@ -547,8 +552,9 @@ def compare(ds: Path, models: list[str], imgsz: int = 640, device: str = "mps") 
                 name = r.names[int(k)]
                 if name in DRIVE_CLASSES:
                     preds.append((img.name, name, c, tuple(box)))
+        preds = drop_small(preds, min_h, cls_of=lambda p: p[1], box_of=lambda p: p[3])
         res[m] = eval_detections(preds, gts, DRIVE_CLASSES)
-    print(f"{len(images)} ảnh val ({dd / 'val.txt'}). AP50 / P / R (ngưỡng 0,25):")
+    print(f"{len(images)} ảnh val ({dd / 'val.txt'}), chỉ tính xe cao ≥ {min_h:.0%} ảnh. AP50 / P / R (ngưỡng 0,25):")
     print(f"{'lớp':<14}{'khung':>6}  " + "  ".join(f"{Path(m).parent.parent.name or m:>24}" for m in models))
     for c in DRIVE_CLASSES:
         n = res[models[0]][c]["n"]
@@ -572,6 +578,8 @@ def main(argv: list[str] | None = None) -> None:
     cp = sub.add_parser("compare", help="chấm model xe + đèn trên tập val (vd yolo11n.pt gốc vs model vừa train)")
     cp.add_argument("models", nargs="*", help="các file .pt; mặc định yolo11n.pt + best.pt mới nhất ở <ds>/drive/runs")
     cp.add_argument("--imgsz", type=int, default=640)
+    cp.add_argument("--min-h", type=float, default=0.05,
+                    help="bỏ xe (cả nhãn lẫn model) thấp hơn tỉ lệ này của ảnh: chỉ chấm xe rõ, gần (0 = tính hết)")
     cp.add_argument("--device", default="mps")
     t = sub.add_parser("train", help="split rồi train Ultralytics")
     t.add_argument("--model", default="yolo11n.pt", help="điểm bắt đầu (.pt), vd model đã train lần trước")
@@ -599,7 +607,7 @@ def main(argv: list[str] | None = None) -> None:
             runs = ds / "drive" / "runs"
             found = sorted(runs.glob("*/weights/best.pt"), key=lambda p: p.stat().st_mtime) if runs.is_dir() else []
             models = ["yolo11n.pt"] + ([str(found[-1])] if found else [])
-        compare(ds, models, imgsz=a.imgsz, device=a.device)
+        compare(ds, models, imgsz=a.imgsz, device=a.device, min_h=a.min_h)
     elif a.cmd == "import-roboflow":
         s = import_roboflow(a.source, ds, a.tag)
         print(f"Nhập {s['images']} ảnh, {s['boxes']} khung biển → {ds / 'signs'}")

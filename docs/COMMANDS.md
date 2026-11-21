@@ -52,6 +52,7 @@ caffeinate -i uv run python -m proto.dataset train --epochs 80 --name drive
 
 # so model xe + đèn gốc (yolo11n.pt, COCO) với model vừa train trên cùng tập val: AP50 / precision / recall theo lớp
 uv run python -m proto.dataset compare
+# mặc định chỉ chấm xe cao ≥ 5% ảnh (xe rõ, gần, đúng cách gán nhãn); --min-h 0 để tính hết
 # hoặc chỉ định file: ... compare yolo11n.pt ~/safegap-dataset/drive/runs/<lần train>/weights/best.pt
 
 # train tiếp từ model lần trước

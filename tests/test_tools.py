@@ -321,3 +321,11 @@ def test_eval_detections_ap_and_pr():
     assert 0.5 < r["car"]["ap50"] < 1.0
     assert r["truck"]["ap50"] > 0.99 and r["truck"]["p"] == 1.0
     assert r["bus"] == {"n": 0, "ap50": 0.0, "p": 0.0, "r": 0.0}
+
+
+def test_compare_drops_small_vehicles_keeps_lights():
+    from proto.dataset import drop_small
+    boxes = [("car", (0.5, 0.5, 0.1, 0.03)), ("car", (0.5, 0.5, 0.2, 0.2)), ("traffic light", (0.1, 0.1, 0.01, 0.02))]
+    assert [b[0] for b in drop_small(boxes, 0.05)] == ["car", "traffic light"]
+    preds = [("a", "truck", 0.9, (0.5, 0.5, 0.1, 0.04))]
+    assert drop_small(preds, 0.05, cls_of=lambda p: p[1], box_of=lambda p: p[3]) == []
