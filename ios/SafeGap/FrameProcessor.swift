@@ -485,6 +485,8 @@ final class FrameProcessor {
             let cx = (l.x1 + l.x2) / 2, cy = (l.y1 + l.y2) / 2
             return cy > yH + 0.05 * h || dets.contains { cx > $0.x1 && cx < $0.x2 && cy > $0.y1 && cy < $0.y2 }
         }
+        // đèn thấp hẳn dưới đèn khác cùng cột: đèn riêng xe máy (chủ app 21/11)
+        lightDets = LightGroup.dropLow(lightDets)
         lastVehicleBoxes = dets.map { NormBox($0.x1 / w, $0.y1 / h, $0.x2 / w, $0.y2 / h) }
         if let last = lastFrameTime, t1 > last {
             let inst = 1.0 / (t1 - last)
@@ -562,10 +564,12 @@ final class FrameProcessor {
             let picked = lightTracker.pick(lightDets, frameWidth: w, frameHeight: h)
             // qua ngã tư / vừa rẽ: đèn cũ không còn áp dụng
             if junction.passed || turn != nil { lightTracker.reset() }
-            let color = picked.map { d in
-                LightColorClassifier.classify(Self.samplePixels(pb, box: d.box),
-                                              aspect: (d.y2 - d.y1) / max(1, d.x2 - d.x1))
+            // đọc màu mọi đèn (ít khung, rẻ): dãy mũi tên ngang hàng khác màu thì chưa biết đèn nào cho hướng mình
+            let colors = picked == nil ? [] : lightDets.filter { $0.y2 - $0.y1 >= lightTracker.minHeightPx }.map { d in
+                (light: d, color: LightColorClassifier.classify(Self.samplePixels(pb, box: d.box),
+                                                                aspect: (d.y2 - d.y1) / max(1, d.x2 - d.x1)))
             }
+            let color = picked.map { LightGroup.color(of: $0, colors: colors) }
             lightState = lightTracker.update(t: t, light: picked, color: color, speedKmh: v)
             lightDebug = String(format: "%d/%d lights raw %@ state %@ h %.0f%@", lightDets.count, lightsRaw, color?.rawValue ?? "-",
                                 lightState?.color.rawValue ?? "-", picked.map { $0.y2 - $0.y1 } ?? 0, darkForLights ? " N" : "")

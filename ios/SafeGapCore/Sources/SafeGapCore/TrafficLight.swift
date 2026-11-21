@@ -239,3 +239,34 @@ public struct LightAlertRules: Equatable, Sendable {
         }
     }
 }
+
+/// Nhiều đèn trên cùng cột / giá (chủ app 21/11): đèn không phải lúc nào cũng cho hướng đi thẳng: có mũi tên rẽ trái,
+/// rẽ phải, đi thẳng, và đèn thấp riêng cho xe máy. Chưa có model biết loại đèn nên dùng luật:
+/// - đèn nằm hẳn dưới một đèn khác cùng cột (thấp hơn cả chiều cao một đèn) là đèn xe máy: bỏ;
+/// - các đèn ngang hàng quanh đèn đang theo mà khác màu (đỏ cạnh xanh): là dãy mũi tên, không biết đèn nào cho
+///   hướng mình đi → coi như chưa rõ màu (tracker giữ trạng thái cũ, không báo đổi màu).
+public enum LightGroup {
+    /// Bỏ đèn nằm dưới một đèn khác cùng cột (cách ít nhất nửa chiều cao đèn trên).
+    public static func dropLow(_ lights: [Detection]) -> [Detection] {
+        lights.filter { l in
+            !lights.contains { o in
+                guard o != l else { return false }
+                let w = max(o.x2 - o.x1, l.x2 - l.x1)
+                let sameColumn = abs((o.x1 + o.x2) / 2 - (l.x1 + l.x2) / 2) < 1.5 * w
+                return sameColumn && l.y1 > o.y2 + 0.5 * (o.y2 - o.y1)
+            }
+        }
+    }
+
+    /// Màu dùng cho đèn đang theo, xét các đèn ngang hàng (cùng giá đèn) với nó.
+    public static func color(of picked: Detection, colors: [(light: Detection, color: LightColor)]) -> LightColor {
+        let h = picked.y2 - picked.y1, w = picked.x2 - picked.x1
+        let cy = (picked.y1 + picked.y2) / 2, cx = (picked.x1 + picked.x2) / 2
+        let own = colors.first { $0.light == picked }?.color ?? .unknown
+        let row = colors.filter {
+            abs(($0.light.y1 + $0.light.y2) / 2 - cy) < 0.8 * h && abs(($0.light.x1 + $0.light.x2) / 2 - cx) < 6 * max(w, h)
+        }
+        let lit = Set(row.map(\.color).filter { $0 != .unknown })
+        return lit.count > 1 ? .unknown : own
+    }
+}

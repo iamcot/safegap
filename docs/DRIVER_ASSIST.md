@@ -249,6 +249,10 @@ Plan đầy đủ (lý do, ngân sách tính toán, rủi ro): Claude Doc "SafeG
 
 ## Giai đoạn C – Đèn giao thông đầy đủ
 
+- [x] Nhiều đèn cùng cột (chủ app 21/11): đèn có thể là mũi tên rẽ trái / phải / đi thẳng, hoặc đèn thấp riêng xe máy.
+      `LightGroup` (TrafficLight.swift): bỏ đèn nằm hẳn dưới đèn khác cùng cột (đèn xe máy); đọc màu mọi đèn, các đèn
+      ngang hàng quanh đèn đang theo mà khác màu (dãy mũi tên) → coi là chưa rõ, tracker giữ trạng thái cũ. Log tối
+      20/11 có 82 lần nhảy thẳng xanh → đỏ, nghi do chọn nhầm giữa đèn mũi tên và đèn thẳng.
 - [ ] C1. Classifier trạng thái (đỏ/vàng/xanh/mũi tên trái-thẳng-phải/tắt) thay HSV.
 - [ ] C2. Đọc đồng hồ đếm ngược (classifier chữ số LED 7 đoạn, kiểm tra giảm 1/giây).
 - [ ] C3. Giữ trạng thái + đếm ngược khi đèn ra khỏi khung; thử camera 0,5x khi đứng yên.
