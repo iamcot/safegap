@@ -306,3 +306,18 @@ def test_drive_set_keeps_app_classes_and_folds_light_colors(tmp_path):
     lines = (ds / "drive" / "labels" / "s__0000001_00.txt").read_text().split("\n")
     assert [D.DRIVE_CLASSES[int(x.split()[0])] for x in lines if x] == ["car", "traffic light", "traffic light"]
     assert (ds / "drive" / "labels" / "s__0000002_00.txt").read_text() == ""
+
+
+def test_eval_detections_ap_and_pr():
+    from proto.dataset import eval_detections
+    gts = {"a.jpg": [("car", (0.5, 0.5, 0.2, 0.2)), ("car", (0.2, 0.2, 0.1, 0.1))], "b.jpg": [("truck", (0.5, 0.5, 0.3, 0.3))]}
+    preds = [("a.jpg", "car", 0.9, (0.5, 0.5, 0.2, 0.2)),      # đúng
+             ("a.jpg", "car", 0.8, (0.8, 0.8, 0.1, 0.1)),      # sai chỗ
+             ("a.jpg", "car", 0.1, (0.2, 0.2, 0.1, 0.1)),      # đúng nhưng conf thấp
+             ("b.jpg", "truck", 0.7, (0.5, 0.5, 0.3, 0.3))]
+    r = eval_detections(preds, gts, ["car", "truck", "bus"])
+    assert r["car"]["n"] == 2
+    assert abs(r["car"]["p"] - 0.5) < 1e-9 and abs(r["car"]["r"] - 0.5) < 1e-9
+    assert 0.5 < r["car"]["ap50"] < 1.0
+    assert r["truck"]["ap50"] > 0.99 and r["truck"]["p"] == 1.0
+    assert r["bus"] == {"n": 0, "ap50": 0.0, "p": 0.0, "r": 0.0}

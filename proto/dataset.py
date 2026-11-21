@@ -461,6 +461,103 @@ def train(ds: Path, *, model: str, epochs: int, imgsz: int, batch: int, device: 
     print(f"Xong. Export: ./scripts/export_coreml.sh {ds}/runs/{name}/weights/best.pt{extra}")
 
 
+# ---- So sánh model xe + đèn (vd model gốc COCO với model vừa train) trên cùng tập val ----
+
+def _iou(a: tuple, b: tuple) -> float:
+    """IoU hai khung (cx, cy, w, h) chuẩn hoá."""
+    ax1, ay1, ax2, ay2 = a[0] - a[2] / 2, a[1] - a[3] / 2, a[0] + a[2] / 2, a[1] + a[3] / 2
+    bx1, by1, bx2, by2 = b[0] - b[2] / 2, b[1] - b[3] / 2, b[0] + b[2] / 2, b[1] + b[3] / 2
+    iw, ih = max(0.0, min(ax2, bx2) - max(ax1, bx1)), max(0.0, min(ay2, by2) - max(ay1, by1))
+    inter = iw * ih
+    union = a[2] * a[3] + b[2] * b[3] - inter
+    return inter / union if union > 0 else 0.0
+
+
+def eval_detections(preds: list, gts: dict, classes: list[str], iou: float = 0.5, conf: float = 0.25) -> dict:
+    """preds: [(ảnh, lớp, conf, (cx, cy, w, h))]; gts: {ảnh: [(lớp, (cx, cy, w, h))]}.
+    Trả về theo lớp: số khung thật, AP50 (nội suy 101 điểm như COCO), precision / recall ở ngưỡng `conf`."""
+    out = {}
+    for c in classes:
+        g = {im: [b for k, b in boxes if k == c] for im, boxes in gts.items()}
+        n = sum(len(v) for v in g.values())
+        ps = sorted([p for p in preds if p[1] == c], key=lambda p: -p[2])
+        used = {im: [False] * len(v) for im, v in g.items()}
+        tp = []
+        for im, _, _, box in ps:
+            best, bi = 0.0, -1
+            for j, gb in enumerate(g.get(im, [])):
+                o = _iou(box, gb)
+                if o > best and not used[im][j]:
+                    best, bi = o, j
+            if best >= iou:
+                used[im][bi] = True
+                tp.append(1)
+            else:
+                tp.append(0)
+        prec, rec, ctp = [], [], 0
+        for i, t in enumerate(tp):
+            ctp += t
+            prec.append(ctp / (i + 1))
+            rec.append(ctp / n if n else 0.0)
+        for i in range(len(prec) - 2, -1, -1):   # đường bao precision
+            prec[i] = max(prec[i], prec[i + 1])
+        ap = 0.0
+        if n:
+            for r in [i / 100 for i in range(101)]:
+                ap += next((p for p, rr in zip(prec, rec) if rr >= r), 0.0)
+            ap /= 101
+        k = sum(1 for p in ps if p[2] >= conf)
+        tpk = sum(tp[:k])
+        out[c] = {"n": n, "ap50": ap, "p": tpk / k if k else 0.0, "r": tpk / n if n else 0.0}
+    return out
+
+
+def _read_gts(images: list[Path], classes: list[str]) -> dict:
+    gts = {}
+    for img in images:
+        lbl = img.parent.parent / "labels" / f"{img.stem}.txt"
+        boxes = []
+        if lbl.exists():
+            for ln in lbl.read_text(encoding="utf-8").splitlines():
+                parts = ln.split()
+                if len(parts) == 5 and parts[0].isdigit() and int(parts[0]) < len(classes):
+                    boxes.append((classes[int(parts[0])], tuple(float(x) for x in parts[1:])))
+        gts[img.name] = boxes
+    return gts
+
+
+def compare(ds: Path, models: list[str], imgsz: int = 640, device: str = "mps") -> dict:
+    """Chấm các model trên tập val của model xe (<ds>/drive/val.txt). Lớp khớp theo tên (COCO có sẵn car, truck,
+    bus, motorcycle, traffic light), nên model gốc yolo11n.pt so được trực tiếp với model đã train."""
+    from ultralytics import YOLO
+
+    dd = ds / "drive"
+    if not (dd / "val.txt").exists():
+        sync_own_drive(ds)
+        split(dd)
+    images = [Path(ln) for ln in (dd / "val.txt").read_text(encoding="utf-8").split()]
+    gts = _read_gts(images, read_classes(dd / "classes.txt"))
+    res = {}
+    for m in models:
+        model = YOLO(m)
+        preds = []
+        for img in images:
+            r = model.predict(str(img), imgsz=imgsz, conf=0.001, device=device, verbose=False)[0]
+            for box, c, k in zip(r.boxes.xywhn.tolist(), r.boxes.conf.tolist(), r.boxes.cls.tolist()):
+                name = r.names[int(k)]
+                if name in DRIVE_CLASSES:
+                    preds.append((img.name, name, c, tuple(box)))
+        res[m] = eval_detections(preds, gts, DRIVE_CLASSES)
+    print(f"{len(images)} ảnh val ({dd / 'val.txt'}). AP50 / P / R (ngưỡng 0,25):")
+    print(f"{'lớp':<14}{'khung':>6}  " + "  ".join(f"{Path(m).parent.parent.name or m:>24}" for m in models))
+    for c in DRIVE_CLASSES:
+        n = res[models[0]][c]["n"]
+        cells = "  ".join(f"{res[m][c]['ap50']:>8.2f} {res[m][c]['p']:>6.2f} {res[m][c]['r']:>6.2f}"[:24].rjust(24)
+                          for m in models)
+        print(f"{c:<14}{n:>6}  {cells}")
+    return res
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="python -m proto.dataset", description=__doc__.split("\n")[0])
     ap.add_argument("--dataset", type=Path, default=None, help="mặc định ~/safegap-dataset")
@@ -472,6 +569,10 @@ def main(argv: list[str] | None = None) -> None:
     im = sub.add_parser("import-roboflow", help="nhập bộ biển Roboflow (YOLO, có data.yaml) vào <dataset>/signs")
     im.add_argument("source", type=Path)
     im.add_argument("--tag", default="rf", help="tiền tố tên ảnh, đổi khi nhập thêm bộ khác")
+    cp = sub.add_parser("compare", help="chấm model xe + đèn trên tập val (vd yolo11n.pt gốc vs model vừa train)")
+    cp.add_argument("models", nargs="*", help="các file .pt; mặc định yolo11n.pt + best.pt mới nhất ở <ds>/drive/runs")
+    cp.add_argument("--imgsz", type=int, default=640)
+    cp.add_argument("--device", default="mps")
     t = sub.add_parser("train", help="split rồi train Ultralytics")
     t.add_argument("--model", default="yolo11n.pt", help="điểm bắt đầu (.pt), vd model đã train lần trước")
     t.add_argument("--epochs", type=int, default=80)
@@ -492,6 +593,13 @@ def main(argv: list[str] | None = None) -> None:
         print("Lớp:", ", ".join(s["classes"]))
     elif a.cmd == "split":
         split(ds)
+    elif a.cmd == "compare":
+        models = a.models
+        if not models:
+            runs = ds / "drive" / "runs"
+            found = sorted(runs.glob("*/weights/best.pt"), key=lambda p: p.stat().st_mtime) if runs.is_dir() else []
+            models = ["yolo11n.pt"] + ([str(found[-1])] if found else [])
+        compare(ds, models, imgsz=a.imgsz, device=a.device)
     elif a.cmd == "import-roboflow":
         s = import_roboflow(a.source, ds, a.tag)
         print(f"Nhập {s['images']} ảnh, {s['boxes']} khung biển → {ds / 'signs'}")

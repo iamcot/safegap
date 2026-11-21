@@ -50,6 +50,10 @@ caffeinate -i uv run python -m proto.dataset train --task marks --name marks
 uv run python -m proto.dataset merge ~/safegap-dataset/inbox
 caffeinate -i uv run python -m proto.dataset train --epochs 80 --name drive
 
+# so model xe + đèn gốc (yolo11n.pt, COCO) với model vừa train trên cùng tập val: AP50 / precision / recall theo lớp
+uv run python -m proto.dataset compare
+# hoặc chỉ định file: ... compare yolo11n.pt ~/safegap-dataset/drive/runs/<lần train>/weights/best.pt
+
 # train tiếp từ model lần trước
 caffeinate -i uv run python -m proto.dataset train --task signs --batch 8 --name signs \
   --model ~/safegap-dataset/signs/runs/<lần trước>/weights/best.pt
